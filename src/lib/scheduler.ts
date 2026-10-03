@@ -1,5 +1,6 @@
-import { runDueContributions } from "./vaults";
+import { expireStaleWithdrawals, runDueContributions } from "./vaults";
 import { settleEmergencies } from "./emergency";
+import { revertExpiredLimitIncreases } from "./limits";
 import { runDueSips } from "./invest/core";
 import type { User } from "./users";
 
@@ -11,6 +12,8 @@ import type { User } from "./users";
 export async function tick(user: User) {
   const now = Date.now();
   runDueContributions(user, now);
+  expireStaleWithdrawals(user, now);
+  revertExpiredLimitIncreases(user, now);
   settleEmergencies(user, now);
   try {
     await runDueSips(user, now);

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { get, newId, run, tx, UPLOAD_DIR } from "./db";
 import { audit } from "./audit";
-import { rulesFor } from "./compliance";
+import { countryInfo, defaultCountryFor, rulesFor } from "./compliance";
 import { transfer, userAccount, worldAccount } from "./ledger";
 import { createUser, type User } from "./users";
 import { createVault, creditIncome, deposit, recordSpend, runDueContributions, sweepRoundups } from "./vaults";
@@ -260,7 +260,8 @@ async function seedProof(
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
   const stored = path.join(UPLOAD_DIR, `${id}.jpg`);
   fs.writeFileSync(stored, buf);
-  const ela = await errorLevelAnalysis(buf);
+  // Rendered samples are ~1 MP, well under the ELA size limit.
+  const ela = (await errorLevelAnalysis(buf))!;
   const elaPath = stored.replace(/\.jpg$/, "_ela.png");
   fs.writeFileSync(elaPath, ela.heatmap);
   const phash = await dHash(buf);
@@ -366,8 +367,9 @@ async function seedProof(
  * hash-chained audit log stays in time order and every balance is the
  * product of real ledger postings.
  */
-export async function seedDemo(opts: { name: string; jurisdiction: string; pin: string; email?: string }) {
-  const rules = rulesFor(opts.jurisdiction);
+export async function seedDemo(opts: { name: string; country?: string; jurisdiction?: string; pin: string; email?: string }) {
+  const country = countryInfo(opts.country ?? defaultCountryFor(opts.jurisdiction ?? "US"))?.code ?? "US";
+  const rules = rulesFor(countryInfo(country)!.market);
   const cur = rules.currency;
   const m = CURRENCY_SCALE[cur] ?? 1;
   const amt = (major: number) => Math.round(major * m * 100);
@@ -399,7 +401,7 @@ export async function seedDemo(opts: { name: string; jurisdiction: string; pin: 
     id: "usr_demo",
     name: opts.name,
     email: opts.email,
-    jurisdiction: rules.code,
+    country,
     pin: opts.pin,
     createdAt: T0,
   });

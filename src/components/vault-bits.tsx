@@ -117,4 +117,6 @@ export const WITHDRAWAL_STATUS: Record<string, { label: string; tone: Tone }> = 
   approved: { label: "Approved", tone: "good" },
   paid: { label: "Paid out", tone: "good" },
   denied: { label: "Declined", tone: "bad" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
+  expired: { label: "Expired — no proof", tone: "neutral" },
 };

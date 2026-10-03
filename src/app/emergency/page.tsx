@@ -73,6 +73,7 @@ interface RequestView {
 interface Status {
   currency: string;
   cap: number;
+  marketCap: number;
   usedThisMonth: number;
   remainingCap: number;
   requestsLast7d: number;
@@ -496,7 +497,7 @@ export default function EmergencyPage() {
             <div className="space-y-4">
               <div>
                 <div className="mb-1.5 flex justify-between text-xs">
-                  <span className="text-muted">Monthly cap</span>
+                  <span className="text-muted">{st.cap < st.marketCap ? "Your monthly limit" : "Monthly cap"}</span>
                   <span className="tnum text-ink-2">
                     {fmtMoney(st.usedThisMonth, cur, { decimals: false })} / {fmtMoney(st.cap, cur, { decimals: false })}
                   </span>

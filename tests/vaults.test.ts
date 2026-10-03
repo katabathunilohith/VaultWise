@@ -2,7 +2,18 @@ import { describe, expect, it } from "vitest";
 import { get, run } from "@/lib/db";
 import { balanceOf, transfer, userAccount, worldAccount } from "@/lib/ledger";
 import { createUser, type User } from "@/lib/users";
-import { createVault, creditIncome, createWithdrawal, getVaultRow, recordSpend, runDueContributions, sweepRoundups, toView } from "@/lib/vaults";
+import {
+  cancelWithdrawal,
+  createVault,
+  creditIncome,
+  createWithdrawal,
+  expireStaleWithdrawals,
+  getVaultRow,
+  recordSpend,
+  runDueContributions,
+  sweepRoundups,
+  toView,
+} from "@/lib/vaults";
 
 const created = createUser({ name: "Rowan Diaz", jurisdiction: "EU", pin: "1357" });
 const fresh = () => get<User>("SELECT * FROM users WHERE id = ?", created.id)!;
@@ -60,5 +71,39 @@ describe("vault rules", () => {
     createWithdrawal(fresh(), id, 80_00, "Clinic");
     expect(toView(getVaultRow(fresh(), id), "EUR").available).toBe(20_00);
     expect(() => createWithdrawal(fresh(), id, 30_00, "Clinic")).toThrow(/available balance/);
+  });
+
+  it("lets an unproven request be cancelled, releasing the hold", () => {
+    const id = createVault(fresh(), { name: "Cancel me", category: "health", target: 1_000_00, ruleType: "none" });
+    transfer({
+      userId: created.id,
+      from: userAccount(created.id, "bank", "EUR").id,
+      to: getVaultRow(fresh(), id).account_id,
+      amount: 50_00,
+      kind: "deposit",
+      memo: "fund",
+    });
+    const wid = createWithdrawal(fresh(), id, 40_00, "Clinic");
+    expect(toView(getVaultRow(fresh(), id), "EUR").available).toBe(10_00);
+    cancelWithdrawal(fresh(), wid);
+    expect(toView(getVaultRow(fresh(), id), "EUR").available).toBe(50_00);
+    expect(() => cancelWithdrawal(fresh(), wid)).toThrow(/waiting for proof/);
+  });
+
+  it("expires requests left without proof for 24 hours", () => {
+    const id = createVault(fresh(), { name: "Abandoned", category: "health", target: 1_000_00, ruleType: "none" });
+    transfer({
+      userId: created.id,
+      from: userAccount(created.id, "bank", "EUR").id,
+      to: getVaultRow(fresh(), id).account_id,
+      amount: 30_00,
+      kind: "deposit",
+      memo: "fund",
+    });
+    createWithdrawal(fresh(), id, 30_00, "Clinic");
+    expect(toView(getVaultRow(fresh(), id), "EUR").available).toBe(0);
+    expect(expireStaleWithdrawals(fresh(), Date.now() + 23 * 3_600_000)).toBe(0);
+    expect(expireStaleWithdrawals(fresh(), Date.now() + 25 * 3_600_000)).toBeGreaterThanOrEqual(1);
+    expect(toView(getVaultRow(fresh(), id), "EUR").available).toBe(30_00);
   });
 });

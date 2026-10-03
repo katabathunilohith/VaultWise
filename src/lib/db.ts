@@ -297,6 +297,34 @@ CREATE TABLE IF NOT EXISTS paper_state (
   PRIMARY KEY (user_id, symbol, timeframe)
 );
 
+-- Personal limits (minor units). Loosening is rationed; tightening is always allowed.
+CREATE TABLE IF NOT EXISTS user_limits (
+  user_id TEXT PRIMARY KEY,
+  single_withdrawal INTEGER NOT NULL,
+  daily_withdrawal INTEGER NOT NULL,
+  monthly_emergency INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS limit_changes (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  before_limits TEXT NOT NULL,
+  after_limits TEXT NOT NULL,
+  reason_code TEXT,
+  explanation TEXT,
+  assessment TEXT,
+  model TEXT,
+  reviewer TEXT,
+  reviewer_note TEXT,
+  expires_at INTEGER,
+  created_at INTEGER NOT NULL,
+  decided_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_limit_changes_user ON limit_changes(user_id, created_at);
+
 CREATE TABLE IF NOT EXISTS market_cache (
   key TEXT PRIMARY KEY,
   fetched_at INTEGER NOT NULL,
@@ -322,7 +350,17 @@ BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 
 declare global {
   var __vaultwiseDb: DatabaseSync | undefined;
+  var __vaultwiseSchema: string | undefined;
   var __vaultwiseTxDepth: number | undefined;
+}
+
+/** Additive, idempotent migrations for databases created by earlier versions. */
+function migrate(d: DatabaseSync) {
+  const userCols = (d.prepare("PRAGMA table_info(users)").all() as { name: string }[]).map((c) => c.name);
+  if (!userCols.includes("country")) {
+    d.exec("ALTER TABLE users ADD COLUMN country TEXT");
+    d.exec("UPDATE users SET country = CASE jurisdiction WHEN 'UK' THEN 'GB' WHEN 'EU' THEN 'DE' ELSE jurisdiction END WHERE country IS NULL");
+  }
 }
 
 function open(): DatabaseSync {
@@ -330,11 +368,20 @@ function open(): DatabaseSync {
   const d = new DatabaseSync(DB_PATH);
   d.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
   d.exec(SCHEMA);
+  migrate(d);
   return d;
 }
 
 export function db(): DatabaseSync {
-  if (!globalThis.__vaultwiseDb) globalThis.__vaultwiseDb = open();
+  if (!globalThis.__vaultwiseDb) {
+    globalThis.__vaultwiseDb = open();
+    globalThis.__vaultwiseSchema = SCHEMA;
+  } else if (globalThis.__vaultwiseSchema !== SCHEMA) {
+    // Hot reload kept an old connection: apply new tables/columns without a restart.
+    globalThis.__vaultwiseDb.exec(SCHEMA);
+    migrate(globalThis.__vaultwiseDb);
+    globalThis.__vaultwiseSchema = SCHEMA;
+  }
   return globalThis.__vaultwiseDb;
 }
 
