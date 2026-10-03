@@ -268,7 +268,12 @@ export default function CorePage() {
           <CardTitle
             sub={hist ? `A monthly SIP into today's model portfolio since ${hist.startMonth}, using real monthly closes` : "Loading market history…"}
             action={
-              <Select value={histMonthly} onChange={(e) => setHistMonthly(Number(e.target.value))} className="h-8 w-auto text-[13px]">
+              <Select
+                aria-label="Monthly SIP amount for the illustration"
+                value={histMonthly}
+                onChange={(e) => setHistMonthly(Number(e.target.value))}
+                className="h-8 w-auto text-[13px]"
+              >
                 {[100, 300, 500, 1000].map((m) => (
                   <option key={m} value={m}>
                     {fmtMoney(m * 100 * (cur === "INR" ? 80 : 1), cur, { decimals: false })}/mo

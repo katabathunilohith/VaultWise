@@ -6,16 +6,16 @@ import { useRouter } from "next/navigation";
 import { api, clearApiCache, refreshAll } from "@/lib/client";
 import { fmtMoney } from "@/lib/shared";
 import { useMe } from "@/components/shell";
+import { LimitsCard } from "@/components/limits-panel";
 import { Badge, Button, Card, CardTitle, ErrorNote, Field, Input, KV, PageHeader, Select, useToast } from "@/components/ui";
 
 export default function SettingsPage() {
-  const { user, rules, jurisdictions, aiEnabled, reload } = useMe();
+  const { user, rules, aiEnabled, reload } = useMe();
   const toast = useToast();
   const router = useRouter();
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email ?? "");
   const [pin, setPin] = useState("");
-  const [jur, setJur] = useState(user.jurisdiction);
   const [year, setYear] = useState(new Date().getFullYear());
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -101,38 +101,23 @@ export default function SettingsPage() {
           </p>
         </Card>
 
+        <div className="lg:col-span-2">
+          <LimitsCard />
+        </div>
+
         <Card className="lg:col-span-2">
           <CardTitle
             sub="One codebase, per-market rules: the compliance engine switches limits, permitted products and disclosures. Illustrative values — not legal advice."
-            action={
-              <div className="flex items-center gap-2">
-                <Select value={jur} onChange={(e) => setJur(e.target.value)} className="h-9 w-auto">
-                  {jurisdictions.map((j) => (
-                    <option key={j.code} value={j.code}>
-                      {j.flag} {j.name}
-                    </option>
-                  ))}
-                </Select>
-                <Button
-                  size="sm"
-                  disabled={jur === user.jurisdiction}
-                  loading={busy === "jur"}
-                  onClick={() => save("jur", { jurisdiction: jur }, "Market rules updated.")}
-                >
-                  Apply
-                </Button>
-              </div>
-            }
+            action={<Badge tone="info">Set at onboarding</Badge>}
           >
             <span className="inline-flex items-center gap-2">
-              <Globe className="size-4" /> Market &amp; compliance rules · {rules.flag} {rules.name}
+              <Globe className="size-4" /> {user.country ? `${user.country.flag} ${user.country.name}` : rules.flag} · {rules.name} rules
             </span>
           </CardTitle>
-          {jur !== user.jurisdiction && (
-            <p className="mb-4 text-xs text-warn-ink">
-              Your wallet currency ({user.currency}) is fixed at onboarding; switching market changes rules and disclosures only.
-            </p>
-          )}
+          <p className="mb-4 text-xs text-muted">
+            Your market is tied to your identity check and your {user.currency} wallet, and every limit below is set in that currency. To try another
+            market, reset the demo and pick a different country during onboarding.
+          </p>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             <div>
               <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Licensing route</div>
@@ -192,7 +177,7 @@ export default function SettingsPage() {
                 <div className="text-sm font-medium">Tax summary</div>
                 <div className="text-xs text-muted">Contributions, withdrawals and cost basis as CSV</div>
               </div>
-              <Select value={year} onChange={(e) => setYear(Number(e.target.value))} className="h-8 w-24 text-[13px]">
+              <Select aria-label="Tax year" value={year} onChange={(e) => setYear(Number(e.target.value))} className="h-8 w-24 text-[13px]">
                 {[0, 1].map((k) => (
                   <option key={k} value={new Date().getFullYear() - k}>
                     {new Date().getFullYear() - k}

@@ -20,6 +20,35 @@ export function aiEnabled() {
 
 export class AiUnavailable extends Error {}
 
+/** A failed model call. `message` is safe to show customers; the provider's raw text (which names the org) goes to the server log only. */
+export class AiError extends Error {
+  constructor(
+    message: string,
+    public kind: "daily_limit" | "rate_limit" | "bad_output" | "provider",
+  ) {
+    super(message);
+  }
+}
+
+function providerError(status: number, text: string) {
+  console.warn(`[groq] ${status}: ${text.slice(0, 500)}`);
+  if (status === 429 && /per day|\((?:TPD|RPD)\)/i.test(text))
+    return new AiError("the AI provider's daily usage limit has been reached", "daily_limit");
+  if (status === 429) return new AiError("the AI provider is at capacity right now", "rate_limit");
+  if (status === 400 && text.includes("json_validate_failed")) return new AiError("the AI model returned an unreadable answer", "bad_output");
+  return new AiError(`the AI provider returned an error (${status})`, "provider");
+}
+
+/** One customer-safe line for any failure of a model call. */
+export function describeAiError(e: unknown) {
+  if (e instanceof AiError) return e.message;
+  if (e instanceof AiUnavailable) return "AI isn't configured on this server";
+  const name = (e as Error)?.name;
+  if (name === "AbortError" || name === "TimeoutError") return "the AI model took too long to respond";
+  if (e instanceof SyntaxError) return "the AI model returned an unreadable answer";
+  return "the AI step didn't complete";
+}
+
 function body(model: string, messages: ChatMessage[], opts: { json?: boolean; temperature?: number; maxTokens?: number; stream?: boolean }) {
   return JSON.stringify({
     model,
@@ -48,7 +77,7 @@ async function call(model: string, messages: ChatMessage[], opts: { json?: boole
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), budget);
   try {
-    let lastErr: unknown;
+    let last = { status: 0, text: "" };
     for (let attempt = 0; attempt < 4; attempt++) {
       const res = await fetch(ENDPOINT, {
         method: "POST",
@@ -62,14 +91,17 @@ async function call(model: string, messages: ChatMessage[], opts: { json?: boole
         return content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
       }
       const text = await res.text();
-      lastErr = new Error(`Groq ${res.status}: ${text.slice(0, 300)}`);
-      if (res.status !== 429 && res.status < 500) break;
-      // Rate limits are per minute; wait as instructed if the budget allows.
+      last = { status: res.status, text };
+      // 429 = rate limit; 5xx = provider hiccup; 400 json_validate_failed = the model emitted
+      // malformed JSON in JSON mode (a sampling fluke) — all worth one more try.
+      const retryable = res.status === 429 || res.status >= 500 || (res.status === 400 && text.includes("json_validate_failed"));
+      if (!retryable) break;
+      // Wait as instructed if the budget allows (per-minute limits clear in seconds; a spent daily quota won't).
       const wait = res.status === 429 ? retryDelayMs(res, text) + 250 : 1000;
       if (Date.now() + wait > deadline - 2000) break;
       await new Promise((r) => setTimeout(r, wait));
     }
-    throw lastErr;
+    throw providerError(last.status, last.text);
   } finally {
     clearTimeout(timer);
   }
@@ -96,7 +128,7 @@ export async function chatStream(messages: ChatMessage[], opts: { model?: string
     headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, "Content-Type": "application/json" },
     body: body(opts.model ?? TEXT_MODEL, messages, { ...opts, stream: true }),
   });
-  if (!res.ok || !res.body) throw new Error(`Groq ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok || !res.body) throw providerError(res.status, await res.text());
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   let buffer = "";

@@ -4,6 +4,7 @@ import { verifyAuditChain } from "@/lib/audit";
 import { reconcile } from "@/lib/ledger";
 import { listFlags } from "@/lib/fraud";
 import { rulesFor } from "@/lib/compliance";
+import { pendingLimitReviews } from "@/lib/limits";
 
 /** Operations console: review queue, risk flags, model metrics, ledger and audit integrity. */
 export const GET = handle(async () => {
@@ -80,6 +81,7 @@ export const GET = handle(async () => {
 
   return json({
     queue,
+    limitRequests: pendingLimitReviews(),
     flags: listFlags(),
     metrics: {
       total,

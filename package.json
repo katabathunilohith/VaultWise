@@ -9,7 +9,8 @@
     "lint": "eslint",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "node scripts/e2e.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -110,13 +110,13 @@ export function ProofPicker({ file, onFile }: { file: File | null; onFile: (f: F
         >
           <ImageUp className="size-7 text-muted" aria-hidden />
           <div className="text-sm font-medium">Drop a photo or scan of the bill</div>
-          <div className="text-xs text-muted">JPEG, PNG, WebP or HEIC · up to 10 MB</div>
+          <div className="text-xs text-muted">JPEG, PNG or WebP · up to 10 MB</div>
         </button>
       )}
       <input
         ref={input}
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+        accept="image/jpeg,image/png,image/webp"
         className="hidden"
         onChange={(e) => onFile(e.target.files?.[0] ?? null)}
       />
@@ -391,6 +391,7 @@ export function WithdrawFlow({
   vault,
   currency,
   onClose,
+  resume,
 }: {
   vault: {
     id: string;
@@ -403,17 +404,20 @@ export function WithdrawFlow({
   };
   currency: string;
   onClose: () => void;
+  /** Continue a request that was created earlier but never got its proof. */
+  resume?: { withdrawalId: string; amount: number; payee: string };
 }) {
-  const [step, setStep] = useState<"details" | "proof" | "verify">("details");
-  const [amount, setAmount] = useState("");
-  const [payee, setPayee] = useState("");
+  const [step, setStep] = useState<"details" | "proof" | "verify">(resume ? "proof" : "details");
+  const [amount, setAmount] = useState(resume ? String(resume.amount / 100) : "");
+  const [payee, setPayee] = useState(resume?.payee ?? "");
   const [note, setNote] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [withdrawalId, setWithdrawalId] = useState<string | null>(null);
+  const [withdrawalId, setWithdrawalId] = useState<string | null>(resume?.withdrawalId ?? null);
   const [proofId, setProofId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const proof = useProof(proofId);
+  const { data: limits } = useApi<{ limits: { singleWithdrawal: number }; usage: { dailyRemaining: number } }>("/api/v1/limits");
   const minor = Math.round(Number(amount || 0) * 100);
   const monthlyPace =
     vault.rule.type === "fixed" && vault.rule.amount
@@ -476,7 +480,14 @@ export function WithdrawFlow({
 
       {step === "details" && (
         <div className="space-y-4">
-          <Field label="Amount" hint={`Available: ${fmtMoney(vault.available, currency)}`}>
+          <Field
+            label="Amount"
+            hint={`Available: ${fmtMoney(vault.available, currency)}${
+              limits
+                ? ` · limit ${fmtMoney(limits.limits.singleWithdrawal, currency, { decimals: false })} per withdrawal, ${fmtMoney(limits.usage.dailyRemaining, currency, { decimals: false })} left today`
+                : ""
+            }`}
+          >
             <MoneyInput
               currency={currency}
               value={amount}
@@ -519,7 +530,8 @@ export function WithdrawFlow({
           </p>
           <ProofPicker file={file} onFile={setFile} />
           {err && <ErrorNote>{err}</ErrorNote>}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="mr-auto text-xs text-muted">Not ready? Close this and use “Add proof” on the vault within 24 hours.</span>
             <Button onClick={submitProof} loading={busy} disabled={!file} icon={<ScanSearch className="size-4" />}>
               Verify &amp; withdraw
             </Button>

@@ -219,7 +219,10 @@ export function Toggle({
       className={cx("relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-40", checked ? "bg-accent" : "bg-line-strong")}
     >
       <span
-        className={cx("absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform", checked ? "translate-x-5" : "translate-x-0.5")}
+        className={cx(
+          "absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform",
+          checked ? "translate-x-5" : "translate-x-0",
+        )}
       />
     </button>
   );

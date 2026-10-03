@@ -4,6 +4,20 @@ import exifr from "exifr";
 
 export const EDITING_SOFTWARE = /photoshop|gimp|canva|pixelmator|snapseed|picsart|lightroom|affinity|paint\.net|fotor|photopea|illustrator/i;
 
+/** Above this size ELA is skipped (memory grows ~22 bytes per pixel); other tamper checks still run. */
+export const ELA_MAX_PIXELS = 25_000_000;
+
+/** Cheap decodability check: decodes a tiny thumbnail. Returns dimensions, or null if the image can't be read. */
+export async function probeImage(buf: Buffer): Promise<{ width: number; height: number; format: string } | null> {
+  try {
+    const meta = await sharp(buf).metadata();
+    await sharp(buf).resize(16, 16, { fit: "inside" }).raw().toBuffer();
+    return { width: meta.width ?? 0, height: meta.height ?? 0, format: meta.format ?? "unknown" };
+  } catch {
+    return null;
+  }
+}
+
 export function sha256(buf: Buffer) {
   return crypto.createHash("sha256").update(buf).digest("hex");
 }
@@ -106,8 +120,10 @@ const BLOCK = 8; // aligned to the JPEG 8x8 DCT grid
  * outliers count: genuine edits are contiguous, noise is scattered.
  * Runs at native resolution — resampling would erase the JPEG grid signal.
  */
-export async function errorLevelAnalysis(buf: Buffer): Promise<ElaResult> {
-  const base = sharp(buf, { limitInputPixels: 40_000_000 }).rotate().removeAlpha();
+export async function errorLevelAnalysis(buf: Buffer): Promise<ElaResult | null> {
+  const meta = await sharp(buf).metadata();
+  if ((meta.width ?? 0) * (meta.height ?? 0) > ELA_MAX_PIXELS) return null;
+  const base = sharp(buf).rotate().removeAlpha();
   const { data: orig, info } = await base.clone().raw().toBuffer({ resolveWithObject: true });
   const recompressed = await sharp(orig, { raw: { width: info.width, height: info.height, channels: info.channels } })
     .jpeg({ quality: ELA_QUALITY })

@@ -2,6 +2,7 @@ import { ZodError, type ZodType } from "zod";
 import { HttpError, requireUser, type User } from "./users";
 import { LedgerError } from "./ledger";
 import { tick } from "./scheduler";
+import { AiError } from "./groq";
 
 export function json(data: unknown, init?: ResponseInit) {
   return Response.json(data, init);
@@ -10,6 +11,7 @@ export function json(data: unknown, init?: ResponseInit) {
 function errorResponse(e: unknown) {
   if (e instanceof HttpError) return json({ error: e.message }, { status: e.status });
   if (e instanceof LedgerError) return json({ error: e.message }, { status: 400 });
+  if (e instanceof AiError) return json({ error: `AI is unavailable right now: ${e.message}. Please try again later.` }, { status: 503 });
   if (e instanceof ZodError) return json({ error: e.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ") }, { status: 400 });
   console.error(e);
   return json({ error: (e as Error)?.message ?? "Unexpected error" }, { status: 500 });

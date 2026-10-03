@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { get, run } from "./db";
-import { rulesFor } from "./compliance";
+import { countryInfo, defaultCountryFor, rulesFor } from "./compliance";
 import { userAccount } from "./ledger";
 import { audit } from "./audit";
 
@@ -9,6 +9,7 @@ export interface User {
   name: string;
   email: string | null;
   jurisdiction: string;
+  country: string | null;
   currency: string;
   kyc_status: string;
   kyc_level: number;
@@ -52,17 +53,32 @@ export function checkPin(user: User, pin: string | undefined | null) {
   return crypto.timingSafeEqual(candidate, Buffer.from(h, "hex"));
 }
 
-export function createUser(opts: { id?: string; name: string; email?: string; jurisdiction: string; pin: string; createdAt?: number }) {
-  const rules = rulesFor(opts.jurisdiction);
+/**
+ * Opens a wallet. The country decides the market (rule set) and the wallet
+ * currency; callers that only know a market get that market's main country.
+ */
+export function createUser(opts: {
+  id?: string;
+  name: string;
+  email?: string;
+  country?: string;
+  jurisdiction?: string;
+  pin: string;
+  createdAt?: number;
+}) {
+  const country = countryInfo(opts.country ?? defaultCountryFor(opts.jurisdiction ?? "US"));
+  if (!country) throw new HttpError(400, "That country isn't supported yet");
+  const rules = rulesFor(country.market);
   const id = opts.id ?? `usr_${crypto.randomBytes(6).toString("hex")}`;
   const createdAt = opts.createdAt ?? Date.now();
   run(
-    `INSERT INTO users (id, name, email, jurisdiction, currency, kyc_status, kyc_level, pin_hash, created_at)
-     VALUES (?, ?, ?, ?, ?, 'verified', 2, ?, ?)`,
+    `INSERT INTO users (id, name, email, jurisdiction, country, currency, kyc_status, kyc_level, pin_hash, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'verified', 2, ?, ?)`,
     id,
     opts.name,
     opts.email ?? null,
     rules.code,
+    country.code,
     rules.currency,
     hashPin(opts.pin),
     createdAt,
@@ -75,7 +91,7 @@ export function createUser(opts: { id?: string; name: string; email?: string; ju
     action: "user.onboarded",
     entityType: "user",
     entityId: id,
-    details: { jurisdiction: rules.code, currency: rules.currency, kyc: "verified (simulated partner check)" },
+    details: { country: country.code, market: rules.code, currency: rules.currency, kyc: "verified (simulated partner check)" },
     ts: createdAt,
   });
   audit({

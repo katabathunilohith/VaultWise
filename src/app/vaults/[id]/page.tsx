@@ -197,6 +197,8 @@ export default function VaultDetailPage() {
   const { data, error } = useApi<Detail>(`/api/v1/vaults/${id}`);
   const now = useNow();
   const [modal, setModal] = useState<null | "add" | "withdraw" | "rule">(null);
+  const [resume, setResume] = useState<{ withdrawalId: string; amount: number; payee: string } | null>(null);
+  const toast = useToast();
 
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
   if (!data)
@@ -353,11 +355,32 @@ export default function VaultDetailPage() {
                   </Td>
                   <Td right>{w.confidence != null ? `${Math.round(w.confidence * 100)}%` : "—"}</Td>
                   <Td right>
-                    {w.proof_id && (
+                    {w.proof_id ? (
                       <Link href={`/proofs/${w.proof_id}`} className="text-[13px] font-medium text-accent-ink hover:underline">
                         Report
                       </Link>
-                    )}
+                    ) : w.status === "awaiting_proof" ? (
+                      <span className="inline-flex gap-1">
+                        <Button size="sm" variant="secondary" onClick={() => setResume({ withdrawalId: w.id, amount: w.amount, payee: w.payee })}>
+                          Add proof
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={async () => {
+                            try {
+                              await api.del(`/api/v1/withdrawals/${w.id}`);
+                              toast({ tone: "good", text: "Request cancelled — the money is available again." });
+                              refreshAll();
+                            } catch (e) {
+                              toast({ tone: "bad", text: (e as Error).message });
+                            }
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </span>
+                    ) : null}
                   </Td>
                 </tr>
               ))}
@@ -411,6 +434,9 @@ export default function VaultDetailPage() {
       </Modal>
       <Modal open={modal === "withdraw"} onClose={() => setModal(null)} title={`Withdraw from ${v.name}`} wide>
         {modal === "withdraw" && <WithdrawFlow vault={v} currency={cur} onClose={() => setModal(null)} />}
+      </Modal>
+      <Modal open={!!resume} onClose={() => setResume(null)} title={`Add proof · ${v.name}`} wide>
+        {resume && <WithdrawFlow vault={v} currency={cur} resume={resume} onClose={() => setResume(null)} />}
       </Modal>
       {v.available <= 0 && v.balance > 0 && (
         <div className="mt-4">

@@ -2,7 +2,7 @@ import { after } from "next/server";
 import { customer, handle, json } from "@/lib/api";
 import { get } from "@/lib/db";
 import { HttpError } from "@/lib/users";
-import { createProof, runPipeline } from "@/lib/verification/pipeline";
+import { createProof, runPipeline, validateUpload } from "@/lib/verification/pipeline";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -18,8 +18,10 @@ export const POST = handle(async (req: Request, ctx: Ctx) => {
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) throw new HttpError(400, "Attach a file");
+  const buffer = Buffer.from(await file.arrayBuffer());
+  await validateUpload(buffer, file.type || "image/jpeg");
   const proofId = createProof(user, {
-    buffer: Buffer.from(await file.arrayBuffer()),
+    buffer,
     fileName: file.name || "receipt",
     mime: file.type || "image/jpeg",
     purpose: "emergency_receipt",

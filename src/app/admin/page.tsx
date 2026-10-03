@@ -4,12 +4,111 @@ import { useState } from "react";
 import Link from "next/link";
 import { Bot, CircleCheck, CircleX, Clock, Database, Flag, Gauge, Link2, ScanSearch, ShieldCheck, TrendingUp } from "lucide-react";
 import { api, refreshAll, useApi, useNow } from "@/lib/client";
-import { CATEGORIES, fmtDate, fmtMoney, timeAgo, type VaultCategory } from "@/lib/shared";
+import { CATEGORIES, fmtDate, fmtMoney, LIMIT_LABELS, timeAgo, type LimitKey, type VaultCategory } from "@/lib/shared";
+import { AssessmentScores } from "@/components/limits-panel";
 import { LegendRow, TipBox } from "@/components/charts";
 import { Badge, Button, Card, CardTitle, Empty, Notice, PageHeader, Skeleton, Table, Tabs, Td, Th, cx, useToast, type Tone } from "@/components/ui";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
+interface LimitRequest {
+  id: string;
+  userName: string;
+  currency: string;
+  reason: string | null;
+  explanation: string | null;
+  before: Record<LimitKey, number>;
+  after: Record<LimitKey, number>;
+  createdAt: number;
+  assessment: {
+    ai: {
+      genuine: number;
+      urgency: number;
+      proportionate: number;
+      scam_risk: number;
+      signals: string[];
+      user_message: string;
+      reviewer_summary: string;
+    } | null;
+    aiError?: string;
+    reasons: string[];
+    ratio: number;
+    screen: { scamSignals: string[]; manipulation: boolean };
+  } | null;
+}
+
+function LimitRequests({ items }: { items: LimitRequest[] }) {
+  const toast = useToast();
+  if (!items.length)
+    return (
+      <Empty
+        icon={<CircleCheck className="size-6" />}
+        title="No limit requests waiting"
+        body="Emergency limit increases the AI couldn't decide land here."
+      />
+    );
+  return (
+    <div className="space-y-3">
+      {items.map((r) => (
+        <Card key={r.id}>
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">{r.userName}</span>
+                <Badge tone="warn">{r.reason ?? "Emergency"}</Badge>
+                <span className="text-xs text-muted">{timeAgo(r.createdAt)}</span>
+              </div>
+              <ul className="mt-2 space-y-0.5 text-[13px]">
+                {(Object.keys(LIMIT_LABELS) as LimitKey[])
+                  .filter((k) => r.before[k] !== r.after[k])
+                  .map((k) => (
+                    <li key={k}>
+                      {LIMIT_LABELS[k].label}: <span className="tnum">{fmtMoney(r.before[k], r.currency, { decimals: false })}</span> →{" "}
+                      <span className="tnum font-semibold">{fmtMoney(r.after[k], r.currency, { decimals: false })}</span>
+                    </li>
+                  ))}
+              </ul>
+              {r.explanation && <p className="mt-2 rounded-lg bg-sunken px-3 py-2 text-[13px]">“{r.explanation}”</p>}
+              <div className="mt-3 space-y-1 text-[13px] text-ink-2">
+                {r.assessment?.reasons.map((x) => (
+                  <div key={x}>• {x}</div>
+                ))}
+                {r.assessment?.screen.scamSignals.length ? <div>• Keyword screen: {r.assessment.screen.scamSignals.join(", ")}</div> : null}
+                {r.assessment?.aiError && <div>• AI unavailable: {r.assessment.aiError}</div>}
+                {r.assessment?.ai?.reviewer_summary && <div className="italic">AI: {r.assessment.ai.reviewer_summary}</div>}
+              </div>
+            </div>
+            <div className="w-full sm:w-72">{r.assessment?.ai && <AssessmentScores ai={r.assessment.ai} />}</div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            {(["approved", "denied"] as const).map((d) => (
+              <Button
+                key={d}
+                size="sm"
+                variant={d === "approved" ? "primary" : "danger"}
+                onClick={async () => {
+                  const note = prompt(d === "approved" ? "Approval note (e.g. verified hospital letter)" : "Reason for declining");
+                  if (!note || note.trim().length < 3) return;
+                  try {
+                    await api.post(`/api/v1/admin/limit-requests/${r.id}`, { decision: d, note });
+                    toast({ tone: "good", text: d === "approved" ? "Approved — temporary limits applied." : "Declined." });
+                    refreshAll();
+                  } catch (e) {
+                    toast({ tone: "bad", text: (e as Error).message });
+                  }
+                }}
+              >
+                {d === "approved" ? "Approve" : "Decline"}
+              </Button>
+            ))}
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 interface Overview {
+  limitRequests: LimitRequest[];
   queue: {
     proof_id: string;
     confidence: number | null;
@@ -162,7 +261,7 @@ export default function AdminPage() {
   const { data: audit } = useApi<{
     rows: { id: number; ts: number; actor: string; actor_type: string; action: string; entity_id: string | null; hash: string; prev_hash: string }[];
   }>("/api/v1/audit/all?limit=60");
-  const [tab, setTab] = useState<"queue" | "flags" | "metrics" | "ledger" | "audit" | "strategies">("queue");
+  const [tab, setTab] = useState<"queue" | "limits" | "flags" | "metrics" | "ledger" | "audit" | "strategies">("queue");
   const now = useNow(30_000);
   const toast = useToast();
 
@@ -206,6 +305,7 @@ export default function AdminPage() {
         onChange={setTab}
         tabs={[
           { value: "queue", label: "Review queue", count: data.queue.length },
+          { value: "limits", label: "Limit requests", count: data.limitRequests.length },
           { value: "flags", label: "Risk flags", count: openFlags.length },
           { value: "metrics", label: "Model metrics" },
           { value: "ledger", label: "Ledger" },
@@ -258,6 +358,8 @@ export default function AdminPage() {
             })}
           </div>
         ))}
+
+      {tab === "limits" && <LimitRequests items={data.limitRequests} />}
 
       {tab === "flags" && (
         <Card>

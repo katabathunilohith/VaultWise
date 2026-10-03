@@ -2,6 +2,7 @@ import { all, get, newId, run, tx } from "./db";
 import { audit } from "./audit";
 import { balanceOf, ensureAccount, transfer, userAccount, worldAccount, LedgerError } from "./ledger";
 import { HttpError, type User } from "./users";
+import { assertWithinWithdrawalLimits } from "./limits";
 import { CATEGORIES, type VaultCategory } from "./shared";
 
 export interface VaultRow {
@@ -375,6 +376,7 @@ export function createWithdrawal(user: User, vaultId: string, amount: number, pa
   const view = toView(v, user.currency);
   if (amount <= 0) throw new HttpError(400, "Amount must be positive");
   if (amount > view.available) throw new HttpError(400, "Amount exceeds the vault's available balance");
+  assertWithinWithdrawalLimits(user, amount);
   const id = newId("wdr");
   const now = Date.now();
   run(
@@ -398,6 +400,52 @@ export function createWithdrawal(user: User, vaultId: string, amount: number, pa
     details: { vaultId, amount, payee, category: v.category, proofRequired: CATEGORIES[v.template].proofHint },
   });
   return id;
+}
+
+/** How long a withdrawal may wait for its proof before the hold is released. */
+export const PROOF_WINDOW_MS = 24 * 3_600_000;
+
+/** Cancels a request that hasn't been backed by proof yet, releasing its hold. */
+export function cancelWithdrawal(user: User, withdrawalId: string) {
+  const w = get<{ id: string; status: string; amount: number; vault_id: string }>(
+    "SELECT id, status, amount, vault_id FROM withdrawals WHERE id = ? AND user_id = ?",
+    withdrawalId,
+    user.id,
+  );
+  if (!w) throw new HttpError(404, "Withdrawal not found");
+  if (w.status !== "awaiting_proof") throw new HttpError(409, "Only requests still waiting for proof can be cancelled");
+  run("UPDATE withdrawals SET status = 'cancelled', decided_at = ? WHERE id = ?", Date.now(), w.id);
+  audit({
+    userId: user.id,
+    actor: user.id,
+    actorType: "user",
+    action: "withdrawal.cancelled",
+    entityType: "withdrawal",
+    entityId: w.id,
+    details: { amount: w.amount, vaultId: w.vault_id },
+  });
+}
+
+/** Scheduler tick: requests left without proof expire, so held money is never stranded. */
+export function expireStaleWithdrawals(user: User, now = Date.now()) {
+  const stale = all<{ id: string; amount: number }>(
+    "SELECT id, amount FROM withdrawals WHERE user_id = ? AND status = 'awaiting_proof' AND created_at < ?",
+    user.id,
+    now - PROOF_WINDOW_MS,
+  );
+  for (const w of stale) {
+    run("UPDATE withdrawals SET status = 'expired', decided_at = ? WHERE id = ?", now, w.id);
+    audit({
+      userId: user.id,
+      actor: "scheduler",
+      actorType: "system",
+      action: "withdrawal.expired",
+      entityType: "withdrawal",
+      entityId: w.id,
+      details: { amount: w.amount, after: "24h without proof" },
+    });
+  }
+  return stale.length;
 }
 
 /** Releases an approved, proof-gated withdrawal from the vault to the linked bank. */

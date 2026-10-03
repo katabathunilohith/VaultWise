@@ -1,10 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CircleCheck, FileCheck2, LoaderCircle, Lock, Siren, TrendingUp } from "lucide-react";
+import { CircleCheck, FileCheck2, LoaderCircle, Lock, MapPin, Siren, TrendingUp } from "lucide-react";
 import { api } from "@/lib/client";
 import { BRAND } from "@/lib/shared";
-import { Button, ErrorNote, Field, Input, Select, Toggle, cx } from "./ui";
+import { countryFlag, detectRegion, regionName, type RegionGuess } from "@/lib/region";
+import { Button, ErrorNote, Field, Input, Notice, Select, Toggle, cx } from "./ui";
+
+export interface CountryOption {
+  code: string;
+  name: string;
+  market: string;
+  flag: string;
+  currency: string;
+  marketName: string;
+}
 
 const PILLARS = [
   { icon: Lock, title: "Purpose-locked vaults", body: "Health, education, housing and more — money that's structurally harder to raid." },
@@ -21,22 +31,62 @@ const STEPS = [
   "Running the Satellite paper engine on live market data",
 ];
 
-export function Onboarding({
-  jurisdictions,
-  onDone,
-}: {
-  jurisdictions: { code: string; name: string; currency: string; flag: string }[];
-  onDone: () => void;
-}) {
+/** Groups countries by market so the rule set and currency are obvious. */
+function CountrySelect({ countries, value, onChange }: { countries: CountryOption[]; value: string; onChange: (cc: string) => void }) {
+  const groups = new Map<string, CountryOption[]>();
+  for (const c of countries) groups.set(c.marketName, [...(groups.get(c.marketName) ?? []), c]);
+  return (
+    <Select id="ob-country" value={value} onChange={(e) => onChange(e.target.value)} required>
+      <option value="" disabled>
+        Choose your country…
+      </option>
+      {[...groups.entries()].map(([market, list]) => (
+        <optgroup key={market} label={`${market} · ${list[0].currency}`}>
+          {[...list]
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.flag} {c.name}
+              </option>
+            ))}
+        </optgroup>
+      ))}
+    </Select>
+  );
+}
+
+export function Onboarding({ countries, onDone }: { countries: CountryOption[]; onDone: () => void }) {
   const [name, setName] = useState("Alex Morgan");
   const [email, setEmail] = useState("");
-  const [jurisdiction, setJurisdiction] = useState("US");
+  const [country, setCountry] = useState("");
+  const [guess, setGuess] = useState<RegionGuess | null>(null);
+  const selected = countries.find((c) => c.code === country) ?? null;
   const [pin, setPin] = useState("");
   const [pin2, setPin2] = useState("");
   const [demo, setDemo] = useState(true);
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Suggest a country from the network (when deployed behind a CDN), the device time zone and browser languages.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let networkCountry: string | null = null;
+      try {
+        networkCountry = (await api.get<{ networkCountry: string | null }>("/api/v1/region")).networkCountry;
+      } catch {
+        // detection is best-effort
+      }
+      const g = detectRegion({ networkCountry, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, languages: navigator.languages });
+      if (cancelled) return;
+      setGuess(g);
+      if (g.supported && g.country) setCountry((cur) => cur || g.country!);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!busy) return;
@@ -49,10 +99,11 @@ export function Onboarding({
     setError(null);
     if (!/^\d{4,6}$/.test(pin)) return setError("Choose a 4–6 digit PIN");
     if (pin !== pin2) return setError("PINs don't match");
+    if (!country) return setError("Choose the country where you live and bank");
     setBusy(true);
     setStep(0);
     try {
-      await api.post("/api/v1/onboarding", { name, email, jurisdiction, pin, demo });
+      await api.post("/api/v1/onboarding", { name, email, country, pin, demo });
       onDone();
     } catch (err) {
       setError((err as Error).message);
@@ -123,7 +174,7 @@ export function Onboarding({
                   <span className="text-lg font-semibold">{BRAND.name}</span>
                 </div>
                 <h2 className="text-2xl font-semibold tracking-tight">Open your wallet</h2>
-                <p className="mt-1 text-sm text-ink-2">Your market sets the currency, guardrails and disclosures.</p>
+                <p className="mt-1 text-sm text-ink-2">Your country sets the currency, guardrails and disclosures.</p>
               </div>
               <Field label="Full name" htmlFor="ob-name">
                 <Input id="ob-name" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} autoComplete="name" />
@@ -131,15 +182,26 @@ export function Onboarding({
               <Field label="Email" hint="Optional" htmlFor="ob-email">
                 <Input id="ob-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
               </Field>
-              <Field label="Country / region" hint="Sets currency, emergency caps, permitted asset classes and data-protection regime" htmlFor="ob-j">
-                <Select id="ob-j" value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)}>
-                  {jurisdictions.map((j) => (
-                    <option key={j.code} value={j.code}>
-                      {j.flag} {j.name} ({j.currency})
-                    </option>
-                  ))}
-                </Select>
+              <Field label="Country of residence" htmlFor="ob-country">
+                <CountrySelect countries={countries} value={country} onChange={setCountry} />
               </Field>
+              {selected ? (
+                <div className="-mt-2 space-y-1.5">
+                  <div className="flex flex-wrap gap-1.5 text-xs">
+                    <span className="rounded-full bg-accent-soft px-2 py-0.5 font-medium text-accent-ink">Wallet currency: {selected.currency}</span>
+                    <span className="rounded-full bg-sunken px-2 py-0.5 text-ink-2">Rules: {selected.marketName}</span>
+                  </div>
+                  {guess?.supported && guess.country === country && (
+                    <p className="flex items-center gap-1.5 text-xs text-muted">
+                      <MapPin className="size-3.5" aria-hidden /> Suggested from {guess.detail}. Change it if you live and bank elsewhere.
+                    </p>
+                  )}
+                </div>
+              ) : guess?.country && !guess.supported ? (
+                <Notice tone="warn" title={`${countryFlag(guess.country)} ${regionName(guess.country)} isn't supported yet`}>
+                  We detected it from {guess.detail}. Choose a supported country where you have a bank account to continue.
+                </Notice>
+              ) : null}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Security PIN" hint="For Tier 2 emergency access" htmlFor="ob-pin">
                   <Input

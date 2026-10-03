@@ -64,8 +64,12 @@ export const EMERGENCY_REASONS: Record<string, string> = {
   other: "Other urgent need",
 };
 
-/** Rough price-level scale used for demo amounts in each currency. */
-export const CURRENCY_SCALE: Record<string, number> = { USD: 1, EUR: 0.95, GBP: 0.8, SGD: 1.3, INR: 80 };
+/**
+ * Rough price-level scale per currency (1 USD-equivalent of everyday spending).
+ * Drives default limits for new markets and demo amounts, so adding a currency
+ * is a one-line change.
+ */
+export const CURRENCY_SCALE: Record<string, number> = { USD: 1, EUR: 0.95, GBP: 0.8, SGD: 1.3, INR: 80, CAD: 1.35, AUD: 1.5, AED: 3.67 };
 
 export const CURRENCY_LOCALE: Record<string, string> = {
   USD: "en-US",
@@ -73,6 +77,17 @@ export const CURRENCY_LOCALE: Record<string, string> = {
   GBP: "en-GB",
   INR: "en-IN",
   SGD: "en-SG",
+  CAD: "en-CA",
+  AUD: "en-AU",
+  AED: "en-AE",
+};
+
+/** Personal limits a customer can tune (minor units). */
+export type LimitKey = "singleWithdrawal" | "dailyWithdrawal" | "monthlyEmergency";
+export const LIMIT_LABELS: Record<LimitKey, { label: string; help: string }> = {
+  singleWithdrawal: { label: "Single withdrawal", help: "Largest proof-verified withdrawal in one request" },
+  dailyWithdrawal: { label: "Daily withdrawals", help: "Total proof-verified withdrawals per day" },
+  monthlyEmergency: { label: "Monthly emergency access", help: "Total emergency releases per calendar month" },
 };
 
 export function fmtMoney(minor: number, currency = "USD", opts: { compact?: boolean; sign?: boolean; decimals?: boolean } = {}) {

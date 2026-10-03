@@ -24,7 +24,7 @@ import { clearApiCache, useApi } from "@/lib/client";
 import { BRAND } from "@/lib/shared";
 import type { JurisdictionRules } from "@/lib/compliance";
 import { cx, Skeleton, ToastProvider } from "./ui";
-import { Onboarding } from "./onboarding";
+import { Onboarding, type CountryOption } from "./onboarding";
 
 export interface Me {
   onboarded: boolean;
@@ -34,6 +34,7 @@ export interface Me {
     name: string;
     email: string | null;
     jurisdiction: string;
+    country: { code: string; name: string; flag: string; currency: string; marketName: string } | null;
     currency: string;
     kycStatus: string;
     kycLevel: number;
@@ -44,6 +45,7 @@ export interface Me {
   };
   rules?: JurisdictionRules;
   jurisdictions: { code: string; name: string; currency: string; flag: string }[];
+  countries: CountryOption[];
 }
 
 const MeCtx = createContext<{ me: Required<Pick<Me, "user" | "rules">> & Me; reload: () => void } | null>(null);
@@ -188,7 +190,7 @@ function SideNav({ me, onNavigate }: { me: Me; onNavigate?: () => void }) {
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-white">{me.user.name}</div>
                 <div className="flex items-center gap-1 text-[11px] text-brand-muted">
-                  <ShieldCheck className="size-3" aria-hidden /> KYC verified · {me.rules?.flag} {me.user.currency}
+                  <ShieldCheck className="size-3" aria-hidden /> KYC verified · {me.user.country?.flag ?? me.rules?.flag} {me.user.currency}
                 </div>
               </div>
             </div>
@@ -222,7 +224,7 @@ export function Shell({ children }: { children: ReactNode }) {
   if (!me.onboarded)
     return (
       <Onboarding
-        jurisdictions={me.jurisdictions}
+        countries={me.countries}
         onDone={() => {
           clearApiCache();
           reload();

@@ -159,6 +159,20 @@ const TICKERS: Record<string, Record<AssetSlot, { symbol: string; name: string }
     gold: { symbol: "GOLDBEES.NS", name: "Nippon India Gold BeES" },
     cash: { symbol: "LIQUIDBEES.NS", name: "Nippon India Liquid BeES" },
   },
+  CA: {
+    equity_home: { symbol: "XIC.TO", name: "iShares Core S&P/TSX Capped Composite" },
+    equity_intl: { symbol: "XAW.TO", name: "iShares Core MSCI All Country World ex Canada" },
+    bonds: { symbol: "ZAG.TO", name: "BMO Aggregate Bond Index ETF" },
+    gold: { symbol: "CGL.TO", name: "iShares Gold Bullion ETF (CAD-hedged)" },
+    cash: { symbol: "CASH.TO", name: "Global X High Interest Savings ETF" },
+  },
+  AU: {
+    equity_home: { symbol: "VAS.AX", name: "Vanguard Australian Shares Index ETF" },
+    equity_intl: { symbol: "VGS.AX", name: "Vanguard MSCI International Shares ETF" },
+    bonds: { symbol: "VAF.AX", name: "Vanguard Australian Fixed Interest ETF" },
+    gold: { symbol: "GOLD.AX", name: "Global X Physical Gold" },
+    cash: { symbol: "AAA.AX", name: "BetaShares Australian High Interest Cash ETF" },
+  },
   SG: {
     equity_home: { symbol: "ES3.SI", name: "SPDR Straits Times Index ETF" },
     equity_intl: { symbol: "IWDA.L", name: "iShares Core MSCI World (USD)" },
@@ -177,6 +191,7 @@ export interface Allocation {
 }
 
 export function modelPortfolio(jurisdiction: string, band: number): Allocation[] {
+  // Markets without a local ETF set use global USD-listed funds, converted to the wallet currency.
   const tickers = TICKERS[jurisdiction] ?? TICKERS.US;
   const w = { ...WEIGHTS[band] };
   // Markets without a cash-like ETF fold that weight into bonds.

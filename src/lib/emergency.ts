@@ -4,6 +4,7 @@ import { rulesFor } from "./compliance";
 import { emergencyRiskScore, raiseFlag } from "./fraud";
 import { transfer, userAccount } from "./ledger";
 import { checkPin, HttpError, type User } from "./users";
+import { effectiveEmergencyCap } from "./limits";
 import { listVaults, type VaultView } from "./vaults";
 import { EMERGENCY_REASONS, fmtMoney, type VaultCategory } from "./shared";
 
@@ -60,6 +61,8 @@ function monthStart(now: number) {
 
 export function emergencyStatus(user: User, now = Date.now()) {
   const rules = rulesFor(user.jurisdiction).emergency;
+  // The stricter of the market's cap and the customer's own monthly limit.
+  const cap = effectiveEmergencyCap(user);
   const usedThisMonth =
     get<{ s: number }>(
       "SELECT COALESCE(SUM(amount), 0) AS s FROM emergency_requests WHERE user_id = ? AND status != 'blocked' AND created_at >= ?",
@@ -89,9 +92,10 @@ export function emergencyStatus(user: User, now = Date.now()) {
   );
   return {
     rules,
-    cap: rules.monthlyCap,
+    cap,
+    marketCap: rules.monthlyCap,
     usedThisMonth,
-    remainingCap: Math.max(0, rules.monthlyCap - usedThisMonth),
+    remainingCap: Math.max(0, cap - usedThisMonth),
     requestsLast7d: last7,
     requestsLast72h: last72h,
     requestsLast30d: last30,
@@ -154,7 +158,7 @@ export function planEmergency(user: User, amount: number, now = Date.now()) {
           key: "cap",
           label: "Monthly emergency cap",
           status: "block",
-          detail: `Only ${fmtMoney(status.remainingCap, user.currency)} left of this month's ${fmtMoney(status.cap, user.currency)} cap`,
+          detail: `Only ${fmtMoney(status.remainingCap, user.currency)} left of this month's ${fmtMoney(status.cap, user.currency)} ${status.cap < status.marketCap ? "personal limit" : "cap"}`,
         },
   );
   checks.push(

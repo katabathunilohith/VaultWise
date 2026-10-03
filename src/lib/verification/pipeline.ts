@@ -3,12 +3,23 @@ import path from "node:path";
 import { all, get, newId, parseJson, run, tx, UPLOAD_DIR } from "../db";
 import { audit } from "../audit";
 import { rulesFor } from "../compliance";
-import { aiEnabled, chatJson, VISION_MODEL } from "../groq";
+import { AiError, aiEnabled, chatJson, describeAiError, VISION_MODEL } from "../groq";
 import { CATEGORIES, fmtMoney, type VaultCategory } from "../shared";
 import { HttpError, type User } from "../users";
 import { payoutWithdrawal } from "../vaults";
 import { raiseFlag } from "../fraud";
-import { dHash, EDITING_SOFTWARE, errorLevelAnalysis, hamming, preprocess, readExif, sha256, type ExifSummary } from "./forensics";
+import {
+  dHash,
+  EDITING_SOFTWARE,
+  ELA_MAX_PIXELS,
+  errorLevelAnalysis,
+  hamming,
+  preprocess,
+  probeImage,
+  readExif,
+  sha256,
+  type ExifSummary,
+} from "./forensics";
 import { acceptedCategories, keywordScores } from "./classify";
 
 export const PIPELINE_VERSION = "vw-proof@1.4";
@@ -99,8 +110,21 @@ export interface VerificationRow {
   created_at: number;
 }
 
-const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp"];
 const MAX_BYTES = 10 * 1024 * 1024;
+
+/** Rejects files the pipeline can't read before anything is stored or held. */
+export async function validateUpload(buffer: Buffer, mime: string) {
+  if (mime === "image/heic" || mime === "image/heif")
+    throw new HttpError(
+      415,
+      "HEIC photos aren't supported yet. Upload a JPEG or PNG — on iPhone, share the photo as JPEG or set Camera → Formats → Most Compatible.",
+    );
+  if (!ALLOWED_MIME.includes(mime)) throw new HttpError(415, "Upload a photo or scan (JPEG, PNG or WebP)");
+  if (buffer.length > MAX_BYTES) throw new HttpError(413, "File is larger than 10 MB");
+  if (!(await probeImage(buffer)))
+    throw new HttpError(415, "We couldn't read that image. It may be damaged, or in a format we don't support — try a JPEG or PNG.");
+}
 
 export function createProof(
   user: User,
@@ -115,7 +139,7 @@ export function createProof(
     emergencyId?: string | null;
   },
 ) {
-  if (!ALLOWED_MIME.includes(input.mime)) throw new HttpError(415, "Upload a photo or scan (JPEG, PNG, WebP or HEIC)");
+  if (!ALLOWED_MIME.includes(input.mime)) throw new HttpError(415, "Upload a photo or scan (JPEG, PNG or WebP)");
   if (input.buffer.length > MAX_BYTES) throw new HttpError(413, "File is larger than 10 MB");
   const id = newId("prf");
   const ext = input.mime.split("/")[1].replace("jpeg", "jpg");
@@ -389,7 +413,8 @@ export async function runPipeline(proofId: string) {
       } catch (e) {
         ext.status = "failed";
         ext.summary = "Vision model call failed — routing to a human reviewer";
-        ext.checks.push({ label: "Vision model", status: "fail", detail: String((e as Error).message).slice(0, 160) });
+        if (!(e instanceof AiError)) console.warn("[verify] vision step", e);
+        ext.checks.push({ label: "Vision model", status: "fail", detail: describeAiError(e) });
       }
     }
     finish(ext);
@@ -514,16 +539,26 @@ export async function runPipeline(proofId: string) {
 
     // 5 — Tamper detection & document reuse.
     const tam = begin("tamper");
-    const ela = await errorLevelAnalysis(buffer);
-    const elaPath = proof.stored_path.replace(/\.[a-z]+$/, "_ela.png");
-    fs.writeFileSync(elaPath, ela.heatmap);
+    const elaResult = await errorLevelAnalysis(buffer);
+    // Very large photos skip ELA (memory-bound); reuse, metadata, arithmetic and visual checks still apply.
+    const ela = elaResult ?? { score: 0, largestCluster: 0, texturedBlocks: 0, heatmap: null };
+    const elaPath = elaResult ? proof.stored_path.replace(/\.[a-z]+$/, "_ela.png") : null;
+    if (elaResult && elaPath) fs.writeFileSync(elaPath, elaResult.heatmap);
     const phash = await dHash(buffer);
     run("UPDATE proofs SET phash = ?, ela_path = ? WHERE id = ?", phash, elaPath, proof.id);
-    tam.checks.push({
-      label: "Error level analysis",
-      status: ela.score >= 0.5 ? "fail" : ela.score >= 0.2 ? "warn" : "pass",
-      detail: `Anomaly ${(ela.score * 100).toFixed(0)}% · largest inconsistent region ${ela.largestCluster} blocks of ${ela.texturedBlocks}`,
-    });
+    tam.checks.push(
+      elaResult
+        ? {
+            label: "Error level analysis",
+            status: ela.score >= 0.5 ? "fail" : ela.score >= 0.2 ? "warn" : "pass",
+            detail: `Anomaly ${(ela.score * 100).toFixed(0)}% · largest inconsistent region ${ela.largestCluster} blocks of ${ela.texturedBlocks}`,
+          }
+        : {
+            label: "Error level analysis",
+            status: "info",
+            detail: `Skipped — the photo is above the ${ELA_MAX_PIXELS / 1_000_000} MP analysis limit; other tamper checks still applied`,
+          },
+    );
     if (ela.score >= 0.5)
       flags.push({ severity: "medium", text: `ELA found a localised compression inconsistency (${(ela.score * 100).toFixed(0)}%)` });
 
@@ -613,7 +648,9 @@ export async function runPipeline(proofId: string) {
     if (!x) confidence = Math.min(confidence, 0.6);
     confidence = clamp(confidence);
 
-    const approveAt = template === "custom" ? 0.95 : rules.verification.autoApprove;
+    const approveAt = rules.verification.autoApprove;
+    // Custom vaults without a borrowed template are the strictest tier: a person always confirms.
+    const strictest = template === "custom";
     // Automation only approves clean cases: any failed check sends it to a person.
     const anyFailedCheck = [S("extract"), S("classify"), S("tamper")].some((st) => st.checks.some((c) => c.status === "fail"));
     let decision: VerificationRow["decision"];
@@ -623,8 +660,9 @@ export async function runPipeline(proofId: string) {
       reasons.push(...hardFails);
     } else if (!x) {
       decision = "human_review";
-      reasons.push("Automated reading wasn't possible, so a person will check this", ...reviewReasons);
-    } else if (confidence >= approveAt && tamperScore < 0.3 && amountScore >= 1 && !anyFailedCheck) {
+      const why = S("extract").checks.find((c) => c.label === "Vision model")?.detail;
+      reasons.push(`Automated reading wasn't possible${why ? ` (${why.slice(0, 100)})` : ""}, so a person will check this`, ...reviewReasons);
+    } else if (confidence >= approveAt && tamperScore < 0.3 && amountScore >= 1 && !anyFailedCheck && !strictest) {
       decision = "auto_approved";
       reasons.push(`High confidence (${(confidence * 100).toFixed(0)}%) that this ${x.document_type.replace(/_/g, " ")} supports the withdrawal`);
     } else if (confidence <= rules.verification.autoDeny) {
@@ -634,14 +672,16 @@ export async function runPipeline(proofId: string) {
       decision = "human_review";
       for (const s of [S("classify"), S("tamper"), S("extract")])
         for (const c of s.checks) if (c.status === "fail" || c.status === "warn") reasons.push(`${c.label}: ${c.detail}`);
-      if (template === "custom") reasons.push("Custom vaults use the strictest tier — a person confirms the purpose");
+      if (strictest) reasons.unshift("Custom vaults without a verification template are always confirmed by a person");
       if (!reasons.length) reasons.push(`Confidence ${(confidence * 100).toFixed(0)}% is between the auto-deny and auto-approve thresholds`);
     }
 
     dec.checks.push({
       label: "Confidence",
       status: decision === "auto_approved" ? "pass" : decision === "auto_denied" ? "fail" : "warn",
-      detail: `${(confidence * 100).toFixed(0)}% · approve ≥ ${(approveAt * 100).toFixed(0)}%, deny ≤ ${(rules.verification.autoDeny * 100).toFixed(0)}%`,
+      detail: strictest
+        ? `${(confidence * 100).toFixed(0)}% · custom vault — approval always by a person, deny ≤ ${(rules.verification.autoDeny * 100).toFixed(0)}%`
+        : `${(confidence * 100).toFixed(0)}% · approve ≥ ${(approveAt * 100).toFixed(0)}%, deny ≤ ${(rules.verification.autoDeny * 100).toFixed(0)}%`,
     });
     dec.checks.push({
       label: "Route",
@@ -706,12 +746,13 @@ export async function runPipeline(proofId: string) {
     });
   } catch (e) {
     const msg = (e as Error).message;
+    console.error("[verify] pipeline", e);
     for (const s of stages) if (s.status === "running" || s.status === "pending") s.status = s.status === "running" ? "failed" : "skipped";
     run(
       "UPDATE verifications SET status = 'error', stages = ?, decision = 'human_review', queued_at = ?, reasons = ? WHERE proof_id = ?",
       JSON.stringify(stages),
       Date.now(),
-      JSON.stringify([`Pipeline error: ${msg}`]),
+      JSON.stringify(["Something went wrong while checking this document, so a person will review it"]),
       proof.id,
     );
     applyOutcome(user, proof, "review", PIPELINE_VERSION, "model");

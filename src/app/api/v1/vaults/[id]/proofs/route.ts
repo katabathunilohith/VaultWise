@@ -3,7 +3,7 @@ import { customer, handle, json } from "@/lib/api";
 import { get } from "@/lib/db";
 import { HttpError } from "@/lib/users";
 import { getVaultRow } from "@/lib/vaults";
-import { createProof, runPipeline } from "@/lib/verification/pipeline";
+import { createProof, runPipeline, validateUpload } from "@/lib/verification/pipeline";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -26,8 +26,10 @@ export const POST = handle(async (req: Request, ctx: Ctx) => {
   );
   if (!w) throw new HttpError(404, "Withdrawal not found");
   if (w.status !== "awaiting_proof") throw new HttpError(409, "This withdrawal already has a proof");
+  const buffer = Buffer.from(await file.arrayBuffer());
+  await validateUpload(buffer, file.type || "image/jpeg");
   const proofId = createProof(user, {
-    buffer: Buffer.from(await file.arrayBuffer()),
+    buffer,
     fileName: file.name || "upload",
     mime: file.type || "image/jpeg",
     purpose: "withdrawal",
