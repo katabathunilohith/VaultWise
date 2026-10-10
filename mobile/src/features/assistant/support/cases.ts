@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { getItem, removeItem, setItem } from "@/lib/storage";
+import { caseMessageKey, getItem, KEYS, removeItem, setItem } from "@/lib/storage";
 import type { SupportTopic } from "./topics";
 
 /**
@@ -29,8 +29,6 @@ export const MAX_OPEN_CASES = 5;
 export const MESSAGE_MAX = 600;
 export const REPLY_WINDOW_MS = 4 * 60 * 60 * 1000;
 
-const KEY = "vw.cases";
-const msgKey = (id: string) => `vw.cases.${id}`;
 const TOPIC_KEYS: SupportTopic[] = ["held", "proof", "emergency", "payment", "other"];
 
 let cache: SupportCase[] | null = null;
@@ -58,12 +56,12 @@ function load(): Promise<SupportCase[]> {
   loading ??= (async () => {
     let metas: CaseMeta[] = [];
     try {
-      const parsed: unknown = JSON.parse((await getItem(KEY)) ?? "[]");
+      const parsed: unknown = JSON.parse((await getItem(KEYS.cases)) ?? "[]");
       metas = Array.isArray(parsed) ? parsed.filter(isMeta) : [];
     } catch {
       metas = [];
     }
-    const withMessages = await Promise.all(metas.map(async (m) => ({ ...m, message: (await getItem(msgKey(m.id))) ?? "" })));
+    const withMessages = await Promise.all(metas.map(async (m) => ({ ...m, message: (await getItem(caseMessageKey(m.id))) ?? "" })));
     // A case added while we were reading wins over what was on disk.
     cache = cache ?? withMessages;
     emit();
@@ -74,7 +72,7 @@ function load(): Promise<SupportCase[]> {
 
 async function persist() {
   const metas: CaseMeta[] = (cache ?? []).map(({ message: _message, ...meta }) => meta);
-  await setItem(KEY, JSON.stringify(metas));
+  await setItem(KEYS.cases, JSON.stringify(metas));
 }
 
 function newCaseId(taken: Set<string>) {
@@ -99,7 +97,7 @@ export async function addCase(input: { topic: SupportTopic; ref?: string; messag
   };
   cache = [created, ...existing];
   emit();
-  await Promise.all([setItem(msgKey(created.id), created.message), persist()]);
+  await Promise.all([setItem(caseMessageKey(created.id), created.message), persist()]);
   return created;
 }
 
@@ -107,7 +105,17 @@ export async function closeCase(id: string) {
   const existing = await load();
   cache = existing.filter((c) => c.id !== id);
   emit();
-  await Promise.all([removeItem(msgKey(id)), persist()]);
+  await Promise.all([removeItem(caseMessageKey(id)), persist()]);
+}
+
+/**
+ * Drops the cases held in memory, after Delete account has cleared them from storage. Without
+ * this, Support keeps showing them and the next new case would write them back.
+ */
+export function forgetCases() {
+  cache = [];
+  loading = null;
+  emit();
 }
 
 /** Open cases, newest first. `null` while they're being read from storage. */

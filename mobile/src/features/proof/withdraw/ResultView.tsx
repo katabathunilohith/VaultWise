@@ -24,8 +24,11 @@ const OUTCOME_HAPTIC: Record<Outcome, TokenName> = {
 };
 
 /**
- * The outcome, in the flow's R1/R2 slots. Paid → Done. With a person → Done, plus a note for the
- * reviewer. Declined → Try another document, plus Ask a person to check. No confetti: money out.
+ * The outcome, in the flow's R1/R2 slots. Paid → Done. With a person → Done. Declined → Try
+ * another document, plus Ask a person to check. No confetti: money out.
+ *
+ * Only a decline can be sent to a person, once (the server answers 409 for anything else), so a
+ * check already with a person offers Talk to a person instead of a note box.
  */
 export function ResultView({
   proof,
@@ -72,22 +75,16 @@ export function ResultView({
   const amt = amountText(amount, vault.currency);
   const reviewBy = whenText(now + rules.reviewSlaHours * 3_600_000, now);
   const seeChecks = () => router.push({ pathname: "/proof/[id]", params: { id: proof.id } });
+  const canAppeal = outcome === "declined" && proof.verification.finalDecision === "denied" && !proof.verification.appealNote;
 
   let footer;
-  if (outcome === "approved") footer = <Button label="Done" armOnMount onPress={onClose} />;
-  else if (outcome === "review")
-    footer = (
-      <>
-        {!noteOpen && !appealed && !proof.verification.appealNote ? <Button label="Add a note for the reviewer" variant="tonal" size="md" onPress={() => setNoteOpen(true)} /> : null}
-        <Button label="Done" armOnMount onPress={onClose} />
-      </>
-    );
+  if (outcome !== "declined") footer = <Button label="Done" armOnMount onPress={onClose} />;
   else
     footer = appealed ? (
       <Button label="Done" onPress={onClose} />
     ) : (
       <>
-        {!noteOpen ? <Button label="Ask a person to check" variant="tonal" size="md" onPress={() => setNoteOpen(true)} /> : null}
+        {canAppeal && !noteOpen ? <Button label="Ask a person to check" variant="tonal" size="md" onPress={() => setNoteOpen(true)} /> : null}
         <Button label="Try another document" armOnMount onPress={() => onTryAnother(d.decline?.reason ?? d.lines[0])} />
       </>
     );
@@ -136,10 +133,10 @@ export function ResultView({
           <AppealBox
             proofId={proof.id}
             autoFocus
-            title={outcome === "review" ? "Add a note for the reviewer" : "Ask a person to check"}
-            body={outcome === "review" ? "Anything that helps them decide, like what the bill was for." : "Tell them anything that helps. They'll look at the bill again."}
-            sentTitle={outcome === "review" ? "Note sent" : "Sent to a person"}
-            sentBody={outcome === "review" ? "The reviewer will see it with your bill." : `A person on our team will look again. You'll hear back by ${reviewBy}.`}
+            title="Ask a person to check"
+            body="Tell them anything that helps. They'll look at the bill again."
+            sentTitle="Sent to a person"
+            sentBody={`A person on our team will look again. You'll hear back by ${reviewBy}.`}
             onSent={() => setAppealed(true)}
           />
         ) : null}

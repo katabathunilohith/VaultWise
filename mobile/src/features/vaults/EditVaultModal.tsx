@@ -8,7 +8,7 @@ import type { UpdateVaultInput, Vault } from "@/lib/api/types";
 import { haptic } from "@/lib/haptics";
 import { parseAmount } from "@/lib/money";
 import { space } from "@/theme";
-import { KeyboardSafe, KeypadFooter, KeypadSpacer, TextField } from "./fields";
+import { KeyboardSafe, KeypadFooter, TextField } from "./fields";
 import { dateFromChoice, GoalFields, RuleFields, type DateChoice } from "./forms";
 import { milestoneLevel, monthlyNeeded, progressOf, ruleDraftFrom, ruleDraftValid, ruleInput, type RuleDraft } from "./format";
 import { writeSeenMilestone } from "./hooks";
@@ -130,7 +130,6 @@ export function EditVaultModal({ vault, initialTab, onClose }: { vault: Vault; i
           ) : (
             <RuleFields draft={rule} onChange={setRule} currency={vault.currency} goalMonthly={goalMonthly} />
           )}
-          {keypad ? <KeypadSpacer /> : null}
         </ModalScreen>
       </KeyboardSafe>
     </Modal>

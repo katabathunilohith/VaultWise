@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { forgetCases } from "@/features/assistant/support/cases";
 import { api } from "@/lib/api/client";
 import { resetDevice } from "@/lib/session";
 import { clearDraft } from "../../onboarding/draft";
@@ -9,7 +10,7 @@ const isMe = (q: { queryKey: readonly unknown[] }) => q.queryKey[1] === "me";
 
 /**
  * Deletes the account: the server wallet (live) or the demo data, then everything this phone
- * keeps (PIN, app lock, consents, notification choices) and every cached response.
+ * keeps (PIN, app lock, consents, notification choices, support cases) and every cached response.
  *
  * /me is re-read rather than cleared, so the root gate never blanks: live, the server now has no
  * wallet and the gate moves to Welcome on its own; in demo mode the sample account is always there,
@@ -19,6 +20,7 @@ const isMe = (q: { queryKey: readonly unknown[] }) => q.queryKey[1] === "me";
 export async function finishDeletion(qc: QueryClient) {
   await api.reset();
   await Promise.all([resetPinAttempts(), resetNotificationPrefs(), resetDevice()]);
+  forgetCases();
   clearDraft();
   await qc.invalidateQueries({ predicate: isMe });
   qc.removeQueries({ predicate: (q) => !isMe(q) && q.getObserversCount() === 0 });

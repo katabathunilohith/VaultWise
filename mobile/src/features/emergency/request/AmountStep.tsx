@@ -5,15 +5,12 @@ import { errorMessage } from "@/lib/api/errors";
 import type { EmergencyOverview } from "@/lib/api/types";
 import { haptic } from "@/lib/haptics";
 import { moneyWhole, parseAmount } from "@/lib/money";
-import { layout, radius, space } from "@/theme";
+import { radius, space } from "@/theme";
 import { blockedReason, maxRequest } from "../copy";
 import { fmt } from "../format";
 import { go, leave } from "../routes";
 import { SplitLines } from "./PlanLines";
 import type { usePlanPreview } from "./usePlanPreview";
-
-/** Keypad + the main button live in the bottom slot; content scrolls clear of them. */
-const KEYPAD_BLOCK = layout.keyHeight * 4 + layout.keyGap * 3 + 12;
 
 /** What someone has typed, with the currency symbol and grouping: "₹12,500.5". */
 function typedDisplay(text: string, currency: string) {
@@ -129,8 +126,6 @@ export function AmountStep({
           <Skeleton height={20} width="80%" />
         </View>
       )}
-
-      <View style={{ height: KEYPAD_BLOCK - 60 }} />
     </ModalScreen>
   );
 }

@@ -10,8 +10,8 @@ import { Field } from "./Field";
 const MIN_CHARS = 5;
 
 /**
- * A note to the person checking the proof. Sending it also asks for a person's review when the
- * automatic check declined it.
+ * Asks a person to check a declined proof again, with a note for them. The server takes this
+ * once, and only for a decline, so callers offer it only then.
  */
 export function AppealBox({
   proofId,

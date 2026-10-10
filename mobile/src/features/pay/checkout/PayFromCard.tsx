@@ -77,12 +77,15 @@ export function PayFromCard({ intent, vault, canChange, onChange }: { intent: Pa
               Not enough available. This bill is {payAmount(intent.amount, intent.currency)}.
             </Txt>
           </Row>
-          <Button
-            label={`Add money to ${vault.name}`}
-            variant="tonal"
-            size="md"
-            onPress={() => router.push(`/add-money/${vault.id}`)}
-          />
+          {intent.dryRun ? (
+            // Adding money moves real bank money, and a practice run never needs it. The vault shown
+            // is the one with the most available (short ones can't be picked), so a smaller bill is the way on.
+            <Txt v="bodyM" color="textMuted">
+              This is a practice run, so you don&apos;t need to add money. Try a smaller bill instead.
+            </Txt>
+          ) : (
+            <Button label={`Add money to ${vault.name}`} variant="tonal" size="md" onPress={() => router.push(`/add-money/${vault.id}`)} />
+          )}
         </>
       ) : null}
     </Card>

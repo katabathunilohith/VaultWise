@@ -27,7 +27,7 @@ export function ReviewStep({ intent, flow }: { intent: PaymentIntent; flow: Chec
         busy ? (
           <Button label={flow.phase.kind === "authenticating" ? "Waiting for confirmation" : "Confirming payment"} loading />
         ) : (
-          <HoldToConfirm label={`Hold to pay ${amount}`} onConfirm={() => void flow.start()} disabled={flow.blocked} />
+          <HoldToConfirm label={`Hold to pay ${amount}`} onConfirm={() => void flow.start()} disabled={flow.blocked} commitHaptic={false} />
         )
       }
     >

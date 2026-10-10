@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { subscribeDemoReset } from "@/lib/api/demo";
 import type { Holding, InvestCore, Minor } from "@/lib/api/types";
 import { splitByWeight, type Frequency } from "./format";
 
@@ -27,6 +28,9 @@ function set(next: OverlayState) {
   state = next;
   listeners.forEach((l) => l());
 }
+
+// Deleting the account in Practice wipes the demo data; the session's plan and buys go with it.
+subscribeDemoReset(() => set({ plan: null, buys: [] }));
 
 function subscribe(l: () => void) {
   listeners.add(l);

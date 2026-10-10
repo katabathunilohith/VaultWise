@@ -30,7 +30,7 @@ import { haptic } from "@/lib/haptics";
 import { moneyWhole, parseAmount } from "@/lib/money";
 import { layout, radius, space, useTheme } from "@/theme";
 import { CoinDrop } from "./CoinDrop";
-import { KeypadFooter, KeypadSpacer, TypedAmount } from "./fields";
+import { KeypadFooter, TypedAmount } from "./fields";
 import { milestoneLevel, progressOf } from "./format";
 import { MILESTONE_TITLE, recordMilestone } from "./hooks";
 import { ReleaseContract } from "./ReleaseContract";
@@ -179,7 +179,6 @@ export function AddMoneyScreen({ vaultId }: { vaultId: string }) {
       {overBank && bank !== null ? (
         <Banner tone="warning" title="More than your bank has" body={`Your bank has ${moneyWhole(bank, vault.currency)}. Try a smaller amount.`} />
       ) : null}
-      <KeypadSpacer />
     </ModalScreen>
   );
 }

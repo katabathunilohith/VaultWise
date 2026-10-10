@@ -1,14 +1,49 @@
-import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSyncExternalStore } from "react";
+import { focusManager, QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useRef, useSyncExternalStore } from "react";
+import { AppState, Platform } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { api } from "./client";
 import { getConnection, subscribeConnection } from "./connection";
 
+/**
+ * Only data older than staleTime is fetched again on focus: coming back to the app, or to a tab.
+ * Money moves in the background (checks finish, payouts land), so a screen shouldn't keep
+ * showing what it had when it was last opened.
+ */
 export const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 15_000, retry: 1, refetchOnWindowFocus: false },
+    queries: { staleTime: 15_000, retry: 1, refetchOnWindowFocus: true },
     mutations: { retry: 0 },
   },
 });
+
+/**
+ * On a phone, the app coming back to the foreground counts as window focus (TanStack Query's
+ * React Native recipe). The browser already reports focus by itself.
+ */
+export function initQueryFocus() {
+  if (Platform.OS === "web") return undefined;
+  const sub = AppState.addEventListener("change", (state) => focusManager.setFocused(state === "active"));
+  return () => sub.remove();
+}
+
+/**
+ * Tabs stay mounted, so going back to one doesn't refetch anything by itself. On every focus after
+ * the first, this re-reads whatever on screen has gone stale.
+ */
+export function useRefreshOnFocus() {
+  const qc = useQueryClient();
+  const first = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (first.current) {
+        first.current = false;
+        return;
+      }
+      void qc.refetchQueries({ type: "active", stale: true });
+    }, [qc]),
+  );
+}
 
 /** Re-renders when the app switches between live and demo data. */
 export function useConnection() {

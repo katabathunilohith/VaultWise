@@ -11,7 +11,7 @@ import { emoji3d } from "@/lib/categories";
 import { haptic } from "@/lib/haptics";
 import { parseAmount } from "@/lib/money";
 import { space } from "@/theme";
-import { KeyboardSafe, KeypadFooter, KeypadSpacer } from "./fields";
+import { KeyboardSafe, KeypadFooter } from "./fields";
 import { dateFromChoice, GoalFields, RuleFields, type DateChoice } from "./forms";
 import { ruleDraftFrom, ruleDraftValid, ruleInput, type RuleDraft } from "./format";
 import { useCurrency, writeSeenMilestone } from "./hooks";
@@ -190,8 +190,6 @@ export function NewVaultScreen() {
               </Txt>
             </Stack>
           ) : null}
-
-          {keypad ? <KeypadSpacer /> : null}
         </ModalScreen>
       </KeyboardSafe>
       <Celebration

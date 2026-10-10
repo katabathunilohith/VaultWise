@@ -35,14 +35,6 @@ export function KeypadFooter({
   );
 }
 
-/**
- * @deprecated ModalScreen now clears the measured footer, keypad included, so this adds nothing.
- * Kept as an empty element until the remaining callers drop it.
- */
-export function KeypadSpacer() {
-  return null;
-}
-
 /** Shows what's being typed on the amount keypad: symbol at 55%, grouped digits, decimals as typed. */
 export function TypedAmount({ value, currency, caption }: { value: string; currency: string; caption?: string }) {
   const { c } = useTheme();

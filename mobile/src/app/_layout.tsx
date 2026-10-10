@@ -8,7 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { initConnection } from "@/lib/api/connection";
-import { queryClient, useConnection, useMe } from "@/lib/api/hooks";
+import { initQueryFocus, queryClient, useConnection, useMe } from "@/lib/api/hooks";
 import { initHaptics } from "@/lib/haptics";
 import { setMoneyLocale } from "@/lib/money";
 import { takePendingCheckout, usePendingCheckout } from "@/lib/pending-checkout";
@@ -25,6 +25,7 @@ export default function RootLayout() {
     void initHaptics();
     void initSession();
   }, []);
+  useEffect(() => initQueryFocus(), []);
   if (!fontsLoaded && !fontError) return null;
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

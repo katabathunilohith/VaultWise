@@ -353,11 +353,13 @@ export function isDemoProof(proofId: string) {
 
 /**
  * The server runs the checks in the background, so a result lands whether or not anyone is
- * watching. Every read that shows balances or statuses settles the proofs whose checks are done.
+ * watching. Every read that shows balances or statuses settles the proofs whose checks are done,
+ * and the Pay with Vaultwise payments whose checks or review are done.
  */
 function settleDue() {
   const now = Date.now();
   for (const p of proofs.values()) if (!p.settled && now - p.createdAt >= PIPELINE_MS) settleProof(p);
+  settlePayments();
 }
 
 function proofView(p: DemoProof): ProofView {
@@ -495,55 +497,65 @@ interface DemoIntent extends PaymentIntent {
   outcome?: "succeeded" | "in_review";
 }
 
-/** A batch of sample checkouts. Each batch after the first gets its own ids. */
-function makeIntents(gen: number): DemoIntent[] {
+/**
+ * Rough price level per currency (USD = 1): the table the server sizes its own samples with
+ * (src/lib/shared.ts), so a sample bill costs about the same in every wallet currency.
+ */
+const CURRENCY_SCALE: Record<string, number> = { USD: 1, EUR: 0.95, GBP: 0.8, SGD: 1.3, INR: 80, CAD: 1.35, AUD: 1.5, AED: 3.67 };
+
+/** A sample bill's line items, written in USD and sized to `cur`; the total is their sum. */
+function bill(cur: string, items: [string, number][]) {
+  const scale = CURRENCY_SCALE[cur] ?? 1;
+  const lineItems = items.map(([description, usd]) => ({ description, amount: Math.round(usd * scale * 100) }));
+  return { currency: cur, lineItems, amount: lineItems.reduce((s, x) => s + x.amount, 0) };
+}
+
+/** A batch of sample checkouts in `cur`. Each batch after the first gets its own ids. */
+function makeIntents(gen: number, cur: string): DemoIntent[] {
   const now = Date.now();
   const suffix = gen ? `_${gen}` : "";
-  const base = { currency, createdAt: now, expiresAt: now + DAY, status: "requires_customer" as const, eligibleVaults: [], simulated: true };
+  const base = { createdAt: now, expiresAt: now + DAY, status: "requires_customer" as const, eligibleVaults: [], simulated: true };
   return [
     {
       ...base,
+      ...bill(cur, [
+        ["Cardiology consultation", 150],
+        ["Electrocardiogram (ECG)", 85],
+        ["Comprehensive blood panel", 62.5],
+      ]),
       id: `pi_demo_citygeneral${suffix}`,
       merchant: { id: "mer_citygeneral", name: "City General Hospital", category: "health", city: "Outpatient billing" },
-      amount: 2380000,
       category: "health",
       description: "Outpatient invoice",
       reference: "INV-20995",
-      lineItems: [
-        { description: "Cardiology consultation", amount: 1200000 },
-        { description: "Electrocardiogram (ECG)", amount: 680000 },
-        { description: "Comprehensive blood panel", amount: 500000 },
-      ],
       outcome: "succeeded",
     },
     {
       ...base,
+      ...bill(cur, [
+        ["Organic Chemistry, 9th ed.", 36.125],
+        ["Lab notebook (2)", 4.5],
+        ["Scientific calculator", 12.5],
+      ]),
       id: `pi_demo_westfield${suffix}`,
       merchant: { id: "mer_westfield", name: "Westfield College Bookstore", category: "education", city: "Campus store" },
-      amount: 425000,
       category: "education",
       description: "Semester textbooks",
       reference: "WCB-7781",
-      lineItems: [
-        { description: "Organic Chemistry, 9th ed.", amount: 289000 },
-        { description: "Lab notebook (2)", amount: 36000 },
-        { description: "Scientific calculator", amount: 100000 },
-      ],
       outcome: "succeeded",
     },
     {
       ...base,
+      ...bill(cur, [
+        ["Amoxicillin 500mg", 5.25],
+        ["Blood pressure monitor cuff", 6.75],
+        ["Energy drinks (6-pack)", 2.75],
+      ]),
       id: `pi_demo_greenleaf${suffix}`,
       merchant: { id: "mer_greenleaf", name: "Greenleaf Pharmacy", category: "health", city: "High Street" },
-      amount: 118000,
       category: "health",
       description: "Pharmacy basket",
       reference: "GLP-30412",
-      lineItems: [
-        { description: "Amoxicillin 500mg", amount: 42000 },
-        { description: "Blood pressure monitor cuff", amount: 54000 },
-        { description: "Energy drinks (6-pack)", amount: 22000 },
-      ],
       outcome: "in_review",
     },
   ];
@@ -554,29 +566,36 @@ function makeIntents(gen: number): DemoIntent[] {
  * outcome and still explains any money it set aside. A fresh batch with new ids is added only
  * once nothing is left to pay or being paid.
  */
-function intentStore() {
+function intentStore(initialCurrency: string) {
+  let cur = initialCurrency;
   let gen = 0;
-  let list = makeIntents(gen);
+  let list = makeIntents(gen, cur);
+  const reset = (nextCurrency = cur) => {
+    cur = nextCurrency;
+    gen = 0;
+    list = makeIntents(gen, cur);
+  };
   return {
     find: (intentId: string) => list.find((x) => x.id === intentId),
     list: () => list,
     refill() {
       const now = Date.now();
       const open = list.some((i) => i.status === "processing" || (i.status === "requires_customer" && i.expiresAt > now));
-      if (!open) list = [...list, ...makeIntents(++gen)];
+      if (!open) list = [...list, ...makeIntents(++gen, cur)];
     },
-    reset() {
-      gen = 0;
-      list = makeIntents(gen);
+    reset,
+    /** Sizes the samples for this wallet currency. A different currency starts them over. */
+    sizeFor(walletCurrency: string) {
+      if (walletCurrency !== cur) reset(walletCurrency);
     },
   };
 }
 type IntentStore = ReturnType<typeof intentStore>;
 
 /** Demo mode: paid from the practice vaults, whose balances move. */
-const demoCheckouts = intentStore();
+const demoCheckouts = intentStore(currency);
 /** A live session while /pay isn't deployed: checked against the real vaults, and nothing moves. */
-const dryRunCheckouts = intentStore();
+const dryRunCheckouts = intentStore(currency);
 
 const PAY_STAGES: { key: string; name: string; ms: number; skipped?: boolean }[] = [
   { key: "intake", name: "Invoice from a registered merchant", ms: 250 },
@@ -587,6 +606,8 @@ const PAY_STAGES: { key: string; name: string; ms: number; skipped?: boolean }[]
   { key: "decision", name: "Decision & audit trail", ms: 250 },
 ];
 const PAY_MS = PAY_STAGES.reduce((s, x) => s + x.ms, 0);
+/** A person's check on a payment sent for review, sped up for Practice (as the Tier 2 pause is). */
+const PAY_REVIEW_MS = 90_000;
 
 function coversCategory(v: Vault, category: VaultCategory) {
   return v.category === category || (v.category === "custom" && v.template === category);
@@ -597,32 +618,54 @@ function payVaults(vaults: Vault[], category: VaultCategory): PayVault[] {
   return vaults.filter((v) => coversCategory(v, category)).map((v) => ({ id: v.id, name: v.name, category: v.category, available: v.available }));
 }
 
+function payFrom(v: Vault, i: DemoIntent) {
+  v.balance -= i.amount;
+  recompute(v);
+  record("payment", `Paid ${i.merchant.name} · ${i.reference}`, v, -i.amount, { account: i.merchant.name, kind: "world" });
+}
+
 /**
  * Moves a confirmed checkout to its outcome once the checks are done. Only demo mode moves money
  * (in the practice vault); a dry run against live vaults changes nothing in them.
+ *
+ * In demo mode a payment sent to a person is held, then the simulated person approves it after
+ * PAY_REVIEW_MS: the hold becomes the payment, as with an approved withdrawal. So no hold is
+ * left behind, however many rounds of samples are paid.
  */
 function advanceIntent(i: DemoIntent, movesMoney: boolean) {
-  if (!i.confirmedAt || i.status !== "processing" || Date.now() - i.confirmedAt < PAY_MS) return;
-  i.status = i.outcome ?? "succeeded";
+  if (!i.confirmedAt) return;
+  const now = Date.now();
   const v = movesMoney ? S.vaults.find((x) => x.id === i.vaultId) : undefined;
-  if (v) {
-    if (i.status === "succeeded") {
-      v.balance -= i.amount;
-      recompute(v);
-      record("payment", `Paid ${i.merchant.name} · ${i.reference}`, v, -i.amount, { account: i.merchant.name, kind: "world" });
-    } else {
+  if (i.status === "processing" && now - i.confirmedAt >= PAY_MS) {
+    i.status = i.outcome ?? "succeeded";
+    if (v && i.status === "succeeded") payFrom(v, i);
+    else if (v) {
       v.held += i.amount;
       recompute(v);
     }
+    if (i.status !== "in_review") i.decisionReason = null;
+    else if (movesMoney) {
+      // Rounded up to the minute, so the time shown is never earlier than the decision.
+      const by = new Date(Math.ceil((i.confirmedAt + PAY_MS + PAY_REVIEW_MS) / 60_000) * 60_000);
+      const time = by.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" });
+      i.decisionReason = `One item doesn't look like a ${i.category} expense, so a person will check it by ${time}.`;
+    } else {
+      i.decisionReason = `One item doesn't look like a ${i.category} expense. In a real payment, a person would check it before anything is paid.`;
+    }
   }
-  if (i.status !== "in_review") i.decisionReason = null;
-  else if (movesMoney) {
-    const by = new Date(Date.now() + 4 * 3_600_000);
-    const time = by.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" });
-    i.decisionReason = `One item doesn't look like a ${i.category} expense, so a person will check it by ${time}.`;
-  } else {
-    i.decisionReason = `One item doesn't look like a ${i.category} expense. In a real payment, a person would check it before anything is paid.`;
+  if (movesMoney && i.status === "in_review" && now - i.confirmedAt >= PAY_MS + PAY_REVIEW_MS) {
+    i.status = "succeeded";
+    i.decisionReason = null;
+    if (v) {
+      v.held = Math.max(0, v.held - i.amount);
+      payFrom(v, i);
+    }
   }
+}
+
+/** The server would finish payments in the background; every read catches the demo up first. */
+function settlePayments() {
+  for (const i of demoCheckouts.list()) advanceIntent(i, true);
 }
 
 function payStages(i: DemoIntent): Stage[] | undefined {
@@ -655,22 +698,30 @@ function findIntent(store: IntentStore, intentId: string) {
   return i;
 }
 
+/** A checkout can be confirmed only while it's still waiting and its link hasn't run out. */
+function assertPayable(i: DemoIntent) {
+  if (i.status !== "requires_customer") throw new ApiError("This payment has already been handled", 409);
+  if (Date.now() >= i.expiresAt) throw new ApiError("This payment link has expired. Ask the merchant for a new one.", 409);
+}
+
 /**
  * Pay with Vaultwise in a live session while the server's /pay routes don't exist. The sample
  * checkouts are offered against the customer's own vaults (the live client passes them in, with
- * the wallet currency) and checked against their real balances, but nothing is debited or held.
- * Every view is marked `dryRun` so the screens can say so.
+ * the wallet currency, and the samples are sized to that currency) and checked against their real
+ * balances, but nothing is debited or held. Every view is marked `dryRun` so the screens can say so.
  */
 export const payDryRun = {
   view(intentId: string, vaults: Vault[], walletCurrency: string): PaymentIntent {
+    dryRunCheckouts.sizeFor(walletCurrency);
     const i = findIntent(dryRunCheckouts, intentId);
     advanceIntent(i, false);
-    return intentView(i, payVaults(vaults, i.category), { currency: walletCurrency, dryRun: true });
+    return intentView(i, payVaults(vaults, i.category), { dryRun: true });
   },
   confirm(intentId: string, vaultId: string, pin: string, vaults: Vault[], walletCurrency: string): PaymentIntent {
+    dryRunCheckouts.sizeFor(walletCurrency);
     const i = findIntent(dryRunCheckouts, intentId);
     advanceIntent(i, false);
-    if (i.status !== "requires_customer") throw new ApiError("This payment has already been handled", 409);
+    assertPayable(i);
     if (pin !== DEMO_PIN) throw new ApiError("That PIN isn't right", 403);
     const v = vaults.find((x) => x.id === vaultId);
     if (!v || !coversCategory(v, i.category)) throw new ApiError("This vault can't pay this bill. Pick another one.", 400);
@@ -678,12 +729,13 @@ export const payDryRun = {
     i.vaultId = vaultId;
     i.status = "processing";
     i.confirmedAt = Date.now();
-    return intentView(i, payVaults(vaults, i.category), { currency: walletCurrency, dryRun: true });
+    return intentView(i, payVaults(vaults, i.category), { dryRun: true });
   },
   list(vaults: Vault[], walletCurrency: string): PaymentIntent[] {
+    dryRunCheckouts.sizeFor(walletCurrency);
     for (const i of dryRunCheckouts.list()) advanceIntent(i, false);
     dryRunCheckouts.refill();
-    return dryRunCheckouts.list().map((i) => intentView(i, payVaults(vaults, i.category), { currency: walletCurrency, dryRun: true }));
+    return dryRunCheckouts.list().map((i) => intentView(i, payVaults(vaults, i.category), { dryRun: true }));
   },
   /** After the live account is wiped, its sample checkouts start over too. */
   reset: () => dryRunCheckouts.reset(),
@@ -727,11 +779,13 @@ export const demo = {
     const v = findVault(vaultId);
     const history = S.histories.get(vaultId) ?? [];
     // Only this session's movements are in the history for most vaults (the snapshot has the full
-    // ledger for one), so the running balance starts from what the vault held before them.
+    // ledger for one), so the running balance starts from what the vault held before them. That
+    // opening point sits just before the first of them: the simulator doesn't know how the balance
+    // got there, so the chart and its label only cover the time it does know.
     const opening = v.balance - history.reduce((s, h) => s + h.amount, 0);
     let bal = opening;
     const moves = [...history].reverse().map((h) => ({ t: h.created_at, balance: (bal += h.amount) }));
-    const start = opening !== 0 && moves.length ? [{ t: Math.min(v.createdAt, moves[0].t - 1), balance: opening }] : [];
+    const start = opening !== 0 && moves.length ? [{ t: moves[0].t - 1, balance: opening }] : [];
     const series = [...start, ...moves];
     return {
       vault: clone(v),
@@ -1121,7 +1175,7 @@ export const demo = {
     settleDue();
     const i = findIntent(demoCheckouts, intentId);
     advanceIntent(i, true);
-    if (i.status !== "requires_customer") throw new ApiError("This payment has already been handled", 409);
+    assertPayable(i);
     if (pin !== DEMO_PIN) throw new ApiError("That PIN isn't right", 403);
     const v = findVault(vaultId);
     if (!coversCategory(v, i.category)) throw new ApiError("This vault can't pay this bill. Pick another one.", 400);
@@ -1132,8 +1186,8 @@ export const demo = {
     return demoIntentView(i);
   },
   demoIntents: async (): Promise<PaymentIntent[]> => {
+    // Catches every checkout up (checks done, reviews finished) before deciding whether to refill.
     settleDue();
-    for (const i of demoCheckouts.list()) advanceIntent(i, true);
     demoCheckouts.refill();
     return demoCheckouts.list().map(demoIntentView);
   },
