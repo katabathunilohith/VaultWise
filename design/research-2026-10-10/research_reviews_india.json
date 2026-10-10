@@ -1,0 +1,796 @@
+{
+ "method_notes": "WHAT WAS FETCHED (2026-10-10, India storefront 'in'):\n- App IDs from the iTunes Search API (https://itunes.apple.com/search?term=<name>&entity=software&country=in&limit=5), matched on trackName and sellerName: Jar 1586776687 (changejar technologies), Jupiter 1507748747 (Amica Financial Technologies), CRED 1428580080 (Dreamplug Technologies), PhonePe 1170055821 (PhonePe Pvt Ltd).\n- Fi Money: none of the searches returned it. Fi's own deep link (fi.onelink.me/FiMony) redirects to apps.apple.com/IN/app/id1531564767. That ID returns resultCount 0 from the lookup API, a 404 on apps.apple.com, and an RSS feed with no entries. The Play package from the Android redirect (com.epifi.paisa) also returns 404. Conclusion: the RSS route failed because Fi has been pulled from both stores. That fits TechCrunch's report (2026-03-11) that Fi is winding down banking on its app: https://techcrunch.com/2026/03/11/india-neobank-fi-winds-down-banking-services-on-its-platform. As fallback I used fi.money pages, two DesiDime threads and CardAdvisor. All Fi complaints are marked qualitative_web with count 0.\n- Reviews: Apple customer-reviews RSS, https://itunes.apple.com/in/rss/customerreviews/page=1..10/id=<id>/sortby=mostrecent/json. All 10 pages had 50 entries, so each of the 4 live apps has 500 reviews (2,000 total). Date windows: Jar 2026-02-03 to 10-07; Jupiter 2025-05-10 to 2026-10-06; CRED 2026-05-18 to 10-08; PhonePe 2026-09-08 to 10-08 (only one month, dominated by a review spike, see below).\n- Sample averages are far below the store ratings: Jar 2.31 vs 4.72, Jupiter 1.77 vs 4.65, CRED 2.54 vs 4.84, PhonePe 3.80 vs 4.67. Inference: the RSS feed only carries written reviews, while store averages include star-only taps, often from in-app prompts. Read the theme counts as 'what angry writers say', not as overall satisfaction.\n\nCODING METHOD:\n- I read every 1-2 star review for all four apps, not a sample: Jar 335, Jupiter 398, CRED 294, PhonePe 141, total 1,168. I also read all 3-star reviews and the substantive 4-5 star ones.\n- I built a shared codebook after the first ~60 reviews per app, implemented it as per-app keyword rules with a priority order, and capped each review at 2 themes. A theme called generic_scam is assigned only when nothing specific matches.\n- Refinement passes: (1) read every unclassified review and patched the rules; Hindi, Hinglish and Punjabi phrasings and curly apostrophes were the main misses; (2) dumped whole themes (Jar value-loss and withdrawal, Jupiter app bugs and rewards, CRED rewards, ads and store, PhonePe ads) and removed false positives (e.g. 'supporting', 'AI course', 'upto', '50 points', 'maintenance'); (3) re-checked a systematic every-k-th sample of 15 per app (60 total). On that final sample I judged about 52 of 60 correct: roughly 4 missed a theme and roughly 4 were partly wrong. Treat counts as ±10%.\n- Capping at 2 themes undercounts cross-cutting themes, support in particular. Uncapped support mentions are: Jar 98 (29%), Jupiter 159 (40%), CRED 80 (27%), PhonePe 16 (11%).\n- Unclassified share is 1-2% for Jar, Jupiter and CRED, and 12.8% for PhonePe (mostly empty or positive text left with 1-2 stars).\n- A separate probe script counted specific phrases across all star ratings. Jar 'bank server / low success rate' errors: 44 mentions, 30 of them in July 2026 on v2.76.0. CRED forced Face ID / no-PIN complaints: 14. PhonePe rating-prompt nags: 16, of which 10 sit inside 4-5 star reviews.\n- PhonePe 1-star reviews per day: 12, 16 and 26 on Sept 16-18, against about 2-3 per day on surrounding days. This lines up with NPCI's 0.4% merchant discount rate on UPI payments above Rs 2,000 (effective Oct 15) and CEO Sameer Nigam's comments on it (https://www.thehansindia.com/tech/phonepes-sameer-nigam-says-upi-mdr-move-brings-ipo-filing-closer-1122480, 16 Sep 2026; https://inc42.com/buzz/payments-council-rules-out-consumer-mdr-phonepe-razorpay-back-free-upi/).\n- CRED: 2 reviews on 2026-06-22 and 06-24 protest a Meta tie-up. Press reports say Meta announced a roughly $900M minority investment on June 22, 2026 (https://moneylife.in/article/cred-windfall-meta-invests-900mn-founder-kunal-shah-becomes-new-ceo-of-whatsapp/80865.html). I took this from a search summary and did not fetch the article.\n\nFEATURE SOURCES: App Store descriptions (in the Search API 'description' field), plus https://www.myjar.app/, https://jupiter.money/, https://jupiter.money/pots/, https://jupiter.money/magic-spends/, https://cred.club/, https://www.phonepe.com/ and the fi.money/features/* pages. App sizes come from the API fileSizeBytes field: CRED 617MB, PhonePe 338MB, Jar 194MB, Jupiter 154MB. None of the 4 live apps lists Apple Watch in supportedDevices.\n\nLIMITS:\n- The web-search budget ran out mid-task, so I could not add Reddit or Trustpilot for Fi or check further press. Fi coverage is therefore thinner than the other apps.\n- The Apple RSS feed covers the India App Store only (iOS users skew higher-income; inference). It holds no Android/Play reviews.\n- No reviewer names or personal data are kept in the outputs. All examples below are paraphrased.\n\nFILES:\n- Raw data: C:/Users/shaik/AppData/Local/Temp/claude/C--Users-shaik-VaultWise/9e11eaa3-37f8-4e12-90a3-5e69f6c8b8c9/scratchpad/research/reviews/india/raw/\n- Scripts (parse.js, classify.js, extras.js, fixline.js): .../india/scripts/\n- Outputs (per-app low/mid/high txt+json, *-coded.json, theme-counts.json, extras.json, summary.json): .../india/out/",
+ "apps": [
+  {
+   "app_id": "1586776687",
+   "name": "Jar: Save Money in Digital Gold",
+   "storefront": "in",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:153 4:6 3:6 2:14 1:321 (avg 2.31 in RSS sample; store avg 4.72 from 113,852 ratings)",
+   "features": [
+    "Automatic saving into 24K digital gold: daily from ₹10, weekly from ₹50, monthly from ₹100, plus instant one-off saves (https://www.myjar.app/)",
+    "Rounds up online spends to the next ₹10 and buys gold with the spare change (App Store description)",
+    "Funded through a UPI Autopay mandate from PhonePe, Google Pay or Paytm; can pause or restart (App Store description). Reviews say pausing does not always stop the debits",
+    "Live gold price tool refreshed every minute; savings and appreciation calculator; 'Gold Locker' holdings view (App Store description, myjar.app)",
+    "Silver savings track (mentioned in reviews; withdrawals worked for silver while gold was blocked in July 2026)",
+    "Withdraw by selling gold to bank/UPI. No lock-in, but a sale is only possible 24h after purchase (App Store FAQ). Reviews describe part of the balance being held for 24h",
+    "Physical gold coins and jewellery (Nek) with delivery charges (website and reviews)",
+    "Engagement layer: 5 free daily spins that convert points to gold, referral rewards, 'free gold' cashback (reviews). One review complains of non-skippable ads",
+    "No KYC needed to buy; adults 18+ (App Store FAQ). Support via WhatsApp bot and email (App Store description and reviews)",
+    "Content tools: 50-30-20 budgeting guide, gold-loan and salary calculators (myjar.app)",
+    "No Apple Watch support listed; no widgets, AI assistant or receipt capture found"
+   ],
+   "complaints": [
+    {
+     "theme": "Got back less than was saved: buy/sell spread, 3% GST and deductions not understood when saving",
+     "count": 126,
+     "share_of_low_star": "37.6% of 335 one- and two-star reviews",
+     "paraphrased_examples": [
+      "Saved about ₹17.5k, could only take out about ₹16.5k, and the app has no downloadable breakdown",
+      "Gold bought at one rate could only be sold roughly 8-10% lower the same day, even while gold prices were rising",
+      "Thought it was a savings jar; only learned at withdrawal that GST plus the spread had eaten around 10%",
+      "A bank recurring deposit would have left me with more than this 'savings' app"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Cannot withdraw / money stuck ('bank servers facing low success rate'), withdrawal option disabled",
+     "count": 124,
+     "share_of_low_star": "37.0% of 335 (44 cite the bank-server error; 30 of those in July 2026 on v2.76.0)",
+     "paraphrased_examples": [
+      "For a week every withdrawal failed with a bank-server error, even though my bank was fine and deposits went through instantly",
+      "Gold withdrawals were blocked while silver withdrawals worked, so it is clearly not a bank problem",
+      "Saved for emergencies, then could not reach the money during one; rent money was stuck",
+      "Withdrawals seem to break exactly when gold prices spike (the reviewer suspects intent; unverified)"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Support unreachable: WhatsApp bot loops, phone line doesn't connect, tickets ignored",
+     "count": 79,
+     "share_of_low_star": "23.6% capped (98 uncapped mentions = 29.3%)",
+     "paraphrased_examples": [
+      "The bot keeps asking what the problem is even after I sent screenshots",
+      "Weeks of tickets, emails and calls with no human reply while my money is stuck"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Generic fraud/scam accusation with no specific detail",
+     "count": 54,
+     "share_of_low_star": "16.1%",
+     "paraphrased_examples": [
+      "One-line 'fraud app, don't install' reviews"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Login/OTP/KYC failures blocking access to savings",
+     "count": 20,
+     "share_of_low_star": "6.0%",
+     "paraphrased_examples": [
+      "Logged out after 6 months and the OTP always errors, so I can't reach my savings",
+      "ID verification glitches stop the withdrawal"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Hidden charges / no transparent breakdown of deductions",
+     "count": 17,
+     "share_of_low_star": "5.1% (23 uncapped)",
+     "paraphrased_examples": [
+      "Support won't show the breakdown of their charges",
+      "Every deduction should be itemized instead of making users work it out"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Autopay can't be stopped; debits continue after pausing or uninstalling",
+     "count": 9,
+     "share_of_low_star": "2.7%",
+     "paraphrased_examples": [
+      "Paused autopay in the app but ₹20 kept being taken; had to cancel the mandate in PhonePe",
+      "Hard to find how to delete autopay; ended up removing it from the UPI app"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "App bugs and slowness",
+     "count": 14,
+     "share_of_low_star": "4.2% (39 uncapped)",
+     "paraphrased_examples": [
+      "The withdraw button does nothing and the app stopped opening after an update"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Gold coin delivery / rewards / ads",
+     "count": 11,
+     "share_of_low_star": "3.3% (store/delivery 4, rewards/spins 3, ads 3, plus 1 overlap)",
+     "paraphrased_examples": [
+      "Paid in advance for a gold coin and it never arrived",
+      "Daily spins only give 'better luck next time' or junk coupons"
+     ],
+     "data_basis": "app_store_rss_counted"
+    }
+   ],
+   "praise_themes": [
+    "Starting with tiny automatic amounts (₹10-₹50 a day) builds a saving habit without thinking about it",
+    "Simple, smooth setup; money accumulates almost invisibly and turns into a pleasant surprise cushion",
+    "Some long-term users report gains when gold prices rose (one reports about 19% on a ₹50/day SIP)"
+   ]
+  },
+  {
+   "app_id": "1507748747",
+   "name": "Jupiter: Cards, UPI, Banking",
+   "storefront": "in",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:69 4:16 3:17 2:25 1:373 (avg 1.77 in RSS sample; store avg 4.65 from 54,187 ratings)",
+   "features": [
+    "Savings and salary accounts held at partner Federal Bank; Jupiter is not a bank (App Store description, jupiter.money)",
+    "Pots: 'intelligent piggy bank' with auto-save toward several goals, progress tracking, rewards for meeting goals (https://jupiter.money/pots/). Reviews say Super Pots were renamed RDs",
+    "Magic Spends: auto-invests ₹10+ in digital gold or ₹100+ in mutual funds every time you spend; can pause (https://jupiter.money/magic-spends/)",
+    "Spend Insights with auto-categorization, monthly budget, linked external accounts, 'Wellness Insights' financial-health score, bill reminders (jupiter.money)",
+    "UPI payments earning 'Jewels' rewards (site says 5 Jewels = up to ₹1); Edge+ CSB RuPay credit card advertising 10%/5%/1% cashback; UPI on credit card (App Store description)",
+    "Mutual funds (0-commission direct, SIP from ₹100, daily/weekly auto-invest), DigiGold, FDs, RDs",
+    "Personal loans, mini-loans, loan against mutual funds; insurance products (fraud/screen/UPI protect)",
+    "1-tap card freeze and biometric security (jupiter.money)",
+    "Support 9am-7pm with chatbot and email (website). No dark mode and no QR widget (repeated requests in 4-5 star reviews). Minimum iOS 17 (API)",
+    "No Apple Watch support listed"
+   ],
+   "complaints": [
+    {
+     "theme": "Support unreachable: bot loops, emails only auto-acknowledged, limited hours",
+     "count": 103,
+     "share_of_low_star": "25.9% capped (159 uncapped = 39.9% of 398)",
+     "paraphrased_examples": [
+      "Waited 1.5 hours in chat with no agent; another time got a closing-time message after 5 hours",
+      "The chatbot keeps asking 'connect to an agent?' and nothing happens",
+      "Federal Bank says only Jupiter can fix it, and Jupiter doesn't answer"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Bugs: UPI intent not opening from merchant apps, crashes on pay, 'something snapped' errors",
+     "count": 77,
+     "share_of_low_star": "19.3%",
+     "paraphrased_examples": [
+      "Chose Jupiter UPI in a food app; it opens the home screen and never shows the payment page",
+      "App crashes right after scanning a QR and entering the amount"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Login / KYC / onboarding / device-compatibility failures",
+     "count": 67,
+     "share_of_low_star": "16.8% (12 cite 'device not compatible' or iOS-version lockouts)",
+     "paraphrased_examples": [
+      "Profile rejected as 'not matching policies' with no reason given (19-year-old applicant)",
+      "Video KYC stuck spinning for days",
+      "After an update my older iPhone says 'device not compatible', so I can't reach my pots balance"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Rewards/cashback not credited, capped or devalued (Jewels)",
+     "count": 53,
+     "share_of_low_star": "13.3%",
+     "paraphrased_examples": [
+      "The checkout showed ₹50 cashback but nothing was credited",
+      "10% cashback quietly capped, then refused because the merchant was classed as grocery",
+      "Jewel redemption minimum raised again and again"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Funds stuck or locked: pots, FDs, gold or mutual-fund sell failing, dormant pots",
+     "count": 49,
+     "share_of_low_star": "12.3%",
+     "paraphrased_examples": [
+      "Tried about 20 times to sell gold at its peak; every attempt failed",
+      "Pot became dormant; reactivation required a branch visit and still wasn't done weeks later"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Can't close account, delete data, deregister UPI or log out",
+     "count": 42,
+     "share_of_low_star": "10.6%",
+     "paraphrased_examples": [
+      "'Close account' just opens the chatbot",
+      "There is no option to delete the UPI ID or even log out"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Hidden/changed fees: minimum balance, debit card fee without a card, closure fee",
+     "count": 36,
+     "share_of_low_star": "9.0%",
+     "paraphrased_examples": [
+      "Marketed as zero-balance, then charged for low balance and ₹118 to close",
+      "Annual debit-card fee charged though no physical card was ever issued"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Credit products: rejections without reason, aggressive collections, credit-score errors",
+     "count": 31,
+     "share_of_low_star": "7.8%",
+     "paraphrased_examples": [
+      "Shown 'pre-approved' every month, then rejected instantly",
+      "Paid the bill but it was reported as overdue to the credit bureau"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Ads, loan spam and forced upsell (credit card mandatory before UPI)",
+     "count": 23,
+     "share_of_low_star": "5.8%",
+     "paraphrased_examples": [
+      "Loan notifications every hour with no way to turn them off",
+      "Can't use UPI without first applying for the credit card"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Account frozen or under lien without explanation",
+     "count": 19,
+     "share_of_low_star": "4.8%",
+     "paraphrased_examples": [
+      "Small gift contributions from colleagues triggered a credit freeze and demands for proof"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Payment failed / debited but not received",
+     "count": 14,
+     "share_of_low_star": "3.5%",
+     "paraphrased_examples": [
+      "Friends' transfers showed success on their side but never arrived"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "UI clutter / basics hidden (history, monthly spend), privacy demands, no dark mode",
+     "count": 26,
+     "share_of_low_star": "6.5% (UX 13, privacy 9, accessibility/dark mode 4)",
+     "paraphrased_examples": [
+      "Pots pushed above the actual balance; history hidden",
+      "Forced Google sign-in / inbox access and a PAN-based credit pull before you can look around",
+      "No dark mode, hard for light-sensitive users"
+     ],
+     "data_basis": "app_store_rss_counted"
+    }
+   ],
+   "praise_themes": [
+    "Spend analysis/categorization called best-in-class and beautifully designed",
+    "Pots for goal-based saving; long-time users praise the clean, fast UI",
+    "Rewards on everyday UPI when they credit correctly; autopay bills feeding rewards",
+    "Feature requests in 4-5 star reviews: dark mode, lock-screen QR widget, biometric UPI, shareable payment receipts"
+   ]
+  },
+  {
+   "app_id": "1531564767 (removed from App Store; Play package com.epifi.paisa also 404)",
+   "name": "Fi Money (epiFi)",
+   "storefront": "in",
+   "reviews_analyzed": 0,
+   "star_distribution": "n/a: app not in the India App Store (lookup resultCount 0; RSS empty) or on Google Play as of 2026-10-10",
+   "features": [
+    "Savings account with Federal Bank. New accounts can no longer be opened through Fi and users are sent to FedMobile (https://fi.money/, https://techcrunch.com/2026/03/11/india-neobank-fi-winds-down-banking-services-on-its-platform)",
+    "Jars / Smart Deposits for goals (holiday, phone, house): open from ₹300, top up with as little as ₹1, 6.5% p.a. stated, linkable to FIT rules (https://fi.money/features/deposits)",
+    "FIT Rules automation: round-up spends to the nearest 10/50/100 and invest the change; save a set amount every time you shop; scheduled autopay rules (https://fi.money/features/fit-rules)",
+    "Ask.Fi assistant: natural-language spend questions ('Uber spends in 2022'), app navigation and commands ('Pay X', 'Open a Smart Deposit') (https://fi.money/features/ask-fi)",
+    "Fi MCP (beta): connects your net worth data to Claude, Cursor or Windsurf for AI analysis (https://fi.money/features/getting-started-with-fi-mcp)",
+    "Magic Lens: snap a photo or screenshot of any asset; AI detects and values it and adds it to net worth (https://fi.money/features/magic-lens)",
+    "Net-worth tracker across bank accounts, mutual funds, EPF, stocks",
+    "Fi-Points rewards (4 points = ₹1) for gift cards and air miles; accrual ended 20 Mar 2026 and redemption closed 31 Mar 2026 (https://fi.money/features/rewards)",
+    "Zero-forex debit card, UPI scan and pay (https://fi.money/features/pay-with-fi); Jump peer-to-peer investing up to 10% (https://fi.money/features/jump); US stocks sunset",
+    "Co-branded MagniFi/AmpliFi/SimpliFi credit cards discontinued 20 Mar 2026 (https://cardadvisor.in/articles/fi-federal-credit-card-review-2026)"
+   ],
+   "complaints": [
+    {
+     "theme": "Service wind-down: banking ends on the app, forced move to FedMobile, users unsure what still works",
+     "count": 0,
+     "paraphrased_examples": [
+      "A user couldn't log in to FedMobile after the switch and moved money elsewhere (DesiDime)",
+      "Users saw only the bank's email, nothing direct from Fi, and felt left in the dark (https://www.desidime.com/discussions/partnership-of-federal-bank-with-fi-is-ending)"
+     ],
+     "data_basis": "qualitative_web"
+    },
+    {
+     "theme": "Rewards and card benefits withdrawn (Fi-Points expiry, card programme closed)",
+     "count": 0,
+     "paraphrased_examples": [
+      "Points accrual stopped 20 March and unused points expired 31 March (fi.money banner)",
+      "Cardholders told to clear dues, move standing instructions and close cards (CardAdvisor)"
+     ],
+     "data_basis": "qualitative_web"
+    },
+    {
+     "theme": "Account freezes, stuck refunds and fees (debit card fee, ₹299 closure fee)",
+     "count": 0,
+     "paraphrased_examples": [
+      "A salary account was frozen and unfrozen without clear cause, destroying trust; FD pre-closure failed when money was needed (https://www.desidime.com/discussions/fi-money-is-dying-funds-are-only-left-for-10-months-better-to-close-the-account)"
+     ],
+     "data_basis": "qualitative_web"
+    },
+    {
+     "theme": "Distrust of the neobank-on-partner-bank model",
+     "count": 0,
+     "paraphrased_examples": [
+      "Commenters said neobanks open and shut within a few years and asked for regulator scrutiny (DesiDime)"
+     ],
+     "data_basis": "qualitative_web"
+    }
+   ],
+   "praise_themes": [
+    "Automation (FIT rules: round-ups, save-as-you-shop) and goal Jars/Smart Deposits (vendor pages; not independently verified)",
+    "Ask.Fi natural-language assistant and AI net-worth tools (MCP, Magic Lens) were unusually advanced for the market (vendor pages)",
+    "Some long-time users on DesiDime still praised the rewards and app quality before the wind-down"
+   ]
+  },
+  {
+   "app_id": "1428580080",
+   "name": "CRED: Credit Cards, Bills, UPI",
+   "storefront": "in",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:158 4:13 3:35 2:27 1:267 (avg 2.54 in RSS sample; store avg 4.84 from 610,920 ratings)",
+   "features": [
+    "Members-only: 750+ credit score required, with a waitlist (App Store description; reviews complain about waitlists)",
+    "Credit-card bill management: reminders, hidden-charge and duplicate-spend detection, smart statements, credit score tracking (App Store description, https://cred.club/)",
+    "UPI scan and pay, pay anyone, Tap to Pay, RuPay credit card on UPI; rent and education fees by credit card; autopay; utility bills (App Store description)",
+    "CRED coins, cashback, jackpots, spins, 'Coin Rush' leaderboard games, raffles, freebies, Deal of the Day, CRED store (reviews, cred.club)",
+    "CRED money (wealth tracking incl. MF/EPF/NPS), CRED garage (vehicles, challans, insurance), CRED cash/cash+ loans, CRED flash pay-later, loan against MF, FDs, CRED wallet (cred.club, App Store description, reviews)",
+    "Biometric / no-PIN UPI payments pushed with repeated Face ID setup prompts; swipe-to-pay button (reviews)",
+    "Home/lock-screen scan widget (reviews mention it and its bugs)",
+    "Heavy sound effects and animations on payment and rewards (reviews); 617MB download size (Search API)",
+    "No Apple Watch support listed"
+   ],
+   "complaints": [
+    {
+     "theme": "Rewards devalued or gamified: useless coins, rigged-feeling spins/jackpots, cashback not credited",
+     "count": 90,
+     "share_of_low_star": "30.6% of 294 (30 mention coins/spins/jackpots)",
+     "paraphrased_examples": [
+      "Years of on-time bill payments, lakhs of coins, and they only buy penny discounts on unwanted brands",
+      "Spun the jackpot 1,000+ times and never won; the odds are never disclosed",
+      "Checkout promised flat ₹125 back, which became 'up to ₹125' and paid ₹5"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Support unreachable: bot-only, tickets closed unresolved",
+     "count": 54,
+     "share_of_low_star": "18.4% capped (80 uncapped = 27.2%)",
+     "paraphrased_examples": [
+      "Only bots, no human; tickets marked resolved without anything being fixed"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Performance: phone heating, lag, crashes on the payment page, UPI PIN keypad unresponsive after updates, huge app size",
+     "count": 51,
+     "share_of_low_star": "17.3%",
+     "paraphrased_examples": [
+      "iPhone gets hot just opening the app",
+      "After an update I couldn't type my UPI PIN at all",
+      "600MB for a bill-payment app"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Dark patterns: forced Face ID/no-PIN prompts, pop-ups during payment, casino-like sounds and animations that can't be muted",
+     "count": 42,
+     "share_of_low_star": "14.3% (14 forced-biometric and 10 sound/animation mentions across all ratings)",
+     "paraphrased_examples": [
+      "Asks me to set up Face ID on every payment; I want my PIN",
+      "Reward sounds play loudly even with the sound toggle off",
+      "Pushed toward paying by credit card and then a game, right as I scanned a QR"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Store, insurance and gift-card fulfilment failures",
+     "count": 35,
+     "share_of_low_star": "11.9%",
+     "paraphrased_examples": [
+      "Expired or damaged products from the store with no return",
+      "Car insurance paid but the policy wasn't issued before expiry"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Credit products: collection calls many times a day, insurance added to a loan without consent, CRED cash suddenly blocked",
+     "count": 25,
+     "share_of_low_star": "8.5%",
+     "paraphrased_examples": [
+      "One missed EMI brought dozens of calls a day",
+      "Declined loan insurance, but it appeared on the statement"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Login / waitlist / onboarding",
+     "count": 25,
+     "share_of_low_star": "8.5%",
+     "paraphrased_examples": [
+      "Credit score of 800 and still waitlisted with no explanation"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Payment debited but not received; refunds take 7-9 days past due dates",
+     "count": 19,
+     "share_of_low_star": "6.5%",
+     "paraphrased_examples": [
+      "The payment failed after money was taken; the refund lands after my card due date"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Hidden platform/service fees shown below the bill amount",
+     "count": 14,
+     "share_of_low_star": "4.8%",
+     "paraphrased_examples": [
+      "A 2% service fee only became visible at checkout; the fee should be shown bigger than the bill amount"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Bill status wrong (paid bills still shown as due, wrong due dates)",
+     "count": 11,
+     "share_of_low_star": "3.7%",
+     "paraphrased_examples": [
+      "Paid 13 days ago and the app still asks me to pay"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Clutter/missing basics, privacy overreach, brand protest, accessibility",
+     "count": 31,
+     "share_of_low_star": "10.5% (UX 14, privacy 9, Meta/MDR protest 6, VoiceOver 2)",
+     "paraphrased_examples": [
+      "No way to sort statements by date or see history per contact",
+      "Requires credit-score and Gmail access before you can use it",
+      "Pay button not labelled for VoiceOver"
+     ],
+     "data_basis": "app_store_rss_counted"
+    }
+   ],
+   "praise_themes": [
+    "Best place to manage several credit cards: timely reminders, payments reflect fast",
+    "Polished design and UX, 'top notch' and 'wow'; easy one-click / no-PIN payments for those who opt in",
+    "Instant CRED cash disbursal in emergencies; one dashboard for wealth",
+    "Feature requests: sound off that respects silent mode, 'open all rewards' to skip repeated animations, more widgets, dark/light toggle, merchant-wise spend analysis"
+   ]
+  },
+  {
+   "app_id": "1170055821",
+   "name": "PhonePe UPI, Payment, Recharge",
+   "storefront": "in",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:322 4:24 3:13 2:15 1:126 (avg 3.80 in RSS sample covering only 2026-09-08 to 10-08; store avg 4.67 from 8.8M ratings)",
+   "features": [
+    "BHIM UPI transfers, scan-and-pay QR, multiple bank accounts and balance check across 140+ banks (App Store description)",
+    "UPI Lite, credit line on UPI, RuPay credit card on UPI, split expenses, gift cards (https://www.phonepe.com/)",
+    "UPI Circle: delegate payments to others with spending limits and full control (phonepe.com)",
+    "International UPI in Singapore, UAE, Nepal, Sri Lanka, Bhutan, Mauritius (phonepe.com)",
+    "Bills, recharges, FASTag, rent. Reviews report platform fees of ₹2-5 on recharges and bills",
+    "Investing and saving: mutual funds incl. daily SIP from ₹10, 24K gold, recurring deposits; insurance; loans; FD-backed credit card (phonepe.com, App Store description, reviews)",
+    "Reward points ('10% on select categories'), refunds tracking (phonepe.com, App Store description)",
+    "Face ID payment authentication (praised in 5-star reviews; iOS 27 glitches in 3-star)",
+    "In-app rating prompt after payments, pop-up ads, promotional push with no separate off switch (reviews)",
+    "No Apple Watch support listed"
+   ],
+   "complaints": [
+    {
+     "theme": "Protest at CEO remarks on UPI merchant charges (MDR) rather than at the product",
+     "count": 38,
+     "share_of_low_star": "27.0% of 141 (1-star reviews jumped to 12, 16 and 26 on Sept 16-18 vs about 2-3/day)",
+     "paraphrased_examples": [
+      "Uninstalling because the founder defended charges on UPI",
+      "Switching to cash or BHIM to boycott private UPI apps"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Ads, pop-ups over the scanner, promo notifications with no off switch, rating prompt after every payment",
+     "count": 21,
+     "share_of_low_star": "14.9% (16 rating-nag mentions across all ratings, 10 of them inside 4-5 star reviews)",
+     "paraphrased_examples": [
+      "A pop-up ad covers the scan button every time I open the app",
+      "There's no setting to stop promotional notifications without losing transaction alerts",
+      "Asked to rate again right after I already rated"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Support unreachable (AI/IVR only)",
+     "count": 14,
+     "share_of_low_star": "9.9% (16 uncapped)",
+     "paraphrased_examples": [
+      "Only an automated voice, no way to reach a real agent"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Lag, freezing, forced logouts after iOS 27",
+     "count": 13,
+     "share_of_low_star": "9.2%",
+     "paraphrased_examples": [
+      "The number pad takes ages to appear when sending money",
+      "Face ID login freezes on the logo screen"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Platform/convenience fees on recharges and bills",
+     "count": 11,
+     "share_of_low_star": "7.8%",
+     "paraphrased_examples": [
+      "Other UPI apps don't charge for recharges; PhonePe adds a fee to almost everything"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Payments stuck or failed; device-change limits",
+     "count": 13,
+     "share_of_low_star": "9.2% (payment failed 6, login/device 7)",
+     "paraphrased_examples": [
+      "₹300 debited and still 'under process'",
+      "The app should warn before paying when bank gateways are down",
+      "Limited sending for 72 hours on a new phone"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Autopay/gold SIP can't be stopped; account can't be closed; account blocked",
+     "count": 12,
+     "share_of_low_star": "8.5% (autopay 4, closure 3, blocked 5)",
+     "paraphrased_examples": [
+      "Can't delete the daily gold autopay and support can't be reached",
+      "A ₹0.01 gold residue prevents closing the account"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Accessibility, privacy, missing insights",
+     "count": 9,
+     "share_of_low_star": "6.4% (accessibility 2, privacy 2, UX/history 5)",
+     "paraphrased_examples": [
+      "Not usable with VoiceOver",
+      "History before July 2025 vanished after an update",
+      "Wants per-recipient monthly analysis like Google Pay"
+     ],
+     "data_basis": "app_store_rss_counted"
+    }
+   ],
+   "praise_themes": [
+    "Fast, dependable UPI; works when other apps fail",
+    "Face ID payments praised as smooth and secure (no exposed PIN)",
+    "Simple, easy to understand for sending and receiving money"
+   ]
+  }
+ ],
+ "cross_app_themes": [
+  "Support failure runs through every app and is the most consistent complaint. Uncapped mention rates in 1-2 star reviews: Jupiter 40%, Jar 29%, CRED 27%, PhonePe 11%. Bots that loop, emails that only auto-acknowledge, and tickets closed without resolution keep coming up. Fi users on DesiDime report the same.",
+  "Money goes in easily but is hard to get out, and that asymmetry is the main reason reviewers call apps 'scam'. Jar: 124 of 335 (37%) can't withdraw, and 44 quote a 'bank server' error. Jupiter: 49 funds-stuck plus 19 frozen/lien out of 398. Fi: freezes reported on DesiDime. Several reviewers point out that deposits go through instantly while withdrawals fail (documented in reviews). Vaultwise deliberately locks money, so it is exposed to exactly this perception and must design against it (inference).",
+  "Users are surprised when they get back less than the balance they were shown. Jar: 126 (38%), from the buy/sell spread plus 3% GST. Hidden fees: Jupiter 36, CRED 14, PhonePe 11. Users rarely object to a fee they saw beforehand; they object to fees that show up afterwards or in small print.",
+  "Gamified rewards backfire once they feel rigged or devalued. CRED 90 (31%) and Jupiter 53 (13%). Coins, spins, jackpots and 'up to' offers drive the anger, and long-time users describe a bait-and-switch. Some Gen Z users do like engagement (CRED praise for design), but random-value mechanics in a money app damage trust.",
+  "Dark patterns and nags: forced Face ID or no-PIN prompts (CRED, 14 mentions), sounds that ignore silent mode, pop-up ads over the scanner, rating prompts after every payment (PhonePe, 16 mentions), loan spam with no opt-out (Jupiter). Users explicitly ask for opt-in biometrics, mute controls and promo-notification toggles.",
+  "Lock-outs and onboarding failures: Jupiter 67 (17%), CRED 25 (8.5%), Jar 20 (6%). Unexplained 'profile doesn't match policy' rejections, iOS-version 'device not compatible' blocks that cut people off from their balance, OTP failures, waitlists.",
+  "Leaving is hard: Jupiter closure/delete/deregister 42 (11%), Jar autopay that keeps debiting after pausing 9, PhonePe autopay and gold-residue blocks on closing. App Store rules already push Vaultwise to offer Delete account (settled), but stopping recurring debits needs the same one-tap treatment.",
+  "Trust depends on the partner bank and the company's public stance. Fi ended banking on its app in March 2026 and sent users to FedMobile. Jupiter users are bounced between Jupiter and Federal Bank. PhonePe drew a one-day 1-star spike over MDR remarks (38 of 141). CRED drew protest over the Meta stake (2). Gen Z reviewers react to company behaviour, not just UX (inference from these counts).",
+  "What users praise and want kept: tiny automatic daily saving that builds a habit (Jar), goal pots plus best-in-class spend categorization (Jupiter), clean credit-card bill management and reminders with polished design (CRED), fast reliable UPI with Face ID (PhonePe), and Fi's automation rules (round-ups, save-as-you-shop) plus its natural-language Ask.Fi assistant (vendor pages).",
+  "Recurring requests in 3-5 star reviews: dark mode (Jupiter), lock-screen QR/scan widget (Jupiter, CRED), sound off that respects silent mode and skippable reward animations (CRED), merchant- and recipient-wise spend analysis (CRED, PhonePe), shareable payment receipts (Jupiter). None of the five has Apple Watch support listed (Search API)."
+ ],
+ "opportunities": [
+  {
+   "idea": "Release Tracker with 'no silent blocks': every vault release, emergency request and withdrawal gets a live timeline (submitted, AI read, forensics, human review, paid). Each step shows a reason code, an ETA and the next action needed. Only the disputed amount is ever held, and the Emergency Tier 1 path stays visible on the same screen. If payouts are degraded system-wide, an in-app status banner says so instead of blaming the user's bank.",
+   "beats_competitors_because": "Jar shows a generic 'bank server' error for days, and Jupiter freezes accounts with 'under review'. Vaultwise locks money on purpose, so explaining every hold is what separates a 'protective lock' from 'they won't let me withdraw' (inference).",
+   "complaint_evidence": "Jar withdrawal_blocked 124/335 (37%), 44 citing the bank-server error (30 in July 2026); Jupiter funds stuck 49 + frozen/lien 19 of 398; Fi freezes (DesiDime, qualitative).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Vault detail",
+    "Release / withdraw request",
+    "Release status timeline (new)",
+    "Emergency",
+    "Notifications",
+    "Home"
+   ]
+  },
+  {
+   "idea": "Show the money users will actually get: one 'Available to release' figure per vault that always equals what would hit the bank. All-in cost preview before any deposit, round-up or Core ETF buy, including an exit-value preview (what you'd get if you sold today). Itemized receipts covering fee, tax and FX on every movement.",
+   "beats_competitors_because": "Jar shows a balance users can't withdraw (spread plus GST), and CRED and Jupiter reveal fees after payment. Users accept costs they see up front; they revolt at ones they discover afterwards.",
+   "complaint_evidence": "Jar value_loss 126/335 (38%) and hidden fees 17; Jupiter fees 36/398 (9%); CRED fees 14/294; PhonePe fees 11/141.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Add money sheet",
+    "Vault detail",
+    "Invest > Core order ticket",
+    "Activity / receipt detail",
+    "Round-up rules"
+   ]
+  },
+  {
+   "idea": "AI-first support with a guaranteed human: the assistant answers and acts, but 'Talk to a person' is never more than 2 taps away. It shows the queue position and expected response time, opens a case with full context attached so users don't repeat themselves, and keeps the case timeline in the app. The existing human-reviewer queue used for proofs is reused for support escalations.",
+   "beats_competitors_because": "All four apps are criticised for bot loops and tickets closed unresolved. A visible service-level promise plus a real human is the cheapest way to stand out.",
+   "complaint_evidence": "Support mentions (uncapped): Jupiter 159/398 (40%), Jar 98/335 (29%), CRED 80/294 (27%), PhonePe 16/141 (11%).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "AI assistant",
+    "Help & cases (new)",
+    "Release status timeline",
+    "More tab"
+   ]
+  },
+  {
+   "idea": "Honest, calm rewards: no coins, spins or 'up to' offers. Milestone celebrations when a vault hits 25/50/100% use a short success haptic and a skippable animation. Saving streaks and any reward show a fixed, exact value and expiry, and celebrations can be turned off.",
+   "beats_competitors_because": "CRED's slot-machine rewards and Jupiter's shifting Jewels are the top grievance among loyal users. Gen Z still gets delight and progress feedback, without random payouts that read as rigged.",
+   "complaint_evidence": "CRED rewards 90/294 (31%), 30 about coins/spins/jackpots; Jupiter rewards 53/398 (13%); Jar spins with unusable winnings (low and 3-star).",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Home",
+    "Vault detail (milestones)",
+    "Streaks / progress",
+    "Settings > Appearance & haptics"
+   ]
+  },
+  {
+   "idea": "Respect controls: notification categories with promotional ones off by default. No ads or upsells inside payment, release or emergency flows. Biometrics stay opt-in and the PIN always works. Sounds follow the device silent switch. A 'Calm mode' reduces motion and celebrations, with a haptics intensity setting. Ask for a rating only once, at a natural pause, through the OS prompt.",
+   "beats_competitors_because": "These are low-cost fixes for the specific irritations users list against CRED, PhonePe and Jupiter, and they protect the flows where money is at stake.",
+   "complaint_evidence": "CRED ads/dark patterns 42/294 (14%) incl. 14 forced Face ID/no-PIN and 10 sound/animation mentions; PhonePe 21/141 (15%) incl. 16 rating-nag mentions; Jupiter 23/398 (loan spam, notification settings ignored).",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Settings > Notifications",
+    "Settings > Security",
+    "Settings > Appearance & haptics",
+    "Payment / release confirmation",
+    "Home"
+   ]
+  },
+  {
+   "idea": "Lock-out-proof access: in-app device change and PIN reset through the user's own email (already settled), specific reasons on any onboarding rejection, and support for older OS versions as far as Expo allows. If the native app can't run, the existing web app gives read-only balances plus emergency and release requests.",
+   "beats_competitors_because": "Jupiter cut users off from their pots with 'device not compatible' and gave rejections with no reason. Jar OTP failures blocked withdrawals. Vaultwise already has a web app and API to fall back on.",
+   "complaint_evidence": "Jupiter login/KYC/device 67/398 (17%, 12 iOS-compat); CRED login/waitlist 25/294; Jar login/OTP 20/335.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Sign-in",
+    "PIN setup/reset",
+    "Device change (new)",
+    "Onboarding / KYC",
+    "Settings > Security"
+   ]
+  },
+  {
+   "idea": "One-tap exits: a 'Pause all auto-saves' master switch that stops round-ups and contribution rules immediately and shows the next scheduled debit. A per-rule cancel that really cancels. A Delete-account flow that shows where the money will be paid, with no exit fee.",
+   "beats_competitors_because": "Jar keeps debiting after users pause, and Jupiter and PhonePe hide closure. Being easy to leave builds the trust that makes people willing to lock money in (inference).",
+   "complaint_evidence": "Jupiter closure/delete/deregister 42/398 (11%); Jar autopay 9/335; PhonePe autopay 4 + closure 3 + gold-residue block; CRED autopay not visible to cancel.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Rules (round-ups, contribution rules)",
+    "Vault detail",
+    "Settings > Delete account"
+   ]
+  },
+  {
+   "idea": "Pay with Vaultwise with a clear final status. The checkout sheet shows the total including any fee before the user confirms, uses a thumb-zone confirm button with a non-swipe accessible alternative, and plays a success haptic. The result screen states success, failed or pending with a reason, an auto-reversal countdown and the merchant-verified invoice attached. There is a self-serve 'charged but merchant didn't receive' flow.",
+   "beats_competitors_because": "CRED and PhonePe leave users with 'processing' states and refunds that land after bill due dates. Vaultwise verifies the invoice at payment time, so it can give a definitive receipt.",
+   "complaint_evidence": "CRED payment_failed 19 + bill_status_wrong 11 + fees 14 of 294; PhonePe payment_failed 6 + fees 11 of 141; Jupiter payment failures/UPI intent 14 of 398; CRED swipe-to-pay one-hand complaint (1).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Pay with Vaultwise checkout sheet",
+    "Payment result",
+    "Activity detail",
+    "Dispute (new)"
+   ]
+  },
+  {
+   "idea": "Explainable proof holds: when forensics flags an invoice, hold only that amount and show the flag category, the exact document needed (with in-app camera capture), the reviewer's time limit and a countdown. Emergency Tier 1 is never affected by a proof hold.",
+   "beats_competitors_because": "Jupiter freezes whole accounts over small transfers with no written reason. Vaultwise's AI and forensics pipeline can explain its own decisions.",
+   "complaint_evidence": "Jupiter account_blocked 19 + funds stuck 49 of 398; Fi freezes (qualitative); Jar 'locked without consent' reviews within withdrawal_blocked.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Release status timeline",
+    "Proof upload / camera",
+    "Vault detail",
+    "Notifications"
+   ]
+  },
+  {
+   "idea": "An AI assistant that can take actions (matching Fi's Ask.Fi): plain-language commands such as 'move ₹500 to Emergency' or 'how much did I spend on food this month', each confirmed in a sheet. Add per-merchant and per-recipient spend breakdowns, and snapping a receipt to attach proof or log a spend, similar to Fi's Magic Lens.",
+   "beats_competitors_because": "Fi's assistant left with the app; Jupiter's spend analysis is praised, and CRED and PhonePe users ask for merchant or recipient analysis. Vaultwise already has a Groq-based assistant and receipt reading, so this mostly links existing pieces (inference).",
+   "complaint_evidence": "Feature requests: CRED merchant-wise analysis (5-star) and per-contact history (3-star); PhonePe per-recipient analysis (1-star); Jupiter monthly-spend removal (3-star); Fi Ask.Fi / Magic Lens pages.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "AI assistant",
+    "Receipt capture",
+    "Insights"
+   ]
+  },
+  {
+   "idea": "Lightweight, accessible build: a size and launch-time budget, restrained animation with Reduce Motion honoured, full VoiceOver labels including the PIN pad, Dynamic Type, and dark mode from launch.",
+   "beats_competitors_because": "CRED is a 617MB download that users say heats their phones and fails VoiceOver. Jupiter users ask for dark mode. These are cheap differentiators for a new Expo app.",
+   "complaint_evidence": "CRED performance 51/294 (17%) and accessibility 2; Jupiter bugs 77/398 and dark-mode/accessibility 4 + 4-star requests; PhonePe accessibility 2, lag 13.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "All screens",
+    "PIN pad",
+    "Checkout",
+    "Settings > Appearance"
+   ]
+  },
+  {
+   "idea": "Widgets and quick actions: a home and lock-screen widget showing vault progress, plus 'Scan to pay with vault' and 'Emergency' shortcuts.",
+   "beats_competitors_because": "Jupiter users explicitly ask for a QR widget, and CRED's widget breaks on iOS updates. A reliable widget keeps Vaultwise visible without push spam.",
+   "complaint_evidence": "Jupiter 5 widget/QR requests (incl. 3 in 4-5 star reviews); CRED widget complaints 9 (5 low-star).",
+   "fits_vaultwise_scope": true,
+   "effort": "L",
+   "screens_affected": [
+    "iOS/Android widget (new)",
+    "Pay / scan",
+    "Emergency"
+   ]
+  },
+  {
+   "idea": "Privacy-light onboarding: let people explore a demo vault before KYC. No inbox or Gmail linking, no forced credit-score pull, and a plain-language primer for each permission (extending the settled camera primer).",
+   "beats_competitors_because": "Jupiter and CRED block entry behind PAN, Google sign-in or credit checks, which reviewers read as data harvesting.",
+   "complaint_evidence": "Jupiter privacy/forced data 9 + forced card upsell; CRED privacy 9 (Gmail access, credit-score permission, data-selling suspicion) of 294.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Welcome / onboarding",
+    "Permission primers",
+    "KYC"
+   ]
+  },
+  {
+   "idea": "Trust & continuity centre: who holds the funds, deposit protection by market, a fee pledge for personal payments, and what happens if Vaultwise or its partner exits (statement export, payout path, notice period).",
+   "beats_competitors_because": "Fi's wind-down sent users to another app with expiring points, and Jupiter users get bounced between Jupiter and the bank. Spelling this out early answers the 'neobanks disappear' fear.",
+   "complaint_evidence": "Fi wind-down and FedMobile migration (TechCrunch, DesiDime: qualitative); PhonePe MDR protest 38/141 (27%); CRED Meta protest 2; Jupiter partner-bank blame in support complaints.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "More > Trust & safety (new)",
+    "Onboarding",
+    "Settings > Statements export"
+   ]
+  },
+  {
+   "idea": "Micro-saving habit without market surprises: daily, weekly or monthly auto-save of small amounts into a purpose vault, a clear label saying whether money sits in cash (with stated yield) or is invested, a streak with a light haptic tick, and the same one-tap pause.",
+   "beats_competitors_because": "Keeps the habit loop users praise in Jar while removing what broke trust there: market exposure presented as 'savings'.",
+   "complaint_evidence": "Jar praise for small automatic amounts (12 habit/small-amount mentions incl. 4 in 4-5 star); Jar value_loss 126/335 shows users didn't understand they were buying a volatile asset.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Rules (contribution / round-ups)",
+    "Create vault",
+    "Home",
+    "Vault detail"
+   ]
+  },
+  {
+   "idea": "Joint-vault spend permissions, modelled on PhonePe's UPI Circle: the joint-vault owner lets a co-member pay with Pay with Vaultwise up to a set limit and category, with real-time alerts.",
+   "beats_competitors_because": "PhonePe offers delegated limits for general UPI. Tying them to purpose-locked joint vaults with invoice verification is distinctive (inference).",
+   "complaint_evidence": "No complaint count: feature parity with PhonePe UPI Circle (https://www.phonepe.com/).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Joint vault settings",
+    "Pay with Vaultwise checkout",
+    "Notifications"
+   ]
+  }
+ ]
+}

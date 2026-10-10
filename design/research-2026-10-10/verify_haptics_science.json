@@ -1,0 +1,162 @@
+{
+ "claims_checked": [
+  {
+   "claim": "Kaaresoja, Brewster & Lantz 2014 (ACM TAP 11(2):9): touch and feedback feel simultaneous at 5 ms (tactile), 19 ms (audio) and 32 ms (visual). Perceived quality drops between 70 and 100 ms for tactile and audio, and between 100 and 150 ms for visual. Recommended ranges are tactile 5–50 ms, audio 20–70 ms and visual 30–85 ms.",
+   "verdict": "supported",
+   "note": "The eprints record and the OpenAlex abstract (doi:10.1145/2611387) give exactly these numbers. All modalities scored significantly worse at 300 ms. The ranges are 75% simultaneity thresholds.",
+   "good_source": "https://eprints.gla.ac.uk/104653/"
+  },
+  {
+   "claim": "Kaaresoja's 2016 thesis gives bimodal visual+tactile limits of 100 ms for visual and 55 ms for tactile.",
+   "verdict": "supported",
+   "note": "The thesis abstract gives visual-tactile limits of 100 ms visual and 55 ms tactile. It also gives visual-audio 95/70 and tactile-audio 25/100, which the spec does not use. If the spec ever pairs tactile with sound (T13 clink, T14 chime), the tactile-audio pair is the relevant one: tactile ≤25 ms.",
+   "good_source": "https://theses.gla.ac.uk/7075/"
+  },
+  {
+   "claim": "Android custom-effects guide: scale ratios of at least 1.4, no more than three intensity levels per primitive, typical scales 0.5/0.7/1.0, and scale 0.0 means minimum perceivable rather than off. Gaps of 5–10 ms can't be detected; gaps of 50 ms or more can.",
+   "verdict": "supported",
+   "note": "Every item is quoted nearly word for word on the page. The page also confirms that one unsupported primitive makes the whole composition fail, that envelopes (API 36) have no fallback, that a BasicEnvelope must end at zero intensity, and that VibrationEffect.Builder gives automatic fallback from Android 16 (26Q4).",
+   "good_source": "https://developer.android.com/develop/ui/views/haptics/custom-haptic-effects"
+  },
+  {
+   "claim": "HapticFeedbackConstants API levels: LONG_PRESS 3, VIRTUAL_KEY 5, KEYBOARD_TAP 8, CLOCK_TICK 21, CONTEXT_CLICK 23, KEYBOARD_PRESS/RELEASE, VIRTUAL_KEY_RELEASE and TEXT_HANDLE_MOVE 27, CONFIRM/REJECT/GESTURE_START/GESTURE_END 30, DRAG_START, GESTURE_THRESHOLD_*, SEGMENT_*, TOGGLE_ON/OFF and NO_HAPTICS 34. FLAG_IGNORE_GLOBAL_SETTING deprecated in 33.",
+   "verdict": "supported",
+   "note": "I parsed the reference page (last updated 2026-08-03) and every API level matches. The catch is implementation, not the facts. The spec's T08/T09 rely on GESTURE_THRESHOLD_ACTIVATE/DEACTIVATE, but neither library the spec chose can call them. expo-haptics SDK 57's AndroidHaptics enum has exactly 19 values and leaves out GESTURE_THRESHOLD_*. Pulsar 1.7.0's Android system presets don't include them either.",
+   "corrected_claim": "The API levels are correct, but GESTURE_THRESHOLD_ACTIVATE/DEACTIVATE cannot be reached through expo-haptics (19-value AndroidHaptics enum) or Pulsar 1.7.0 presets. They need a custom native module.",
+   "good_source": "https://developer.android.com/reference/android/view/HapticFeedbackConstants ; https://docs.expo.dev/versions/latest/sdk/haptics/"
+  },
+  {
+   "claim": "Composition primitives: CLICK, TICK, QUICK_RISE, SLOW_RISE and QUICK_FALL at API 30; THUD, SPIN and LOW_TICK at API 31. The delayType overload (DELAY_TYPE_PAUSE / DELAY_TYPE_RELATIVE_START_OFFSET) arrived in API 36.",
+   "verdict": "supported",
+   "note": "The parsed reference page confirms all of these. The 3-arg addPrimitive(id, scale, delay) is API 30, and the 4-arg delayType overload and both DELAY_TYPE_* constants are API 36. On API 30–35 the delay behaves as a pause after the previous primitive, but the DELAY_TYPE_PAUSE constant itself cannot be referenced there. The spec's notation ('DELAY_TYPE_PAUSE (API 30+ default)') blurs this.",
+   "good_source": "https://developer.android.com/reference/android/os/VibrationEffect.Composition"
+  },
+  {
+   "claim": "Expo SDK 57 expo-haptics covers only system semantics: impactAsync (5 styles), notificationAsync (3), selectionAsync, and performAndroidHapticsAsync with 19 AndroidHaptics values. It recommends performAndroidHapticsAsync over the Vibrator-based calls on Android, points to Pulsar for custom patterns, and on iOS does nothing in Low Power Mode, when disabled, or while the camera or dictation is active.",
+   "verdict": "supported",
+   "note": "The docs page (sdkVersion 57.0.0) confirms all of this. The spec assumes two things the API doesn't have. (1) expo-haptics has no prepare() call, and grepping the page for 'prepare' finds nothing. (2) impactAsync takes no intensity argument, so recipes such as 'impact(.light) intensity 0.6' or 'impact(.rigid,.8)' can't be built with it.",
+   "good_source": "https://docs.expo.dev/versions/latest/sdk/haptics/"
+  },
+  {
+   "claim": "react-native-pulsar 1.7.0 offers presets, usePatternComposer (discrete events with time in ms and amplitude/frequency 0–1, plus continuous envelopes), useRealtimeComposer, useAdaptiveHaptics, worklet compatibility, Settings.enableHaptics, getHapticsSupportLevel, getHapticCapabilities, forceHapticsSupportLevel (Android) and a jest mock. It needs the New Architecture.",
+   "verdict": "supported",
+   "note": "npm shows latest 1.7.0, published 2026-08-11, and every API name appears in the docs. It also needs React Native 0.71+, react-native-worklets and expo prebuild. Synchronized sound is NOT in 1.7.0; the docs mark it as unreleased. The pattern composer works in amplitude/frequency, not in named Android primitives with scales. Primitives exist only as one-shot presets (Presets.System.Android.primitiveClick() etc.), so the spec's COMP recipes (e.g. 'CLICK .7 → +50p TICK .5') can't be expressed directly. Pulsar has preloadPresets but no documented UIFeedbackGenerator-style prepare().",
+   "corrected_claim": "Pulsar 1.7.0 exists with those APIs, but it cannot directly express scaled Android primitive compositions or GESTURE_THRESHOLD constants, and synchronized sound is not in 1.7.0.",
+   "good_source": "https://docs.swmansion.com/pulsar/sdk/react-native/"
+  },
+  {
+   "claim": "Both platforms suppress app haptics in power-saving modes. In AOSP, battery saver ignores every usage except ringtone, alarm, communication request, physical emulation and hardware feedback, so touch haptics are dropped.",
+   "verdict": "partly_supported",
+   "note": "iOS Low Power Mode muting the Taptic Engine is confirmed by the Expo docs. The Android half is overstated. VibrationSettings.java does apply that allowlist, but only when the battery-saver policy has disableVibration=true. In AOSP main, config_battery_saver.xml sets config_batterySaver_full_disableVibration to false, and BatterySaverPolicy turns the restriction off whenever accessibility services are enabled. Whether battery saver mutes touch haptics therefore depends on the OEM or device config and is off in stock AOSP. The design conclusion (haptics never the only signal) still holds.",
+   "corrected_claim": "iOS Low Power Mode disables the Taptic Engine. On Android, battery saver drops touch vibrations only where the OEM or device config enables disable_vibration (stock AOSP default: false), and never while accessibility services are on.",
+   "good_source": "https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/res/res/values/config_battery_saver.xml ; https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/services/core/java/com/android/server/power/batterysaver/BatterySaverPolicy.java"
+  },
+  {
+   "claim": "Seifi & MacLean 2013 (WHC, 30 participants): rhythm affected all five scales. Several very short pulses were rated roughest, most alarming and most unpleasant; a long vibration with one short silence was most pleasant. 175 Hz was more alarming than 75 Hz, smooth correlated with pleasant (r=.53), and individual variation was highest on pleasantness.",
+   "verdict": "supported",
+   "note": "Every number checks out against the full PDF. Important limit: the stimuli were 1-second alert-style vibrations on an electroactive-polymer actuator, not 10–20 ms LRA transients. In pilots, subjects showed no preference among short 0.1–0.3 s keypress vibrations. It supports keeping waiting or alert rhythms (T15, T19) smooth and calm, and a user setting. It says nothing about the touch-transient tokens.",
+   "good_source": "https://www.cs.ubc.ca/labs/spin/sites/default/files/local_pdfs/A_first_look_at_individuals_affective_ratings_of_vibrations.pdf"
+  },
+  {
+   "claim": "Francisco et al. 2015: duration difference limen about 13% (500–1500 ms standards); amplitude difference limen 39.8 µm at a 200 µm standard (about 20%) at 40 Hz; amplitude changes perceived duration.",
+   "verdict": "supported",
+   "note": "Front Syst Neurosci 2015;9:77 has these figures (n=20). The stimuli were 40 Hz flutter on a lab stimulator at 300 µm for the duration task, with 500–1500 ms durations. That is far from phone LRA transients, so the figures support 'don't encode meaning in fine duration or amplitude steps' only by analogy. Android's 1.4 ratio is the rule that actually applies.",
+   "good_source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4439551/"
+  },
+  {
+   "claim": "Manshad & Brannon 2021 (J Business Research): lower-intensity vibration at payment reduced reported willingness to spend compared with no vibration. Haptics at payment time shift spending intent.",
+   "verdict": "partly_supported",
+   "note": "The paper exists (JBR 122:88–96, Jan 2021). In the full text (PMC7484625), only the lower-intensity condition differed from control: $41.37 vs $50.65, p=.05 one-sided. Higher intensity showed no effect (p=.23), and the omnibus ANOVA was not significant (p=.15; pretest p=.11). The vibration came from an external controller attached to the phone, not the phone's own haptics. Participants were n=158 undergraduates making hypothetical purchases (3 bags of chips). The effect points toward vibration adding 'pain of paying' (less spending). It gives no evidence that celebratory or success haptics increase spending.",
+   "corrected_claim": "One small, borderline study (n=158 undergraduates, external vibration motor, hypothetical spending) found that low-intensity vibration during payment processing modestly reduced reported willingness to spend; high intensity had no effect. It does not show that payment haptics increase spending.",
+   "good_source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7484625/"
+  },
+  {
+   "claim": "Regulators flag celebratory transaction feedback. SEC RFI 34-92766 (Aug 2021) lists celebrations for trading; FCA (Nov 2022) linked confetti, badges and push notifications to riskier behaviour, as an association, not causation.",
+   "verdict": "supported",
+   "note": "The SEC RFI text lists 'celebrations for trading' (digital confetti, crowds applauding), streaks, badges, notifications and visual cues. The FCA article is dated 21 Nov 2022 and says its survey cannot show the features cause poor outcomes. Neither document mentions haptics or vibration, so applying them to haptics is the spec's inference and should be labelled that way.",
+   "good_source": "https://www.sec.gov/rules/other/2021/34-92766.pdf ; https://www.fca.org.uk/publications/research-articles/gaming-trading-how-trading-apps-could-be-engaging-consumers-worse"
+  },
+  {
+   "claim": "WWDC19 session 810: the Apple Pay confirmation is two simple taps in the sound's tempo, chosen to feel positive but serious. The principles are causality, harmony and utility. Four rapid taps can feel like three (ghosting). The Apple Watch alarm ramps the haptic up and cuts it before the sound.",
+   "verdict": "supported",
+   "note": "The transcript (Camille Moussette and Hugo Verweij) confirms all of these. The haptic matches the sound's tempo, not its waveform.",
+   "good_source": "https://developer.apple.com/videos/play/wwdc2019/810/"
+  },
+  {
+   "claim": "Apple HIG 'Playing haptics': use system haptics only for their documented meanings, be consistent, complement other feedback, avoid overuse, prefer short haptics, make haptics optional, and don't disrupt the camera, gyroscope or microphone. Notification examples are depositing a check and unlocking a vehicle. Switches, sliders and pickers play haptics automatically.",
+   "verdict": "supported",
+   "note": "Confirmed from the HIG JSON. 'Make haptics optional. Let people turn off or mute haptics' directly supports the in-app Off/Subtle/Full setting. The page calls the Flashlight button a transient example but does not call it 'high sharpness'; that wording comes from WWDC19 520, not the HIG.",
+   "good_source": "https://developer.apple.com/design/human-interface-guidelines/playing-haptics"
+  },
+  {
+   "claim": "UIFeedbackGenerator.prepare() lowers latency; the prepared state lasts only seconds; re-prepare if more feedback is expected.",
+   "verdict": "partly_supported",
+   "note": "The prepare() docs confirm the claim but add a caveat the spec ignores: if you keep calling prepare() without ever triggering feedback, the system may put the Taptic Engine back to idle and ignore further prepare() calls. That undercuts T16's 're-prepare() during verification' and G1's 're-prepare during waits'. Neither expo-haptics nor Pulsar exposes prepare(), so it is unreachable without a native module.",
+   "corrected_claim": "prepare() gives a short (seconds) low-latency window, and repeated prepare() calls without triggering may be ignored. It is not exposed by expo-haptics or Pulsar 1.7.0.",
+   "good_source": "https://developer.apple.com/documentation/uikit/uifeedbackgenerator/prepare()"
+  },
+  {
+   "claim": "Opal: haptics follow the iOS system setting with no in-app toggle, and its blog says an engineer 'meticulously fine-tuned' haptics for the milestone reveal; over 2 million reveals; no pattern specs published.",
+   "verdict": "supported",
+   "note": "The help article says you'll need to disable haptics in iOS Settings. The blog credits Matt (Davenport) with fine-tuning the haptics, cites over 2M reveals, and gives no timing or intensity details.",
+   "good_source": "https://opalapp.com/blog/the-milestone-reveal-moment"
+  },
+  {
+   "claim": "Hoggan, Brewster & Johnston CHI 2008: adding tactile feedback significantly improved touchscreen text entry, close to a physical keyboard; better actuators improved it further. Android says a crisp click improves typing speed and reduces errors.",
+   "verdict": "partly_supported",
+   "note": "The Hoggan 2008 abstract confirms this, and the task included phone-number entry, which fits the PIN pad. The Android actuators page does say click feedback 'can increase typing speed and reduce errors', but it cites no study, so it adds no independent evidence. Hoggan used 2008-era hardware with a dedicated actuator.",
+   "good_source": "https://doi.org/10.1145/1357054.1357300"
+  },
+  {
+   "claim": "TI SLOA207: an LRA without braking can take up to 300 ms to stop, about 10 ms with active braking, and LRAs are more efficient than ERMs.",
+   "verdict": "partly_supported",
+   "note": "The TI note says an unbraked actuator 'can last hundreds of milliseconds', and the efficiency claim is in the text. The specific '300 ms vs 10 ms' figures are not in the text. The comparison table gives LRA brake times of 17–37 ms with the DRV2605 closed-loop driver.",
+   "corrected_claim": "Without braking an actuator can ring for hundreds of milliseconds; TI measured closed-loop LRA brake times of about 17–37 ms. LRAs are generally more efficient than ERMs.",
+   "good_source": "https://www.ti.com/lit/pdf/sloa207"
+  },
+  {
+   "claim": "Makous, Friedman & Vierck 1995: fingertip Pacinian sensitivity peaks near 250 Hz, spanning about 65–400 Hz. Bolanowski et al. 1988: four channels.",
+   "verdict": "supported",
+   "note": "J Neurosci 15(4):2808–2818 is confirmed. The Bolanowski 1988 JASA paper exists (Semantic Scholar metadata); its 0.4 to >500 Hz span was not separately verified from the full text.",
+   "good_source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6577777/"
+  },
+  {
+   "claim": "Pielot et al. 2014: 63.5 notifications per day, and more notifications were associated with more negative emotion. Stothart et al. 2015: notifications alone disrupt attention.",
+   "verdict": "supported",
+   "note": "Both abstracts confirm this. Pielot was a one-week in-situ study of only 15 users, so the 63.5 figure is indicative, not a population estimate. The spec should not present it as a general statistic.",
+   "good_source": "https://doi.org/10.1145/2628363.2628364"
+  },
+  {
+   "claim": "Implementation snippet for T21: vibrator.vibrate(composition, VibrationAttributes.createForUsage(USAGE_TOUCH)) on tier A (API 31+).",
+   "verdict": "unsupported",
+   "note": "The Vibrator reference shows vibrate(VibrationEffect, VibrationAttributes) was added in API 33. The spec's tier A-Android starts at API 31, so API 31–32 devices need vibrate(effect, AudioAttributes) (API 26) or plain vibrate(effect). Any Vibrator-based path also needs the VIBRATE permission, unlike performHapticFeedback.",
+   "corrected_claim": "vibrate(VibrationEffect, VibrationAttributes) requires API 33; use the AudioAttributes overload on API 26–32.",
+   "good_source": "https://developer.android.com/reference/android/os/Vibrator"
+  },
+  {
+   "claim": "Core Haptics is supported on iPhone 8 and later, not on iPad or Vision Pro; SwiftUI SensoryFeedback (iOS 17+) adds increase/decrease/start/stop/alignment/levelChange/pathComplete.",
+   "verdict": "partly_supported",
+   "note": "'Preparing your app to play haptics' says iPad, iPod touch and Apple Vision Pro lack haptic support, but does not state 'iPhone 8 and later'. The iPhone 8 cut-off comes from WWDC19 520 and was not re-verified here. In SensoryFeedback, pathComplete is iOS 17.5+, not 17.0; the rest are 17.0.",
+   "good_source": "https://developer.apple.com/documentation/corehaptics/preparing-your-app-to-play-haptics"
+  }
+ ],
+ "spec_corrections": [
+  "T08/T09 and §7: remove 'HFC:GESTURE_THRESHOLD_ACTIVATE/DEACTIVATE (34)' as an expo-haptics or Pulsar recipe. Neither library exposes them (expo's AndroidHaptics has 19 values; Pulsar 1.7.0's Android presets omit them). Either add a small native module calling View.performHapticFeedback, or use SEGMENT_TICK (arm) and nothing (disarm) through performAndroidHapticsAsync.",
+  "G1, T01, T16 and the T13–T16 notes: remove prepare() calls from the expo/Pulsar path. Neither library exposes UIFeedbackGenerator.prepare(). If kept in a custom module, note Apple's caveat that repeated prepare() without triggering may be ignored, so drop 're-prepare during verification/waits' and prepare just before the expected outcome.",
+  "§5B iOS recipes with UIKit intensities (e.g. 'impact(.light) intensity 0.6', 'impact(.rigid,.8)', 'impact(.heavy,1.0)'): expo-haptics impactAsync takes no intensity. Implement them as Pulsar discrete events (amplitude/frequency) or in a native module, and mark the plain expo call as the Basic fallback only.",
+  "§5B Android COMP recipes (scaled primitives with delays, e.g. 'CLICK .7 → +50p TICK .5'): Pulsar 1.7.0's usePatternComposer takes amplitude/frequency events, not primitive IDs with scales, and primitive presets play unscaled one at a time. Either promote 'Option B' (an in-house Expo Module with Kotlin Composition plus Swift AHAP) to the primary path for T12–T21 custom tokens, or rewrite the recipes as Pulsar amplitude/frequency patterns and check them on device.",
+  "§0 notation and T12/T13/T15/T21: DELAY_TYPE_PAUSE and DELAY_TYPE_RELATIVE_START_OFFSET constants and the 4-arg addPrimitive are API 36 only. Below 36, use the 3-arg addPrimitive(id, scale, delayMs), whose delay is a pause after the previous primitive. Don't reference the constant there.",
+  "§7 Kotlin T21 snippet: vibrate(VibrationEffect, VibrationAttributes) is API 33. Tier A-Android starts at API 31, so add an API 31–32 branch using vibrate(effect, AudioAttributes) or vibrate(effect), and note that any Vibrator path needs the VIBRATE permission.",
+  "§1 Battery row and G3: change 'Android battery saver suppresses app haptics' to 'may suppress'. AOSP default config_batterySaver_full_disableVibration=false, and BatterySaverPolicy skips the restriction when accessibility is on, so behaviour depends on the OEM. In the §8 test plan, expect haptics to keep playing in battery saver on some Android devices (e.g. Pixel default) and confirm the in-app setting still governs.",
+  "§3 'Research on payments', §4 ethics rule 1/5, and T22 rationale: restate S56 as one small, borderline, hypothetical-purchase study (n=158 undergraduates, external vibration motor) in which only low-intensity vibration reduced reported willingness to spend versus none; high intensity had no effect. Don't cite it as evidence that payment haptics raise spending. Justify a neutral T22 with SEC/FCA concerns about celebratory transaction feedback, and label the step from visual confetti to haptics as an inference, because neither regulator mentions haptics.",
+  "§1 Affect row and T15/T19 rationale: note that Seifi & MacLean used 1 s alert vibrations on an EAP actuator, and their pilots found no preference among short 0.1–0.3 s vibrations. Use the paper only for waiting and countdown rhythms and the user setting, not for touch-transient design.",
+  "§1 JNDs row: note that Francisco et al. used 40 Hz flutter at 200–300 µm with 500–1500 ms durations. The 13%/20% figures are lab analogues, and Android's ≥1.4 ratio and ≤3 levels is the operative rule.",
+  "§1 Actuators row: replace 'Unbraked LRA rings up to 300 ms; braked ≈10 ms' with 'Unbraked actuators can ring for hundreds of ms; TI measured closed-loop LRA brake times of ~17–37 ms'.",
+  "§1 Performance row: drop the Android actuators page as a source for 'improves typing speed and reduces errors' (it cites nothing). Rely on Hoggan et al. 2008, which also covers phone-number entry, and Brewster et al. 2007.",
+  "§1 Latency row: add Kaaresoja's tactile-audio bimodal limit (tactile ≤25 ms, audio ≤100 ms) for tokens with optional sounds (T13 clink, T14 chime, T21 clunk). That is stricter than the 55 ms visual-tactile figure G1 uses.",
+  "§1 Adaptation row: describe Pielot et al.'s 63.5 notifications/day as from a 15-person, one-week study, not a population figure.",
+  "§2 Apple digest: SensoryFeedback.pathComplete needs iOS 17.5, not 17. Source 'Core Haptics on iPhone 8 and later' to WWDC19 520 rather than 'Preparing your app to play haptics', which only lists unsupported devices (iPad, iPod touch, Vision Pro).",
+  "§2 React Native digest: note that Pulsar's synchronized-sound API is unreleased in 1.7.0, so audio-haptic pairing (T13/T14/T21 sounds) must be scheduled separately, and the ±16 ms sync target needs device verification."
+ ],
+ "overall": "I checked 22 of the research's claims; none of the core platform facts or study numbers is fabricated. The bigger problems are in the implementation plan, plus a few overreaches.\n\n**Holds up:**\n- **Platform facts:** the Android HapticFeedbackConstants and Composition API levels, the Android custom-effects rules (1.4 ratio, 3 levels, 50 ms gaps), the Expo SDK 57 haptics surface, Pulsar 1.7.0, Apple's HIG and WWDC19 810 (Apple Pay two taps, ghosting).\n- **Study numbers:** Kaaresoja's latency figures, Seifi & MacLean, Francisco, Makous, Hoggan 2008 and Pielot.\n- **Regulators:** the SEC and FCA wording is accurate.\n\n**Implementation gaps:**\n- **Missing calls:** expo-haptics has no prepare() and no impact intensity. Neither expo-haptics nor Pulsar 1.7.0 can call GESTURE_THRESHOLD_*. Pulsar can't express the spec's scaled Android primitive compositions.\n- **Hidden dependency:** much of §5B therefore needs a custom native module, which the spec treats only as a fallback ('Option B').\n- **Kotlin snippet:** it uses an API 33 overload on an API 31+ tier.\n- **DELAY_TYPE constants:** they are API 36 only.\n\n**Overreaches:**\n- **Android battery saver:** stock AOSP does not turn off vibration in battery saver (the default is false, and the restriction is skipped when accessibility is on). So 'both OSes silence haptics in low-power modes' is true only for iOS; on Android it depends on the manufacturer.\n- **Payment study:** Manshad & Brannon is a small, borderline, hypothetical study using an external motor. Only low-intensity vibration reduced reported spending, and it says nothing about celebratory haptics increasing spending.\n- **Regulators and haptics:** neither the SEC nor the FCA mentions haptics, so applying their concerns to haptics is the spec's inference and should be labelled that way.\n- **TI braking numbers:** the 300 ms / 10 ms figures aren't in the TI note.\n\nThe design direction (sparse, crisp, rhythm-coded haptics; neutral payment success; Off/Subtle/Full setting; never the only signal) still holds; the implementation sections need revising.\n\n**Method:** the shared web-search budget ran out, so I checked everything by fetching primary sources directly (Android and Apple reference pages, AOSP source, npm registry, Crossref, OpenAlex and Semantic Scholar abstracts, PMC full text). The Drouin 2012 phantom-vibration figure (89%), the Robinhood CNBC article (the page returned 403) and the 'Vibration off' Apple Support page were not independently verified."
+}

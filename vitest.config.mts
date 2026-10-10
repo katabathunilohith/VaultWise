@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
@@ -8,5 +8,7 @@ export default defineConfig({
     setupFiles: ["./tests/setup.ts"],
     pool: "forks",
     testTimeout: 30_000,
+    // The Expo app in mobile/ has its own test setup.
+    exclude: [...configDefaults.exclude, "mobile/**"],
   },
 });

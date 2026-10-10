@@ -1,0 +1,147 @@
+{
+ "claims_checked": [
+  {
+   "claim": "Hoober 2013: 1,333 observations, 780 touching the screen; 49% one-handed, 36% cradled, 15% two-handed; 67% right thumb, 33% left; largest phone seen was a Galaxy Note 2.",
+   "verdict": "supported",
+   "note": "All figures match the UXmatters article. One detail is wrong: the instruction to ignore the drawings is not in the 2017 editor's note. It is in Hoober's own comment dated 28 Feb 2017, where he writes 'Please, please everyone ignore those drawings.' The editor's note only links to his newer work. The data comes from 2012-era phones of 5.5 inches or less, so it should not be carried over directly to 6.1–6.9 inch phones.",
+   "good_source": "https://www.uxmatters.com/mt/archives/2013/02/how-do-users-really-hold-mobile-devices.php"
+  },
+  {
+   "claim": "Hoober 2017 Part 1: 75% of touches are made with one thumb; fewer than half of users hold the phone one-handed; 36% cradle; 10% hold in one hand and tap with the other hand's finger; grips change without users noticing; Back is reached constantly.",
+   "verdict": "supported",
+   "note": "The article contains all of these statements. It also says Back is often the most-used button even when it sits in an upper corner. Part 1 gives no sample sizes or denominators.",
+   "good_source": "https://www.uxmatters.com/mt/archives/2017/03/design-for-fingers-touch-and-people-part-1.php"
+  },
+  {
+   "claim": "Touch accuracy is about 7 mm at the centre and about 12 mm at the corners, and also at the top and bottom edges. The top and bottom edges are worse than the sides.",
+   "verdict": "partly_supported",
+   "note": "Part 3 does say 'Accuracy varies from 7 mm at the center of the screen to 12 mm at the corners'. The only basis given is 'millions of measured touches', with no method or data published. Part 3 does not give a figure for the top and bottom edges. The '10–12 mm' figure for those edges comes from the November 2013 article, where it is a spacing recommendation, not a measured accuracy. The claim that top and bottom are 'much worse than the sides' is also from the 2013 article, which cites Parhi et al.",
+   "corrected_claim": "Hoober reports accuracy of about 7 mm at the centre and about 12 mm at the corners, but publishes no data or method behind these figures. Separately, he recommends 10–12 mm spacing at the top and bottom edges and says those edges are worse than the sides (2013).",
+   "good_source": "https://www.uxmatters.com/mt/archives/2017/07/design-for-fingers-touch-and-people-part-3.php"
+  },
+  {
+   "claim": "Hoober heuristics: put key actions in the middle half to two-thirds of the screen, secondary actions on the top and bottom edges, and tertiary actions in corner menus; keep unrecoverable actions away from routine controls; put at most 4 items on an iOS bar, or 5 on the largest phones.",
+   "verdict": "supported",
+   "note": "Each of these appears in Part 3. The November 2013 article also says an iOS bottom bar works 'only if there are four or fewer elements'. This bears directly on the spec, which recommends 5 tabs on the 393 pt canvas but never addresses Hoober's limit.",
+   "good_source": "https://www.uxmatters.com/mt/archives/2013/11/design-for-fingers-and-thumbs-instead-of-touch.php"
+  },
+  {
+   "claim": "Le et al. (CHI 2018): the thumb's comfortable area is about 36 cm² (33.6–41.9, mean 36.4) whatever the phone size; 16 participants with hands of 163–219 mm; phones of 4–5.96 inches; the grip moves up on bigger phones.",
+   "verdict": "partly_supported",
+   "note": "The numbers are correct. Table 3 gives the thumb values per phone as 33.6, 41.9, 35.2 and 35.0, with mean 36.4 and SD 3.3. The correlation with phone size is r = -.303, p = .697. Several caveats are missing from the research. (a) The 'comfortable area' is the region explored by at least 25% of participants, an aggregate envelope, so it overstates what one person can reach. (b) Participants were seated, and all 16 were right-handed. (c) Area was measured on the phone's front surface on bezelled 2012–2014 phones, so part of it lies outside the screen. (d) With only 4 phones, the lack of a significant correlation is weak evidence that the area is constant. (e) The upward shift of the grip is measured from the position of the index finger's base joint. That part of the claim is supported.",
+   "corrected_claim": "On 4–5.96 inch phones, the thumb area explored without a grip change by at least 25% of 16 seated right-handed participants was 33.6–41.9 cm² (mean 36.4). No significant trend with phone size was found across 4 phones. The grip moved up on larger phones.",
+   "good_source": "https://www.medien.ifi.lmu.de/pubdb/publications/pub/le2018fingersrange/le2018fingersrange.pdf"
+  },
+  {
+   "claim": "Spec §2.1: a 25–60 mm band from the thumb pivot, spanning a sector of about 100–120°, reproduces Le et al.'s roughly 36 cm² comfortable area.",
+   "verdict": "unsupported",
+   "note": "The arithmetic does not hold. An annulus from 25 to 60 mm has area π(60²−25²) ≈ 93.5 cm². A 100° sector of it is about 26 cm² and a 120° sector is about 31 cm². Reaching 36 cm² needs a sector of about 140°. Le et al.'s comfortable area also includes positions where the thumb is strongly bent near its base, so leaving the F band (under 25 mm) out of the 'comfortable' region does not match the source.",
+   "corrected_claim": "To match 36 cm² with a 25–60 mm band, the sector must be about 140°. Alternatively, count the flexion band as part of Le et al.'s comfortable area: it is reachable without a grip change, but slower according to Trudeau."
+  },
+  {
+   "claim": "Bergstrom-Lehtovirta & Oulasvirta (CHI 2014): a quadratic model of the thumb's functional area based on hand size, screen size and index-finger position; 20 participants; average R² 0.958.",
+   "verdict": "source_unreachable",
+   "note": "The ACM and Semantic Scholar pages both returned 403, and web search was exhausted. Le et al. confirm the quadratic curves and the average R² of .958. They describe the model as predicting the thumb's maximum range, mainly from hand size and the position of the index finger. The participant count of 20 and screen size as a predictor could not be verified."
+  },
+  {
+   "claim": "Trudeau et al. 2012: performance is worst near the thumb base in the bottom-right and best in neutral postures (top-right, middle-left). Smaller phones are better; side-to-side movement beats bending movement; outward beats inward.",
+   "verdict": "supported",
+   "note": "J Biomech 45(14):2349–54 had 10 right-handed participants. Human Factors 54(1):52–59 had 20 right-handed participants. Both findings match the CDC Stacks records.",
+   "good_source": "https://stacks.cdc.gov/view/cdc/194429"
+  },
+  {
+   "claim": "Hurff's Thumb Zone is a best-guess heat map credited to Luke Wroblewski. The natural zone does not scale with the screen, and the 6 Plus has more hard-to-reach area.",
+   "verdict": "partly_supported",
+   "note": "The article dates from 17 Sept 2014 and calls the map 'a best guess', and the points about scaling and the 6 Plus are correct. The credit is wrong. Hurff presents the map as his own, built on Hoober's study of 1,333 people. Wroblewski appears only in a photo caption. Hurff also notes that the 6 Plus changes the grip itself, with the little finger used as a stabiliser.",
+   "corrected_claim": "The Thumb Zone is Hurff's own best-guess map (2014), based on Hoober's 2013 grip data. It was not measured.",
+   "good_source": "https://www.scotthurff.com/posts/how-to-design-for-thumbs-in-the-era-of-huge-screens/"
+  },
+  {
+   "claim": "Parhi, Karlson & Bederson (MobileHCI 2006): 9.2 mm for single taps and 9.6 mm for repeated taps. NN/g (2019) cites this study for its 1 cm minimum.",
+   "verdict": "supported",
+   "note": "The Microsoft Research abstract gives 9.2 mm for discrete tasks and 9.6 mm for serial tasks. NN/g (Aurora Harley, 5 May 2019) recommends 1 cm × 1 cm and cites Parhi et al. The NN/g article itself does not mention 9.2 or 9.6.",
+   "good_source": "https://www.microsoft.com/en-us/research/?p=155150"
+  },
+  {
+   "claim": "Bi, Li & Zhai (CHI 2013), FFitts: standard Fitts's law is insufficient for small finger-touch targets because of a fixed limit on finger precision; FFitts reaches R² of 0.91 or higher.",
+   "verdict": "supported",
+   "note": "The research's word 'under-predicts errors' is a paraphrase. The abstract says Fitts's law is 'insufficient in modeling small-target acquisition'. The dual-distribution model and R² of at least 0.91 across 3 experiments are confirmed. The design implications the research draws are its own inference.",
+   "good_source": "https://research.google/pubs/ffitts-law-modeling-finger-touch-with-fitts-law/"
+  },
+  {
+   "claim": "NN/g (Pernice & Budiu 2016, 179 users): on mobile, navigation was used in 89% of tasks on a site with combined navigation, against 44–56% on sites with hidden menus. NN/g's 2015 primer says more than 5 tab items is hard.",
+   "verdict": "partly_supported",
+   "note": "Each figure belongs to a single site: SupermarketHQ (combined, 89%), Bloomberg (hidden, 44%) and 7Digital (hidden, 56%). They are not a controlled comparison of hidden and visible navigation. Budiu's 2015 primer does say that more than 5 options are hard to fit. It also says the right pattern depends on the type of task, not that visible navigation always wins.",
+   "corrected_claim": "Site-level data from NN/g suggests hidden navigation is used less and later. Treat this as a direction, not a measured effect size.",
+   "good_source": "https://www.nngroup.com/articles/find-navigation-mobile-even-hamburger/"
+  },
+  {
+   "claim": "Apple HIG tab bars (updated 8 June 2026): use the tab bar for navigation, not actions; avoid More overflow tabs; don't hide tabs; use single-word labels; the bar floats on Liquid Glass with a bottom accessory and a search tab.",
+   "verdict": "supported",
+   "note": "The exact wording is confirmed from the HIG JSON, and the change log shows 8 June 2026. Two nuances. The 'Avoid overflow tabs' guidance is about the More tab the system creates when tabs don't fit. Vaultwise's own 'More' tab is a different thing, so this guidance does not directly argue against it. And the HIG says 'Use single words whenever possible', not 'always'.",
+   "good_source": "https://developer.apple.com/design/human-interface-guidelines/tab-bars"
+  },
+  {
+   "claim": "Apple HIG: 44×44 pt minimum hit area; full-width primary buttons preferred; a destructive action is never the primary; 12/24 pt padding; text enlargement of at least 200%; Body text 17 pt at default and 53 pt at AX5.",
+   "verdict": "partly_supported",
+   "note": "Confirmed: the 44×44 pt rule on the Buttons page, the rule that a destructive button should not take the primary role, the 12/24 pt padding (Accessibility page, not Buttons), 'at least 200 percent' (Accessibility page) and Body 17 → 53 pt (Typography page). Not confirmed: 'Prefer buttons that span the width of the screen for primary actions' and 'use the same height for both' appear only in the watchOS section, not in the iOS guidance. The Accessibility table also lists 28×28 pt as the iOS minimum, with 44×44 as the default.",
+   "corrected_claim": "The HIG's full-width primary button and equal-height pairing guidance is for watchOS only. On iOS, full-width buttons in the spec are a design choice ([I]), not HIG guidance.",
+   "good_source": "https://developer.apple.com/design/human-interface-guidelines/buttons"
+  },
+  {
+   "claim": "Apple HIG Sheets (updated 24 March 2026): medium and large detents, a grabber, swipe to dismiss, one sheet at a time, full-screen modals for camera views and multi-step tasks, Cancel leading and Done trailing. NN/g (Laubheimer 2023): visible Close button, Back closes the sheet, swipe-down should not be the only exit, no stacked sheets, no long content.",
+   "verdict": "supported",
+   "note": "Everything is confirmed. The HIG also says that in multi-step flows, Back replaces Cancel on the leading edge after the first step, and that Cancel, Done and Back should not all be shown together.",
+   "good_source": "https://developer.apple.com/design/human-interface-guidelines/sheets"
+  },
+  {
+   "claim": "Material: 3–5 navigation bar destinations; the M3 Expressive update lowers the bar from 80 dp to 64 dp.",
+   "verdict": "supported",
+   "note": "BottomNavigation.md says the bar can have 'three to five destinations' and lists the Expressive height as 'From 80dp to 64dp'. FloatingActionButton.md returned a 503, so the FAB claim was not re-checked.",
+   "good_source": "https://github.com/material-components/material-components-android/blob/master/docs/components/BottomNavigation.md"
+  },
+  {
+   "claim": "System gestures: iOS 26 adds interactiveContentPopGestureRecognizer for a back pan anywhere in the content area. Android back works from both side edges, and apps cannot opt out of the home gesture. Exclusion rects are capped at about 200 dp per edge. Edge-to-edge is enforced when targeting SDK 35.",
+   "verdict": "partly_supported",
+   "note": "Confirmed: the UIKit property exists from iOS 26.0 and works on 'the entire content area' for leading-to-trailing pans. The Android statements about both edges and no opt-out from home are verbatim. The SDK 35 edge-to-edge enforcement is confirmed. The 200 dp cap does not appear on the primary Android gesture-navigation page and remains unsourced. That page also does not tell apps to pad by the gesture insets; it only mentions getMandatorySystemGestureInsets().",
+   "good_source": "https://developer.apple.com/documentation/uikit/uinavigationcontroller/interactivecontentpopgesturerecognizer"
+  },
+  {
+   "claim": "Expo SDK 57 native tabs: import from expo-router/unstable-native-tabs (expo-router/native-tabs from SDK 58); at most 5 tabs on Android; the tab bar height cannot be measured; minimise behaviour; BottomAccessory (SDK 55+); per-tab icon colours. SDK 57 uses React Native 0.86.",
+   "verdict": "partly_supported",
+   "note": "Confirmed: both import paths, the 5-tab cap on Android, that the height cannot be measured, BottomAccessory on SDK 55+, the FlatList limits, that tabs cannot be added or removed at runtime, and RN 0.86. Two corrections. minimizeBehavior takes 'automatic' (the default), 'never', 'onScrollDown' and 'onScrollUp', and works on iOS 26+ only. For per-tab colour, the docs only list Trigger.Icon selectedColor and Trigger.Label selectedStyle, plus NativeTabs-level iconColor and labelStyle. No per-trigger colour for the unselected state is documented, so an accent-coloured Pay icon in the unselected state may not be possible.",
+   "corrected_claim": "Native tabs document per-tab colour only for the selected state. A Pay icon that is accent-coloured even when not selected is unverified.",
+   "good_source": "https://docs.expo.dev/versions/v57.0.0/sdk/router/native-tabs/"
+  },
+  {
+   "claim": "iOS Reachability is off by default (Settings > Accessibility > Touch), and a swipe down on the bottom edge activates it. Samsung One UI puts a viewing area at the top and an interaction area below.",
+   "verdict": "partly_supported",
+   "note": "The Apple support page loaded only its title and table of contents, which lists models through iPhone 18 Pro Max. The article text never loaded, so 'off by default' and the Settings path are unverified. The Samsung page confirms the viewing area and interaction area wording, but it does not mention one-handed use explicitly; it talks about 'Better reachability'.",
+   "good_source": "https://developer.samsung.com/one-ui/layout/basic.html"
+  },
+  {
+   "claim": "Reference screen sizes: iPhone 15/16 393×852, Plus 430×932, 17/17 Pro 402×874, Air 420×912, 17 Pro Max 440×956, all @3x at 460 ppi. 1 pt ≈ 0.166 mm, so 5 tabs on 393 pt are about 13 mm each, against about 11.7 mm on the iPhone 7.",
+   "verdict": "supported",
+   "note": "The Use Your Loaf tables confirm the sizes and 460 ppi. The physical sizes check out: 1179/460 in gives 65.1 mm and 2796/460 in gives 154.4 mm. For the iPhone 7, 750 px at 326 ppi gives 58.4 mm, or 11.7 mm per tab. The safe-area insets differ from the spec, though: 17 Pro Max has 62/34 and Air has 68/34, while the L canvas in the spec lists 59/34. The floating Liquid Glass bar is inset from the screen edges, so real tab widths are smaller than 13 mm.",
+   "good_source": "https://useyourloaf.com/blog/iphone-17-screen-sizes/"
+  }
+ ],
+ "spec_corrections": [
+  "§0 line 1: Note that the 2013 figures (49% one-handed, 67/33 right/left) come from phones of 5.5 inches or less. Hoober (2017) says only that 'fewer than 50%' hold the phone one-handed. Also correct the 'withdrew drawings' source: it is Hoober's 28 Feb 2017 comment, not the editor's note.",
+  "§0 line 2 and §2.1 accuracy layer: Keep 7 mm (centre) and 12 mm (corners), but label them as Hoober's unpublished aggregate. Re-label 'top and bottom bands 11–12 mm' as Hoober's 2013 spacing recommendation of 10–12 mm, not a measured accuracy.",
+  "§0 line 3 and §2.1: Qualify Le et al. The 36 cm² is the area reached by at least 25% of 16 seated, right-handed participants, measured on the front of bezelled phones, and constant size is based on only 4 phones. Treat the derived '39% / 33% of screen' as an optimistic upper bound.",
+  "§2.1: Fix the sector arithmetic. A 25–60 mm band over 100–120° covers only about 26–31 cm². Either widen it to about 140° or count the F band as within Le's comfortable area: reachable without a grip change, but slow according to Trudeau. Then re-check the N/S/H cells in §2.2–2.3.",
+  "§3.1, why five tabs: Address the conflict with Hoober's guidance. Both his 2013 and 2017 Part 3 articles say an iOS bottom bar should have at most 4 items, or 5 only on the largest phones. Justify 5 on the S canvas with a measured item width on the iOS 26/27 floating bar, or test a 4-tab variant.",
+  "§3.1, Option A rationale: Remove or reword 'the HIG warns against overflow More tabs' as a reason to drop Vaultwise's More tab. That HIG text is about the system-generated overflow tab, not an app-defined destination. The real arguments are hidden navigation and keeping Emergency visible.",
+  "§3.2 and §3.3: Per-tab colour in the Expo SDK 57 native tabs docs covers only the selected state (Trigger.Icon selectedColor, Trigger.Label selectedStyle). Mark the always-accent Pay icon as unverified, and add a device check or a fallback such as a filled glyph or the selected-only accent.",
+  "§3.3 and §9: The minimizeBehavior values are 'automatic' (default), 'never', 'onScrollDown' and 'onScrollUp', and the prop works on iOS 26+ only. Note that it has no effect on Android.",
+  "§4 R1 and R2: Change '(HIG)' to [I] for full-width primary buttons and for side-by-side buttons of equal width and height. The HIG gives that guidance only for watchOS. The 12/24 pt padding in R14 comes from the HIG Accessibility page, not Buttons.",
+  "§4 R7 and screen flows: Follow the HIG multi-step pattern. After step 1, Back replaces Cancel/Close in the leading position, and Cancel, Back and Done are never shown together. Decide whether multi-step full-screen modals show X or Back at the leading edge, not both.",
+  "§4 R12(d): Mark the 200 dp exclusion cap as unverified. It does not appear on the primary Android gesture-navigation page. Also reword the gesture-inset padding guidance: the doc only exposes getMandatorySystemGestureInsets().",
+  "§1 canvases: The top safe-area inset varies within each canvas: 59 pt on iPhone 16 and 16 Plus, 62 pt on 402×874 and 440×956, and 68 pt on Air (420×912). Compute positions from insets at runtime and stop treating 59 as fixed for L.",
+  "§7 Reachability: 'off by default' could not be checked against Apple's page. Keep the rule (no bottom-edge gestures), which holds either way, but drop the [D] tag or re-verify it.",
+  "Key sources and findings: Correct the Hurff entry. It is Hurff's own best-guess map built on Hoober's 2013 data, not credited to Luke Wroblewski.",
+  "Findings, NN/g hidden navigation: Present 89% against 44–56% as single-site figures (SupermarketHQ, Bloomberg, 7Digital), not as a controlled effect size."
+ ],
+ "overall": "I checked 20 claims. The base sources are real and mostly quoted correctly: Hoober 2013 and 2017, Le et al. 2018, both Trudeau 2012 papers, Parhi 2006, FFitts 2013, the HIG tab bar and sheet guidance, Material 3–5 destinations and 64 dp, iOS 26 interactiveContentPopGestureRecognizer, the Android rule that the home gesture cannot be opted out of, the Expo native tabs 5-tab, no-height and import-path facts, Expo SDK 57 on RN 0.86, and the iPhone point sizes. Hurff's map is miscredited (it is his own, built on Hoober's data, not Wroblewski's).\n\nFour problems matter for the design:\n1. **The heat-map geometry is wrong.** The sector the spec uses to reproduce Le et al.'s 36 cm² comes to only about 26–31 cm². Le's figure is also more generous than the research presents: it is an envelope reached by at least 25% of 16 seated, right-handed participants, measured on bezelled phones. The thumb-zone cells need recalculating and should be treated as optimistic.\n2. **The 5-tab decision ignores Hoober's own limit.** His 2013 and 2017 articles say an iOS bottom bar should have at most 4 items, or 5 only on the largest phones.\n3. **Several HIG citations are over-claimed.** The full-width primary button and equal-height pairing guidance is watchOS-only. The 'avoid More' guidance is about the system overflow tab, not an app-defined More destination.\n4. **Native-tab details are inaccurate.** The Expo docs document per-tab colour only for the selected state, so the always-accent Pay icon is unverified. minimizeBehavior has four values, not two.\n\nNot verified:\n- the 7/12 mm accuracy figures (Hoober publishes no method or data behind them);\n- the 200 dp exclusion cap;\n- whether Reachability is off by default;\n- the Bergstrom-Lehtovirta 2014 details (403 errors).\n\nWeb search hit its per-session limit during this check, so these points could only be checked by fetching pages directly. A follow-up session could check them with search. The navigation recommendation (centre Pay tab, native tabs, full-screen modals for money flows) is still defensible, but the spec should apply the corrections above before it is treated as evidence-backed."
+}

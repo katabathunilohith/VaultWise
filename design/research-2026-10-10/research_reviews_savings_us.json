@@ -1,0 +1,826 @@
+{
+ "method_notes": "STOREFRONT: US App Store for all five apps. APP IDS: from the iTunes Search API (https://itunes.apple.com/search?term=<name>&entity=software&country=us&limit=8), matched on trackName and sellerName. Qapital = 969977669 (Qapital, LLC). Acorns = 883324671 (Acorns Grow Incorporated). Chime = 836215269 (Chime Financial, Inc.). Oportun = 1011935076 (Oportun, Inc.); this listing is now titled \"Oportun: Savings & Loans\" and its description says it was formerly Digit. SoFi = 1191985736 (Social Finance, LLC).\n\nREVIEW DATA: Apple customer-reviews RSS, pages 1-10, sortby=mostrecent, e.g. https://itunes.apple.com/us/rss/customerreviews/page=1/id=969977669/sortby=mostrecent/json. Every page returned 50 entries, so each app has 500 reviews, which is the feed's cap. No RSS failures; nothing fell back to the web.\n- Date windows differ a lot by app: Qapital 2024-06-11 to 2026-10-08; Acorns 2026-01-21 to 2026-10-08; Chime 2026-09-03 to 2026-10-08 (only about 5 weeks); Oportun 2024-10-16 to 2026-10-08; SoFi 2026-04-04 to 2026-10-08.\n\nCODING: I read every 1-2 star review: Qapital 103, Acorns 228, Chime 186, Oportun 139, SoFi 295, total 951. All are under 300 per app, so there was no sampling. I also skimmed the 3-star reviews and about 40 long 4-5 star reviews per app.\n- Codebook v1 (15 themes) came from that reading. Spot-check 1 showed rule misses (round-ups/rules not firing, Zelle/card problems, deposit holds, sign-up/KYC, investing tools, Spanish/Portuguese text, \"still charging me\") and over-assignment of support. Codebook v2 has 20 themes plus unclassified_vague, with support rules tightened to need a negative-quality cue.\n- Rules are keyword regexes. Score = number of distinct rule hits per theme; the top 2 themes are kept, ties broken by a priority list. I then spot-checked every rule assignment against my reading. That found a regex bug (\"not us\" matching \"DO NOT USE\"), which I fixed.\n- I recorded 375 human-coded overrides (364 changed the rule output, mostly the secondary theme) in scripts/overrides.json. Final and rule-only counts are both in out/theme-counts.json. Primary-theme counts were broadly stable between the two.\n- Each review has at most 2 themes, so shares add up to more than 100%. Praise counts are keyword matches on 4-5 star reviews, so they are approximate.\n\nFEATURES: from App Store descriptions in the Search API results (saved to out/appmeta.json) plus first-party pages fetched with WebFetch: https://www.chime.com/, https://www.chime.com/savings-account/, https://www.qapital.com/ and https://www.qapital.com/pricing. sofi.com and oportun.com returned HTTP 403, so SoFi and Oportun features come only from App Store text and reviews. The WebSearch budget for this session ran out, so I did not consult Google Play, Trustpilot, Reddit or press; all complaint data_basis is app_store_rss_counted. Apple Watch: none of the five apps lists a Watch device in supportedDevices (an inference from that API field).\n\nCAVEATS:\n- Written recent reviews skew much more negative than the store averages (4.74-4.83). For example, 45.6% of Acorns' recent written reviews are 1-2 star against a 4.75 average, so these complaints are not rating-weighted.\n- Oportun's and SoFi's samples include loan customers (the credit_loans theme), which is partly out of scope for Vaultwise.\n- Dollar amounts and events in examples are reviewers' claims, paraphrased; I did not verify them.\n\nFILES:\n- Downloaded data (iTunes Search results and RSS pages): C:/Users/shaik/AppData/Local/Temp/claude/C--Users-shaik-VaultWise/9e11eaa3-37f8-4e12-90a3-5e69f6c8b8c9/scratchpad/research/reviews/savings_us/raw/\n- Scripts (parse.js, classify.js, overrides.json, appmeta.js, praise.js, totals.js, listsearch.js): .../savings_us/scripts/\n- Outputs: .../savings_us/out/, containing *-all.json, *-low.txt, *-classified.txt, *-low-classified.json, theme-counts.json, praise-counts.json and appmeta.json.",
+ "apps": [
+  {
+   "app_id": "969977669",
+   "name": "Qapital: The Money Saving App (Qapital, LLC)",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:365 4:20 3:12 2:19 1:84 (1-2 star coded n=103; window 2024-06-11 to 2026-10-08; store avg 4.80 from 85,870 ratings)",
+   "features": [
+    "Unlimited savings goals that can be personalised; reviews say custom goal photos/pictures were shrunk or removed in the 2024 redesign. Sources: App Store description https://apps.apple.com/us/app/qapital-the-money-saving-app/id969977669 and reviews.",
+    "Rules engine with customizable triggers, e.g. save when you buy a treat or go for a run. Reviews name a round-up rule, a 52-week challenge rule and a Set & Forget rule. Sources: App Store description and https://www.qapital.com/pricing.",
+    "Automatic savings from each paycheck. Reviewers call the payday split 'Payday Divvy' and want it to go beyond a 50% cap. Sources: qapital.com/pricing and reviews.",
+    "Low-balance safeguard: several 5-star reviews say rules pause when checking falls below about $100 (reviewer-reported).",
+    "Transfers between goals, available on all plans (qapital.com/pricing).",
+    "Dream Team: shared goals with a partner, where each person chooses what is shared or private (App Store description).",
+    "ETF investing with ready-made, auto-rebalanced portfolios on the Complete ($8) and Premier ($12) plans (qapital.com/pricing).",
+    "Qapital Visa debit card with weekly spending budget and near-budget notifications (App Store). A 3-star reviewer says physical cards were discontinued in favour of digital-only cards.",
+    "'Ask Qapital': personalised insights on the Complete plan (qapital.com/pricing). One 3-star reviewer mentions Ask Qapital and personalised insights as newer features.",
+    "Pricing: Basic $3, Complete $8, Premier $12 per month, with a 30-day free trial; the fee starts after the trial and once a bank is linked (qapital.com/pricing; App Store).",
+    "Not found: no Apple Watch device in supportedDevices; no widgets, themes, haptics or animations mentioned in any of the 500 reviews; no QR or checkout payments; no receipt capture.",
+    "Interest: one long-time user calls the APY 'abysmal' (reviewer claim; I found no published rate)."
+   ],
+   "praise_themes": [
+    "Easy and simple: 121 of 385 4-5 star reviews (keyword count). Several praise an uncluttered app that does not pitch products.",
+    "Set-and-forget saving: 95 mentions. Users say they don't notice the money leaving; 'out of sight, out of mind' recurs; ADHD users explicitly praise it.",
+    "Goals and visual progress: 82 mentions. Saving for trips, Christmas, a car or an emergency fund. One reviewer reports about $100k saved over 5 years (reviewer claim).",
+    "Rules, round-ups, 52-week challenge and Payday Divvy: 64 mentions. Users describe saving as motivating, even fun.",
+    "Safeguards that pause saving when checking is low, so the app doesn't overdraft (repeated in long 5-star reviews).",
+    "Partner and shared goals: 13 mentions. Couples saving for weddings and shared funds."
+   ],
+   "complaints": [
+    {
+     "theme": "funds_stuck_or_slow_withdrawal: can't get money out, slow transfers out, missing or mismatched balances",
+     "count": 34,
+     "share_of_low_star": "33.0% of 103",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Moving money back to the bank took 7-9 days, and the user spent 30 minutes failing to find how to start the transfer.",
+      "After closing the account, only part of the balance arrived; the couple says thousands were still missing two months later.",
+      "A Christmas fund showed less than the deposits added up to, and support asked the user to prove the deposits with statements."
+     ]
+    },
+    {
+     "theme": "support_poor: chat or AI bots only, no phone, tickets closed, conflicting answers",
+     "count": 26,
+     "share_of_low_star": "25.2%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Out of business hours there is only an 'AI' chat bot, which went in circles.",
+      "Agents kept closing conversations without answering, and each new agent required screenshots to be resubmitted.",
+      "There is no phone number to call while money is locked."
+     ]
+    },
+    {
+     "theme": "bank_link_failures: Plaid disconnects, credit unions unsupported, rules silently stop",
+     "count": 23,
+     "share_of_low_star": "22.3%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The bank disconnects almost daily, sometimes with no notification, so no saving happens for weeks.",
+      "A credit-union user was told smaller institutions lack the tech to stay linked.",
+      "The app said the bank was connected while none of the rules were firing."
+     ]
+    },
+    {
+     "theme": "fees_subscription_cancellation: charged after cancel, price revealed late, hard to close",
+     "count": 21,
+     "share_of_low_star": "20.4%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Was still charged monthly after cancelling through Apple subscriptions, because cancellation had to happen inside the app.",
+      "The app collects personal details before saying it costs about $6 a month.",
+      "The app froze each time the user tried to cancel the membership and close the account."
+     ]
+    },
+    {
+     "theme": "account_locked_or_closed: re-verification (SSN/ID/address) blocks access, closures",
+     "count": 11,
+     "share_of_low_star": "10.7%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "After an update, the app demanded SSN and home address before allowing access, while withdrawals from the bank continued.",
+      "The account was closed for alleged fraudulent activity with no explanation and the funds were held.",
+      "Changing the funding account requires a selfie holding ID every time."
+     ]
+    },
+    {
+     "theme": "unwanted_or_excess_auto_transfers",
+     "count": 11,
+     "share_of_low_star": "10.7%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A default payday rule moved a large share of the paycheck, which then had to settle for 3 business days before it could go back.",
+      "The user was charged insufficient-funds fees even after turning automatic deposits off.",
+      "About $800 was pulled, and only $16 could be returned the same day."
+     ]
+    },
+    {
+     "theme": "redesign_navigation_ux: 2024 redesign hid goals and pushed investing and card",
+     "count": 10,
+     "share_of_low_star": "9.7%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Goals can no longer be seen in one list; they are tiny tiles in a horizontal scroll.",
+      "Goals can't be reordered, and the header is a fixed, unattractive green that can't be customised.",
+      "The update hard-sells the credit card and investing when the user only wants to save."
+     ]
+    },
+    {
+     "theme": "app_bugs_login",
+     "count": 9,
+     "share_of_low_star": "8.7%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The app says the phone number already has an account, so the user can't sign in.",
+      "The app force-closes on every launch."
+     ]
+    },
+    {
+     "theme": "automation_not_firing: round-ups and rules don't run",
+     "count": 8,
+     "share_of_low_star": "7.8%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The round-up rule recorded nothing after six card purchases.",
+      "A Set & Forget rule moved no money for a month, yet the fee was still charged."
+     ]
+    }
+   ]
+  },
+  {
+   "app_id": "883324671",
+   "name": "Acorns: Save & Invest Money (Acorns Grow Incorporated)",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:225 4:22 3:25 2:25 1:203 (1-2 star coded n=228; window 2026-01-21 to 2026-10-08; store avg 4.75 from 959,422 ratings)",
+   "features": [
+    "Round-Ups that invest spare change, plus recurring investments from $5 (App Store https://apps.apple.com/us/app/acorns-save-invest-money/id883324671).",
+    "Expert-built diversified ETF portfolios; up to 5% allocation to a Bitcoin-linked ETF; a custom portfolio of the largest 100+ US stocks and ETFs (App Store).",
+    "Later IRA with a 1-3% first-year contribution match depending on tier; Early Invest kids accounts with a 1% match on Gold (App Store).",
+    "Emergency Savings at 3.59% APY, and a Checking account that invests spare change on spend and a slice of each paycheck (App Store).",
+    "Money Manager: automatically splits money across investing, saving and spending (Gold) (App Store).",
+    "Earn: bonus investments when shopping with 10,000+ brands; referral bonuses up to $1,200 (App Store). Reviews also mention $975 and $1,400 refer-N-friends promotions.",
+    "Education: articles, courses and live Q&As (App Store).",
+    "Subscription tiers: Bronze $4, Silver $8, Gold $12 per month (App Store).",
+    "Security: two-factor authentication, card lock, SIPC/FDIC (App Store).",
+    "Home-screen widget exists; one 3-star review says it is often blank or unavailable.",
+    "No dark mode: two 4-star reviews request it. Users report repeated in-app 'rate the app' prompts. No Apple Watch in supportedDevices."
+   ],
+   "praise_themes": [
+    "Beginner-friendly investing: 96 of 247 4-5 star mentions. Users say it got them investing with no finance knowledge and value having no day-trading or margin temptations.",
+    "Easy and simple: 57 mentions. 'Neatly organized'.",
+    "Round-ups and automatic recurring investing as a habit: 19 plus 17 mentions. Small amounts add up; one reviewer reports $58k after 6 years (claim).",
+    "Concrete milestones: a house down payment, a car fund.",
+    "Kids and family accounts are valued; users ask for a couples view."
+   ],
+   "complaints": [
+    {
+     "theme": "fees_subscription_cancellation: billed after cancel or closure, auto-upgrade, price shown late, fees greater than returns, can't close",
+     "count": 103,
+     "share_of_low_star": "45.2% of 228",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Kept charging $3-$12 a month for months or years after the account was closed and all stocks sold.",
+      "The trial silently moved the user to the $12 Gold tier.",
+      "Asks for ID and bank details before revealing there is a monthly fee.",
+      "Can't close an account with a $0 balance without first adding money or linking a bank."
+     ]
+    },
+    {
+     "theme": "funds_stuck_or_slow_withdrawal",
+     "count": 38,
+     "share_of_low_star": "16.7%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A withdrawal quoted as next-day took over a week.",
+      "Closing the account means a 3-6 day wait for the money.",
+      "An IRA rollover of about $20k was reported 'transferred' but never arrived at the new institution."
+     ]
+    },
+    {
+     "theme": "account_locked_or_closed: automated fraud flags, repeated re-verification",
+     "count": 25,
+     "share_of_low_star": "11.0%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "An automated system flagged 'suspicious activity' and closed the account despite ID and bank proof; funds were held for 60+ days.",
+      "The account was locked four times in one week, each needing new documents and a 24-hour review.",
+      "A child's account stayed locked for a year over identity verification."
+     ]
+    },
+    {
+     "theme": "support_poor",
+     "count": 25,
+     "share_of_low_star": "11.0%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Outsourced, scripted support asks again for information already given in the same thread.",
+      "Tasks that used to be self-serve now require an AI assistant that can't do them.",
+      "Promised 24-hour callbacks never happen."
+     ]
+    },
+    {
+     "theme": "unwanted_or_excess_auto_transfers: paused rules restarted, unexpected pulls",
+     "count": 24,
+     "share_of_low_star": "10.5%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Paused investments were switched back on automatically after the bank balance rose.",
+      "A changed recurring amount wasn't applied, which caused an overdraft.",
+      "$1,000 in checking was split into the IRA and savings without permission."
+     ]
+    },
+    {
+     "theme": "investing_returns_tools",
+     "count": 24,
+     "share_of_low_star": "10.5%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Withdrew noticeably less than was invested, after a year of paying the subscription.",
+      "Closing a custom-portfolio position sends the cash out instead of letting it be reallocated."
+     ]
+    },
+    {
+     "theme": "promo_referral_bonus_not_paid",
+     "count": 23,
+     "share_of_low_star": "10.1%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A refer-5-friends bonus was voided because one referral missed a step, and no detail was given for privacy reasons.",
+      "One referral was miscounted after a password reset, so the user got only 2 of 3."
+     ]
+    },
+    {
+     "theme": "app_bugs_login",
+     "count": 19,
+     "share_of_low_star": "8.3%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The keyboard doesn't appear when entering date of birth at sign-up.",
+      "The PIN and password must be reset on every login.",
+      "The app wrongly says the phone is jailbroken."
+     ]
+    }
+   ]
+  },
+  {
+   "app_id": "836215269",
+   "name": "Chime – Mobile Banking (Chime Financial, Inc.)",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:289 4:10 3:15 2:12 1:174 (1-2 star coded n=186; window only 2026-09-03 to 2026-10-08; store avg 4.83 from 1,613,434 ratings)",
+   "features": [
+    "Fee-free checking and 47K fee-free ATMs (https://www.chime.com/).",
+    "SpotMe fee-free overdraft up to $200; needs $200+ monthly qualifying direct deposit; starting limit $20 (chime.com).",
+    "MyPay pay advance: limits $20-$1,000, with up to $750 advertised; optional 3% instant fee ($2 min, $5 max). Paycheck up to 2 days early (chime.com).",
+    "Credit-building Chime Card with no credit check and no interest (chime.com).",
+    "Savings APY tiers: 1.00% standard, 3.00% Chime+, 4.00% Prime; Round Ups; auto-transfer of 10% of each direct deposit; unlimited savings goals with tracking (https://www.chime.com/savings-account/).",
+    "Cash back: 5% on Prime or 2% on Plus in a chosen monthly category, up to $1,500 of purchases (chime.com).",
+    "Real-time alerts; claims 24/7 human support; Visa zero liability (chime.com). Reviews say an in-app AI help assistant comes first.",
+    "Cash deposit at retailers via barcode; mobile check deposit; Chime Checkbook; instant transfers; investing from $1 (chime.com and reviews).",
+    "Reviews mention card lock/unlock, rotating virtual card numbers, and Chime Wireless eSIM.",
+    "App Store description is one line; features come from the website. No Apple Watch in supportedDevices; no widget, theme or haptics mentions in the 500 reviews."
+   ],
+   "praise_themes": [
+    "Early pay, SpotMe and MyPay as a safety net: 33 of 299 4-5 star mentions.",
+    "Credit building: 23 mentions; users report rising scores (claim).",
+    "Easy to use: 46 mentions. Card lock and virtual card numbers are cited as security features users like.",
+    "Fast transfers and reachable live support are praised by some users (7 mentions each); this contradicts the 1-star theme."
+   ],
+   "complaints": [
+    {
+     "theme": "fraud_dispute_denied: unauthorized charges and scams not reimbursed, generic denials",
+     "count": 57,
+     "share_of_low_star": "30.6% of 186",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Disputes for clearly unauthorized charges were denied twice despite a police report.",
+      "After weeks of submitted evidence the only answer was a generic 'no error occurred' letter that didn't address the evidence.",
+      "A dispute was closed in under a day, which the user took as no real investigation."
+     ]
+    },
+    {
+     "theme": "support_poor",
+     "count": 33,
+     "share_of_low_star": "17.7%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The AI help line can't resolve anything and then says to call human support.",
+      "Transferred between six departments and then disconnected; supervisors hung up.",
+      "A supervisor refused to confirm a promised credit in writing."
+     ]
+    },
+    {
+     "theme": "card_and_payment_problems: P2P irreversibility, card replaced or declined, contactless",
+     "count": 20,
+     "share_of_low_star": "10.8%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Money sent to the wrong person can't be reversed.",
+      "Contactless payment broke after an update.",
+      "The card was cancelled and replaced without being asked for."
+     ]
+    },
+    {
+     "theme": "promo_referral_bonus_not_paid",
+     "count": 18,
+     "share_of_low_star": "9.7%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A sign-up bonus was refused because the promo code wasn't entered before opening the account.",
+      "Bonus terms changed between screenshots taken at sign-up and payout."
+     ]
+    },
+    {
+     "theme": "credit_loans_advances: MyPay and SpotMe limits cut, repayment timing",
+     "count": 17,
+     "share_of_low_star": "9.1%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The MyPay limit dropped from about $1,000 to $200 without warning.",
+      "Being slightly late on a small loan payment removed MyPay access for two weeks."
+     ]
+    },
+    {
+     "theme": "funds_stuck_or_slow_withdrawal",
+     "count": 17,
+     "share_of_low_star": "9.1%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The account was closed and about $10k was held with no return date or method.",
+      "Can't transfer savings to checking even though the app looks operational."
+     ]
+    },
+    {
+     "theme": "deposits_checks_holds",
+     "count": 14,
+     "share_of_low_star": "7.5%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A check under $75 has been held for more than 8 days.",
+      "A cash deposit at a retailer was never recorded; the user was told an investigation could take 45 days."
+     ]
+    },
+    {
+     "theme": "app_bugs_login",
+     "count": 16,
+     "share_of_low_star": "8.6%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Sign-up loops back to the first screen after entering date of birth.",
+      "The app forces biometrics or a passkey with no password option."
+     ]
+    },
+    {
+     "theme": "account_locked_or_closed",
+     "count": 11,
+     "share_of_low_star": "5.9%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Logged out right after receiving money, then told a Canadian passport is not acceptable ID.",
+      "Told the account would close over 'recent activity' with no further detail."
+     ]
+    }
+   ]
+  },
+  {
+   "app_id": "1011935076",
+   "name": "Oportun: Savings & Loans, formerly Digit (Oportun, Inc.)",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:311 4:28 3:22 2:23 1:116 (1-2 star coded n=139; window 2024-10-16 to 2026-10-08; store avg 4.74 from 289,212 ratings)",
+   "features": [
+    "Set & Save: algorithmic auto-saving that learns income, spending and bill dates (App Store https://apps.apple.com/us/app/oportun-savings-loans/id1011935076).",
+    "Savings goals: '15 million goals' claim; move money between goals; built-in progress tracker (App Store).",
+    "Smart Bills goals that save, withdraw and repeat automatically, i.e. sinking funds (App Store).",
+    "Control settings: limits and guidelines on saving, one-tap pause, withdraw anytime (App Store). Reviews mention a default Rainy Day fund, Boost savings, and that an older 'save more / save less' control has been removed.",
+    "Overdraft safeguard: reviews say transfers reverse if checking would go negative. Several 1-2 star reviews say overdrafts still happen.",
+    "$0.99 instant withdrawal fee, otherwise 3-5 business days (reviews). One reviewer claims the effective fee was higher.",
+    "Spending view and bills list (App Store). Reviews say a savings graph was requested for years but a spending graph shipped instead.",
+    "Pricing: 30-day trial, then $5.99/mo or $3.99/mo billed yearly (App Store).",
+    "Loan management: balance, payments, autopay (App Store). Reviews say Digit-era automatic bill payments were removed.",
+    "Multi-factor authentication; FDIC via partner banks (App Store).",
+    "Reviews: Face ID often doesn't persist. One review asks for a dark app icon. No Apple Watch in supportedDevices."
+   ],
+   "praise_themes": [
+    "Saves without thinking: 67 of 339 4-5 star mentions. 'Secret stash' and 'out of sight' saving; strongly praised by ADHD users.",
+    "Easy: 59 mentions. Goals and a Rainy Day cushion: 54 mentions.",
+    "Safety features users value: pause, a savings limit, auto-reversal before overdraft.",
+    "Long-term loyalty since the Digit days; some users say the fee is worth it.",
+    "Explicit feature requests in positive reviews: a maximum daily withdrawal cap, a buffer for the one-day balance lag, joint accounts."
+   ],
+   "complaints": [
+    {
+     "theme": "fees_subscription_cancellation: paying to save own money, billed after cancel, no in-app cancel",
+     "count": 36,
+     "share_of_low_star": "25.9% of 139",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Ex-Digit users resent a $5-$5.99 monthly fee to save their own money.",
+      "Charged for months after deleting the app or cancelling; there is no in-app option to end the subscription.",
+      "After cancelling in the app, billing continued until a future renewal date."
+     ]
+    },
+    {
+     "theme": "app_bugs_login: locked out by 2FA to old phone, Face ID not persisting",
+     "count": 31,
+     "share_of_low_star": "22.3%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "After changing phone number, login codes still go to the old number while the app keeps withdrawing.",
+      "Face ID and remember-me never stick, so a full login is needed every time.",
+      "An update over a weekend blocked login for three days."
+     ]
+    },
+    {
+     "theme": "funds_stuck_or_slow_withdrawal",
+     "count": 27,
+     "share_of_low_star": "19.4%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Rent money transferred in eight days early wasn't available on the day; the user reports being evicted (claim).",
+      "Withdrawals return a 'trouble processing' error while email support drags on.",
+      "Money left the bank but never showed up in the app."
+     ]
+    },
+    {
+     "theme": "unwanted_or_excess_auto_transfers: algorithm pulls too much or too little, overdrafts",
+     "count": 27,
+     "share_of_low_star": "19.4%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The app took its maximum amount 13 times in a row, sometimes twice a day.",
+      "Can't set an amount or a date, and overdrafts happen even with protection on.",
+      "A $5,000 goal ended with $2,100 saved by the deadline."
+     ]
+    },
+    {
+     "theme": "support_poor: phone line only for loans, savings support email-only",
+     "count": 23,
+     "share_of_low_star": "16.5%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The phone number only serves loan customers; savings support is email-only and takes days.",
+      "Support pasted links that don't work."
+     ]
+    },
+    {
+     "theme": "credit_loans_advances (loan customers)",
+     "count": 22,
+     "share_of_low_star": "15.8%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "High-interest loan terms and $45 fees.",
+      "Denied despite a good credit score; payments not reported to credit bureaus."
+     ]
+    },
+    {
+     "theme": "bank_link_failures",
+     "count": 21,
+     "share_of_low_star": "15.1%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The bank disconnects every few weeks and reconnecting fails, so saving stops.",
+      "Reminder messages every 3-5 days to manually reconnect."
+     ]
+    }
+   ]
+  },
+  {
+   "app_id": "1191985736",
+   "name": "SoFi: Bank, Invest & Crypto (Social Finance, LLC)",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:144 4:30 3:31 2:49 1:246 (1-2 star coded n=295; window 2026-04-04 to 2026-10-08; store avg 4.74 from 385,425 ratings; age rating 12+)",
+   "features": [
+    "SoFi Coach: an AI-driven financial guide that chats about spending, budget, credit, debt and portfolio (App Store https://apps.apple.com/us/app/sofi-bank-invest-crypto/id1191985736).",
+    "Savings Vaults for emergency fund and goals; reviews mention per-vault icons and ask for more icons or emoji. Instant fee-free transfers between checking and savings (App Store).",
+    "APY: 4.50% on up to $20k with the paid SoFi Plus membership; 3.10% base with eligible direct deposit or $5k in qualifying deposits; variable (App Store).",
+    "Stocks, ETFs, fractional shares from $5, options, automated investing, IRA/Roth IRA; crypto with 25+ coins (App Store).",
+    "Budgeting, spending tracking and net worth across linked accounts; reviewers call the insights 'Relay'. Credit score monitoring; personal and student loans (App Store and reviews).",
+    "Bill pay, Zelle and P2P send. Reviews: Zelle is gated until direct deposit is set up, and is buggy.",
+    "Joint accounts (reviews: valued, but creation was reported broken).",
+    "Dark mode exists but is incomplete per reviews. No home-screen widgets: two 4-star reviews ask for them. No Apple Watch in supportedDevices.",
+    "Fees: instant transfers, outgoing wires, global remittance (App Store). Reviews also report inactivity fees, $100 to close an investment account, and $4.95 cash deposits.",
+    "sofi.com was not reachable (HTTP 403), so I could not verify Roundups or other savings automation."
+   ],
+   "praise_themes": [
+    "All-in-one: banking, investing, crypto, loans and credit in one app. Easy: 48 of 174 4-5 star mentions; investing: 33.",
+    "Vaults to organise money like cash envelopes. One 1-star reviewer still says no other bank matches the vaults; couples use them as envelopes.",
+    "No account fees and a competitive APY (9 mentions); trust in the bank charter.",
+    "Dark mode and TOTP support praised by a power user."
+   ],
+   "complaints": [
+    {
+     "theme": "support_poor: AI chat posing as human, can't reach a person",
+     "count": 56,
+     "share_of_low_star": "19.0% of 295",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The chat said a human had joined, but it was another AI asking the user to keep waiting.",
+      "The AI coach suggested options that don't exist while the user hunted 20 minutes for an account number.",
+      "Cases marked resolved with the wrong document and no way to reply."
+     ]
+    },
+    {
+     "theme": "app_bugs_login: login failures after updates, SMS-only MFA, sluggish UI",
+     "count": 55,
+     "share_of_low_star": "18.6%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "After an update, login opens a web page and asks to sign in three times.",
+      "SMS MFA stopped working for a Google Voice number, blocking Zelle; the user asks for passkeys or email.",
+      "On iPhone the app overheats and the PIN keypad is sluggish with no tactile feedback."
+     ]
+    },
+    {
+     "theme": "ads_upsell_notification_spam",
+     "count": 37,
+     "share_of_low_star": "12.5%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A full-screen promo appears on every launch, even for paying Plus members.",
+      "Bitcoin price push notifications arrive by default and are grouped with account alerts.",
+      "The home screen is a wall of product banners above the actual balances."
+     ]
+    },
+    {
+     "theme": "redesign_navigation_ux: buried info, features removed",
+     "count": 36,
+     "share_of_low_star": "12.2%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "An update removed running balances and the visible APY paid.",
+      "Scheduled transfers between SoFi accounts were removed and replaced with instant-only.",
+      "Moving money from a couple of vaults to checking takes minutes and many steps."
+     ]
+    },
+    {
+     "theme": "credit_loans_advances",
+     "count": 34,
+     "share_of_low_star": "11.5%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Told the loan was approved, then denied after a hard pull.",
+      "Loan terms changed between approval and funding."
+     ]
+    },
+    {
+     "theme": "funds_stuck_or_slow_withdrawal",
+     "count": 33,
+     "share_of_low_star": "11.2%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "'Instant' transfers took days.",
+      "A bank was unlinked by a bug for two months, so the user could neither move money nor close the account."
+     ]
+    },
+    {
+     "theme": "fees_subscription_cancellation",
+     "count": 28,
+     "share_of_low_star": "9.5%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "$25 inactivity fees, and $100 to close an investment account, not disclosed.",
+      "Ads still shown after paying for the membership."
+     ]
+    },
+    {
+     "theme": "deposits_checks_holds",
+     "count": 24,
+     "share_of_low_star": "8.1%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A mobile check took 8-15 days despite a 1-2 day estimate.",
+      "No barcode for cash deposits, plus a fee to deposit cash."
+     ]
+    },
+    {
+     "theme": "perks_rates_changed_or_gated",
+     "count": 19,
+     "share_of_low_star": "6.4%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The advertised savings APY became conditional on direct deposit a few months after joining, a bait-and-switch.",
+      "SoFi Plus stopped being free with direct deposit and became a paid subscription."
+     ]
+    },
+    {
+     "theme": "card_and_payment_problems",
+     "count": 18,
+     "share_of_low_star": "6.1%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Zelle is blocked until direct deposit is set up, which excludes self-employed users.",
+      "Every purchase abroad is declined, and the approve-it-was-me prompt disappeared."
+     ]
+    }
+   ]
+  }
+ ],
+ "cross_app_themes": [
+  "Pooled over 951 coded 1-2 star reviews, the top themes are: fees, subscription and cancellation friction 195 (20.5%); poor support 163 (17.1%); funds stuck or slow withdrawal 149 (15.7%); app bugs and login 130 (13.7%); fraud or dispute denied 81 (8.5%); credit, loans and advances 73 (7.7%); account locked or closed 64 (6.7%); unwanted or excess auto-transfers 64 (6.7%); bank-link failures 60 (6.3%); redesign or navigation 59 (6.2%); ads, upsell and notification spam 49 (5.2%); promo or referral not paid 48 (5.0%).",
+  "Money-movement trust is the core problem for savings apps. 291 of 951 (30.6%) low-star reviews involve at least one of: funds stuck, unwanted pulls, bank link, automation not firing, or account locked. It is concentrated in the pure savings apps: Qapital 65 of 103 and Oportun 73 of 139, against Chime 25 of 186. Inference: for Vaultwise, whose product deliberately restricts withdrawals, this is the biggest risk and the biggest chance to stand out.",
+  "The same mechanism drives both praise and complaints. Qapital and Oportun 5-star reviews love that money is 'out of sight, out of mind' and moves without thinking (Qapital 95 and Oportun 67 save-without-thinking mentions). The 1-2 star reviews are what happens when that invisibility becomes opacity: missing money, surprise pulls, silent rule failures.",
+  "Subscriptions are the leading complaint for Acorns (45.2% of its low-star) and Oportun (25.9%), and a top-4 theme for Qapital (20.4%). Billing after cancellation, cancellation that only works in-app, price disclosed after KYC, and fees larger than returns on small balances. Former Digit users still resent going from free to paid.",
+  "AI-first support is rejected when there is no clear way to reach a human. SoFi users say a bot pretended to be a human; Chime's AI help line just redirects to humans; Qapital and Acorns users describe looping bots. Assistants are tolerated only as a front door to people.",
+  "Explainability is missing from automated decisions. Chime's generic dispute denials, Acorns' AI fraud-flag closures, and KYC re-verification loops across Qapital, Acorns, SoFi and Chime all share 'no reason given'. This bears directly on Vaultwise's AI and forensics proof-verification pipeline.",
+  "Auto-save controls users explicitly request: a maximum daily or per-pull cap, a low-balance floor, a heads-up before pulls, pauses that stay paused, and a buffer for one-day balance lag (Oportun and Qapital reviews; Acorns restart complaints).",
+  "Redesign backlash: Qapital's 2024 redesign (goal list hidden, photos shrunk, no reordering, card and invest pushed) and SoFi's banner-heavy home both generated complaints. Users value stable, customisable, uncluttered layouts and personal goal imagery; SoFi users ask for more vault icons and emoji.",
+  "Delight is a gap (inference). In 2,500 reviews there are zero mentions of haptics, animations, celebrations, themes or app icons as positives. The only haptics mention is a SoFi complaint that the PIN pad is sluggish with no tactile feedback. Widgets are requested by SoFi users (8 mentions) and Acorns' widget is reported broken. None of the five apps lists Apple Watch support.",
+  "Gen Z-relevant signals: ADHD and neurodivergent users are a vocal fan base for set-and-forget saving (Qapital and Oportun); a 17-year-old complains Chime is rated 4+ but requires 18+ to open an account; joint and partner saving is praised (Qapital Dream Team) or requested (Chime, SoFi)."
+ ],
+ "opportunities": [
+  {
+   "idea": "Money Timeline: every movement into or out of a vault (contribution, release, emergency withdrawal, refund) gets a live tracker with an exact expected settle date, the reason for any hold, a reference ID and a shareable receipt. A balance never just changes without an explanation.",
+   "beats_competitors_because": "Competitors give vague '3-5 business days' estimates that slip, and reviewers describe money 'in limbo' with support unable to trace it. A traceable timeline turns waiting into visible progress and gives users evidence for support conversations.",
+   "complaint_evidence": "funds_stuck_or_slow_withdrawal 149/951 (Qapital 34 = 33.0%, Acorns 38, Oportun 27, SoFi 33, Chime 17); deposits_checks_holds 43 (SoFi 24, Chime 14).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Vault detail",
+    "Activity/History",
+    "Emergency",
+    "Home",
+    "Pay with Vaultwise receipt"
+   ]
+  },
+  {
+   "idea": "A lock that is a promise, not a trap. When a vault is created, show a plain 'release contract' card: what releases the money (verified invoice), the Emergency Tier 1 and Tier 2 path, maximum hold times and personal limits. Every vault keeps a permanent 'How do I get my money out?' button that opens the right path in two taps.",
+   "beats_competitors_because": "Locking is Vaultwise's differentiator. Competitors' 'locks' feel accidental: KYC freezes and opaque holds. Making the restriction chosen, predictable and escapable keeps the 'out of sight, out of mind' benefit that Qapital and Oportun users praise without the 'they're holding my money hostage' reaction.",
+   "complaint_evidence": "funds_stuck 149 and account_locked_or_closed 64 (Acorns 25, Qapital 11, Chime 11, SoFi 11). Praise: 'out of sight' saving is cited in Qapital and Oportun 5-star reviews.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Create vault",
+    "Vault detail",
+    "Emergency",
+    "Onboarding"
+   ]
+  },
+  {
+   "idea": "Auto-save guardrails: a never-below balance floor, a daily and weekly maximum per rule, a 7-day preview of upcoming pulls, a heads-up notification about 24 hours before larger pulls with one-tap skip, and pauses that stay paused until the user resumes them.",
+   "beats_competitors_because": "Oportun users explicitly ask for a maximum daily withdrawal cap and for the one-day balance lag to be handled; Acorns restarts paused investments on its own; Qapital and Oportun pulls caused overdrafts. Vaultwise can show exactly what will move and when, before it moves.",
+   "complaint_evidence": "unwanted_or_excess_auto_transfers 64 (Oportun 27 = 19.4%, Acorns 24 = 10.5%, Qapital 11 = 10.7%). Praise for low-balance pause safeguards in Qapital and Oportun 5-star reviews.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Rules / Contribution rules",
+    "Round-ups settings",
+    "Vault detail",
+    "Home",
+    "Notifications"
+   ]
+  },
+  {
+   "idea": "Link health and rule-run receipts: a status chip for each linked account; an immediate push and a home banner when a link breaks and rules pause; one-tap re-link; and per-rule run history ('Round-up skipped Tuesday: bank disconnected').",
+   "beats_competitors_because": "Qapital and Oportun users discover weeks later that saving silently stopped while fees continued. Visible rule receipts make round-ups trustworthy, and Vaultwise depends on round-ups and contribution rules.",
+   "complaint_evidence": "bank_link_failures 60 (Qapital 23 = 22.3%, Oportun 21 = 15.1%, SoFi 12); automation_not_firing 13 (Qapital 8).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Home",
+    "Rules",
+    "More > Linked accounts",
+    "Notifications"
+   ]
+  },
+  {
+   "idea": "Explainable decisions with an appeal path. When the proof-of-use pipeline declines or flags an invoice, or a guardrail blocks a release, show which check failed (amount mismatch, merchant category, date, tampering signal), what to upload instead, and a one-tap 'Ask a human reviewer' with a visible response-time target. The AI assistant can explain the decision but never ends the case.",
+   "beats_competitors_because": "The category's most hated pattern is the generic denial ('no error occurred') or an AI fraud flag with no human review. Vaultwise already routes some decisions to human reviewers, so it can surface that queue as a trust feature instead of a black box.",
+   "complaint_evidence": "fraud_dispute_denied 81 (Chime 57 = 30.6%); account_locked_or_closed 64, including an Acorns account closed after an AI fraud flag despite ID; support_poor 163 (17.1%).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Proof upload result",
+    "Release request",
+    "Emergency Tier 2",
+    "Activity",
+    "Help / case tracker"
+   ]
+  },
+  {
+   "idea": "Human-backed support with case tracking: the AI assistant answers first but always shows a 'Talk to a person' option with the current wait; each issue becomes a tracked case with a timeline; cases close only when the user confirms; and the assistant never claims to be human.",
+   "beats_competitors_because": "Reviewers across all five apps reject support that is only AI, and especially AI posing as a human (SoFi). Honest escalation lets Vaultwise keep an AI assistant without inheriting its biggest liability.",
+   "complaint_evidence": "support_poor 163/951 (SoFi 56 = 19.0%, Chime 33 = 17.7%, Qapital 26 = 25.2%, Acorns 25, Oportun 23 = 16.5%, where savings support is email-only).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "AI assistant",
+    "More > Help",
+    "Case detail",
+    "Notifications"
+   ]
+  },
+  {
+   "idea": "Honest pricing and one-step exit: show any price before KYC; cancel or close in at most three taps in-app; closing sweeps all vaults to the linked bank, stops every scheduled pull immediately and issues a confirmation receipt; no closing fee and no requirement to add money first. Pair with the existing Delete account flow in Settings, which Apple's in-app account-deletion requirement already makes necessary.",
+   "beats_competitors_because": "Competitors earn their worst reviews at exit: billing after cancellation, cancellation that only works in-app, accounts that can't be closed at $0. A clean exit builds trust for Gen Z users who are wary of subscriptions.",
+   "complaint_evidence": "fees_subscription_cancellation 195/951 (20.5%): Acorns 103 = 45.2%, Oportun 36 = 25.9%, SoFi 28, Qapital 21 = 20.4%.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Onboarding (pricing disclosure)",
+    "More > Settings",
+    "Delete account / Close & sweep",
+    "Subscription screen"
+   ]
+  },
+  {
+   "idea": "No-ads home and opt-in notifications: no marketing interstitials or cross-sell banners on Home; notifications split into transactional (always on: pulls, releases, link breaks) and optional (tips, milestones), with quiet hours. Investing or Pay with Vaultwise prompts appear only in context.",
+   "beats_competitors_because": "SoFi's biggest UX complaint is full-screen promos and crypto pushes even for paying members. Gen Z users praise an app that 'doesn't pitch'.",
+   "complaint_evidence": "ads_upsell_notification_spam 49 (SoFi 37 = 12.5%); Qapital redesign pushing card and invest; Acorns repeated rate-the-app prompts.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Home",
+    "More > Notifications settings",
+    "Invest entry points"
+   ]
+  },
+  {
+   "idea": "Personalised, stable vault home: users can pin and reorder vaults, switch grid or list, and give each vault a cover photo, emoji or icon and colour (Gen Z expression). Redesigns never remove a view without a 'classic layout' toggle. Optional 'privacy blur' hides balances until tapped, for out-of-sight savers.",
+   "beats_competitors_because": "Qapital's redesign backlash centred on hidden goal lists, tiny photos and no reordering; SoFi users beg for more vault icons or emoji. Customisation is cheap delight that also addresses the 'too plain' feedback on the current navy theme.",
+   "complaint_evidence": "redesign_navigation_ux 59 (SoFi 36 = 12.2%, Qapital 10 = 9.7%); missing_features 18, including SoFi vault icons and Acorns and SoFi transaction search; praise for goal visuals: Qapital 82 and Oportun 54 positive mentions.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Home",
+    "Vaults list",
+    "Vault customize",
+    "Settings > Appearance"
+   ]
+  },
+  {
+   "idea": "Resilient, tactile sign-in: passkeys plus Face ID or fingerprint that persist across updates; account recovery by email when the phone number changes (no SMS-only 2FA); an in-app PIN pad that responds instantly with light haptic feedback on each key and a distinct haptic for success or failure.",
+   "beats_competitors_because": "Oportun users are locked out because codes go to an old number, Face ID doesn't stick in Oportun or SoFi, and a SoFi reviewer specifically complains the PIN pad is sluggish with no tactile feedback. Vaultwise's planned PIN pad plus biometrics can be the category's smoothest.",
+   "complaint_evidence": "app_bugs_login 130/951 (SoFi 55 = 18.6%, Oportun 31 = 22.3%, Acorns 19, Chime 16, Qapital 9); one SoFi PIN-pad haptics complaint.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Sign-in",
+    "PIN pad",
+    "Biometric prompt",
+    "More > Security",
+    "Account recovery"
+   ]
+  },
+  {
+   "idea": "Purposeful celebration: milestone moments (first contribution, 25/50/100% of goal, a proof verified and released, a streak of weeks kept) with a short success haptic and lightweight animation, plus optional savings challenges such as the 52-week ramp and no-spend weeks. No confetti on routine screens.",
+   "beats_competitors_because": "Not one of the 2,500 reviews mentions haptics or celebration, so the space is unclaimed (inference). Qapital's 52-week rule and Oportun's 'I love opening the app to see what I've saved' show the emotional payoff that structured progress can amplify.",
+   "complaint_evidence": "Praise-side evidence: Qapital 64 rules and round-ups mentions plus 4 52-week or challenge mentions in 385 positive reviews; Oportun 67 save-without-thinking mentions. Design mentions: 0 haptic or animation praise across all apps.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Vault detail",
+    "Home",
+    "Proof verified / release success",
+    "Challenges"
+   ]
+  },
+  {
+   "idea": "Bonuses you can track: if Vaultwise runs referrals, milestones or merchant boosts through Pay with Vaultwise, show a progress tracker with explicit per-step criteria and deadlines, and pay per qualified friend rather than all-or-nothing; rates or perks shown at sign-up are locked for a stated period.",
+   "beats_competitors_because": "Acorns' all-or-nothing refer-5 promotions and Chime's fine-print bonuses produce angry reviews; SoFi's APY bait-and-switch erodes trust.",
+   "complaint_evidence": "promo_referral_bonus_not_paid 48 (Acorns 23 = 10.1%, Chime 18 = 9.7%, SoFi 7); perks_rates_changed_or_gated 25 (SoFi 19 = 6.4%).",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "More > Rewards / Referrals",
+    "Onboarding offer screen",
+    "Vault detail (rate display)"
+   ]
+  },
+  {
+   "idea": "Pay with Vaultwise with built-in reversibility: confirm the merchant and the verified invoice before paying, show a payment status timeline, route any refund back to the source vault automatically, and support a dispute flow tied to the stored invoice evidence. Avoid irreversible open P2P sends; payments go only to verified merchants.",
+   "beats_competitors_because": "Chime and SoFi reviewers lose money to irreversible P2P and Zelle sends and to denied disputes. Vaultwise's invoice-verified checkout already holds the evidence a dispute needs.",
+   "complaint_evidence": "card_and_payment_problems 44 (Chime 20 = 10.8%, SoFi 18, including Zelle gating and bugs); fraud_dispute_denied 81.",
+   "fits_vaultwise_scope": true,
+   "effort": "L",
+   "screens_affected": [
+    "Checkout (Pay with Vaultwise)",
+    "Payment receipt",
+    "Activity",
+    "Dispute flow"
+   ]
+  },
+  {
+   "idea": "Fee-honest investing: Core (index ETF SIP) shows net-of-fee returns and 'fees vs. growth' in plain numbers, warns when a small balance is being eroded by costs, and lets proceeds be reallocated inside the app; Satellite stays a clearly labelled practice mode with no real money at risk.",
+   "beats_competitors_because": "Acorns' second-biggest grievance after billing is that fees exceed returns on small balances, and that cashing out a position forces money out of the app. Transparency suits young first-time investors.",
+   "complaint_evidence": "investing_returns_tools 46 (Acorns 24 = 10.5%, SoFi 22 = 7.5%); Acorns fees-greater-than-returns cases within its 103 fees complaints.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Invest (Core)",
+    "Invest (Satellite practice)",
+    "Portfolio detail"
+   ]
+  },
+  {
+   "idea": "Joint vaults with explicit permissions: each partner sets what is shared, who can request releases, and whether a release needs both partners' approval; transfers carry notes or memos; there is an activity log by person.",
+   "beats_competitors_because": "Qapital's Dream Team is praised; Chime users ask for joint accounts; SoFi joint account creation was reported broken and a SoFi user lost money via an unapproved contact. Approval-gated joint vaults combine sharing with control.",
+   "complaint_evidence": "Praise: partner and shared mentions Qapital 13, Oportun 10. Requests: Chime joint account (3-star), SoFi note or memo requests (2 reviews), SoFi joint account broken and friends-list unauthorized removal (missing_features 18 total).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Joint vault setup",
+    "Vault detail",
+    "Release request",
+    "Activity"
+   ]
+  },
+  {
+   "idea": "Accessibility and glanceability: full VoiceOver and TalkBack labels including charts and the PIN pad; dynamic type; a reduced-motion mode that keeps haptics; and a privacy-safe home-screen widget showing vault progress percentages with no amounts by default.",
+   "beats_competitors_because": "SoFi reviewers report VoiceOver only reading 'screenshot' in sub-screens and ask for widgets; Acorns' widget is reported as often blank; ADHD users are a vocal positive segment for set-and-forget apps.",
+   "complaint_evidence": "Accessibility complaints in SoFi reviews (2 low-star or 3-star VoiceOver reports); widget requests or complaints: SoFi 8 mentions (6 in 4-5 star), Acorns 1; ADHD praise in Qapital (7 mentions) and Oportun (6).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "All screens (labels)",
+    "Home",
+    "Settings > Accessibility",
+    "Home-screen widget"
+   ]
+  }
+ ]
+}

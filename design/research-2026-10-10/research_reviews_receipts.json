@@ -1,0 +1,879 @@
+{
+ "method_notes": "WHAT WAS FETCHED (US storefront for every app; collected 2026-10-10)\n1) App IDs came from the iTunes Search API, e.g. https://itunes.apple.com/search?term=healthequity&entity=software&country=us&limit=5. I picked each trackId by checking sellerName.\n- HealthEquity Mobile: id 642959434, HealthEquity Inc.\n- EZ Receipts: id 412650768, HealthEquity Inc., formerly WageWorks. This is HealthEquity's FSA/HRA receipt app, so it is included as a second HealthEquity app.\n- Benepass: id 1497613952, BenePass, Inc.\n- Benefits by WEX: id 400760695, WEX, Inc.\n- Reimbursement by WEX: id 1597767196, WEX, Inc.\n- Lively Benefits: id 1458289932, Lively, Inc.\n- Expensify - Travel & Expense: id 471713959, Expensify, Inc.\n\n2) Reviews came from Apple's customer-review RSS, https://itunes.apple.com/us/rss/customerreviews/page=<p>/id=<id>/sortby=mostrecent/json, pages 1-10, stopping at the first empty page. All feeds returned data; none failed.\n- HealthEquity: 500 reviews (10 pages), dated 2026-01-04 to 2026-10-08.\n- EZ Receipts: 500, 2022-06-03 to 2026-10-08.\n- Benefits by WEX: 500, 2025-10-15 to 2026-10-08.\n- Expensify: 500, 2024-02-14 to 2026-10-08.\n- Lively: 112 (page 4 empty), 2019-04-10 to 2026-10-07.\n- Reimbursement by WEX: 53 (page 3 empty), 2022 to 2026.\n- Benepass: 50 only. Page 2 came back empty on 3 retries, and sortby=mosthelpful returned the same 50 reviews. They span 2021 to 2026, so Benepass counts are a thin sample.\nRaw JSON: C:/Users/shaik/AppData/Local/Temp/claude/C--Users-shaik-VaultWise/9e11eaa3-37f8-4e12-90a3-5e69f6c8b8c9/scratchpad/research/reviews/receipts/raw/ (56 files, search results included).\nScripts: .../receipts/scripts/parse.js, classify.js and subcounts.js, each run with node and given the raw or out directory as an argument.\nDerived outputs (deduplicated reviews with no author names, assignments, counts): .../receipts/out/.\n\n3) CLASSIFICATION\n- I read every 1-3 star review for Benefits by WEX (259), Benepass, Lively and Reimbursement by WEX in full. I also read about 250 HealthEquity, about 200 EZ Receipts and about 230 Expensify low-star reviews, from the newest, middle and oldest parts of each sample.\n- I built a 15-theme codebook after the first ~60 reviews of WEX and HealthEquity.\n- Every 1-2 star review (n = 474, 463, 27, 237, 20, 44, 411) was classified, not a sample, using sentence-level keyword rules. Each review gets at most 2 themes: the two with the most matching sentences, with ties broken by theme specificity.\n- Rules went through about 4 rounds of spot-checks covering roughly 350 printed assignments from WEX, EZ Receipts, HealthEquity and Expensify, plus targeted precision checks on denial, card, OCR, upload and slow-payout themes. These fixed real bugs: a negation pattern was matching the 'nt' in 'account', and login reviews were being counted as denials or uploads.\n- I did not compute a formal precision figure. The broad themes (login/access, crash/bugs, UX) are fuzzier than the specific ones. Reviews with no theme are counted as GENERAL_UNSPECIFIED.\n- Sub-issue numbers labelled 'mentions' come from subcounts.js. They count reviews containing a keyword, not exclusive themes.\n- The count of 9 WEX complaints about the AI auto-scan / auto-analyze update is a manual count: I read all 14 keyword hits.\n\n4) CAVEATS\n- Written RSS reviews skew far more negative than the store averages. HealthEquity Mobile averages 4.27 stars from 14,669 ratings, yet 474 of its 500 recent written reviews are 1-2 stars. EZ Receipts averages 4.64 from 78,000 ratings. My inference: star-only in-app prompts lift the averages, so shares here describe complaint mix, not overall satisfaction.\n- The HealthEquity sample covers only January-October 2026, when users report mandatory passkeys.\n- The web-search budget ran out mid-task, so there were no Google Play, Trustpilot or Reddit fallbacks. The data basis is App Store RSS for all apps.\n- Feature lists come from:\n  - App Store descriptions in the Search API result. Page URLs: https://apps.apple.com/us/app/healthequity-mobile/id642959434, https://apps.apple.com/us/app/ez-receipts/id412650768, https://apps.apple.com/us/app/benepass/id1497613952, https://apps.apple.com/us/app/benefits-by-wex/id400760695, https://apps.apple.com/us/app/reimbursement-by-wex/id1597767196, https://apps.apple.com/us/app/lively-benefits/id1458289932, https://apps.apple.com/us/app/expensify-travel-expense/id471713959\n  - https://www.getbenepass.com/\n  - https://livelyme.com/\n  - https://help.expensify.com/articles/new-expensify/reports-and-expenses/Create-an-Expense\n  - HealthEquity's own app page (https://www.healthequity.com/mobile-app) returned 403.\n- Supporting references: the IRS debit-card auto-substantiation rules in Notice 2006-69 (https://www.irs.gov/irb/2006-31_IRB) and Expo StoreReview guidance (https://docs.expo.dev/versions/latest/sdk/storereview/).\n- Review-derived claims cite the RSS feed for that app id. Opportunities are my inference.",
+ "apps": [
+  {
+   "app_id": "642959434",
+   "name": "HealthEquity Mobile (HealthEquity HSA/FSA/HRA)",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:3 4:6 3:17 2:42 1:432 (recent written reviews 2026-01-04..2026-10-08; store average 4.27 from 14,669 ratings)",
+   "features": [
+    "Claims from a photo, the gallery, or images/PDFs in the Files app (src: https://apps.apple.com/us/app/healthequity-mobile/id642959434)",
+    "Pay providers or reimburse yourself directly from the account (same src)",
+    "Manage debit cards: link card transactions to claims and documents; order, activate and replace cards for dependents (same src)",
+    "Start claims and view claim status (same src)",
+    "HSA investments: view performance, research funds, place trades (same src)",
+    "Alerts when the card is used (same src)",
+    "Chat and live help (same src)",
+    "From reviews: mandatory passkey login with third-party government-ID and selfie verification, screenshot blocking on iOS, an in-app HSA store, ads, linked external cards to spot eligible expenses, and a 'scan receipt' that does not autofill fields (src: https://itunes.apple.com/us/rss/customerreviews/page=1/id=642959434/sortby=mostrecent/json, pages 1-10)",
+    "Not seen in description or reviews: savings goals, round-ups, streaks, widgets, Apple Watch, themes, haptics"
+   ],
+   "complaints": [
+    {
+     "theme": "Login/authentication lockouts: forced passkeys, ID and selfie verification, password resets",
+     "count": 272,
+     "share_of_low_star": "272/474 (57.4%); passkey mentioned in 166/474 (35%); ID/selfie/third-party verification in 18",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Passkey setup errors every time and there is no password fallback, so the user cannot reach their HSA at all",
+      "Logging in now means scanning a driver's license and taking a selfie through a third party, which the reviewer refuses on privacy grounds",
+      "The passkey is never stored, so the app asks for a new one at every login and then locks the account"
+     ]
+    },
+    {
+     "theme": "Crashes, generic errors, frozen screens, cannot scroll to the Pay/Submit button",
+     "count": 173,
+     "share_of_low_star": "173/474 (36.5%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A full-screen release-notes popup cannot be closed, which blocks the whole app",
+      "The reimbursement page won't scroll, so the submit button can't be reached",
+      "Every reimbursement attempt ends with an unexplained error, so users fall back to the website"
+     ]
+    },
+    {
+     "theme": "Receipt/document upload and claim submission failures",
+     "count": 75,
+     "share_of_low_star": "75/474 (15.8%); bogus '80 unattached documents' limit in 6 reviews",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Attaching the required documentation fails with a generic error every time, or crashes the app",
+      "The app says the user has hit 80 unattached documents when they have a handful",
+      "The document is reported as deleted instead of attached, and the chosen date of service changes by itself"
+     ]
+    },
+    {
+     "theme": "Unhelpful or unreachable support",
+     "count": 36,
+     "share_of_low_star": "36/474 (7.6%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Support opened a case for the login problem and never followed up",
+      "Agents tell users to try again tomorrow or to use a different browser"
+     ]
+    },
+    {
+     "theme": "UX friction: providers not saved, web-only features, too many steps",
+     "count": 35,
+     "share_of_low_star": "35/474 (7.4%); providers not saved mentioned in 8",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "New providers are never remembered, so pharmacy or babysitter details are retyped for every claim",
+      "Transfers and some forms work only on the web or by fax"
+     ]
+    },
+    {
+     "theme": "Fees and ads",
+     "count": 26,
+     "share_of_low_star": "26/474 (5.5%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "High investment fees and a new transfer-out fee",
+      "Third-party ads have appeared inside a health-money app"
+     ]
+    },
+    {
+     "theme": "Privacy: screenshot blocking, biometric/ID data collection",
+     "count": 20,
+     "share_of_low_star": "20/474 (4.2%); screenshot blocking mentioned in 6",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Screenshots of balances now save as black images, so the user can't share spending with family",
+      "Users object to giving biometric data to a third party just to see their own balance"
+     ]
+    },
+    {
+     "theme": "Substantiation burden and card suspension",
+     "count": 14,
+     "share_of_low_star": "14/474 (3.0%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The FSA card keeps being suspended until receipts are uploaded again, even for the same provider each time",
+      "Claims require a letter of medical necessity, which feels like endless hoops"
+     ]
+    },
+    {
+     "theme": "Session timeouts that wipe in-progress work",
+     "count": 11,
+     "share_of_low_star": "11/474 (2.3%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The app logs the user out every couple of minutes during a support chat, losing drafts",
+      "A timeout prompt erased a half-entered reimbursement"
+     ]
+    },
+    {
+     "theme": "Slow deposits and funds held",
+     "count": 7,
+     "share_of_low_star": "7/474 (1.5%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Contributions sit on hold for about 10 days before they can be used"
+     ]
+    }
+   ],
+   "praise_themes": [
+    "Easy to pay a provider or reimburse yourself once logged in",
+    "Visit/claims data is pulled in automatically, so no manual scanning is needed",
+    "Patient, helpful staff for getting back into the account",
+    "Only 9 of 500 sampled reviews were 4-5 stars, so the praise signal is thin"
+   ]
+  },
+  {
+   "app_id": "412650768",
+   "name": "EZ Receipts (HealthEquity, formerly WageWorks: FSA/HRA/commuter)",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:11 4:7 3:19 2:56 1:407 (2022-06..2026-10; store average 4.64 from 78,000 ratings)",
+   "features": [
+    "Check balances and spending (src: https://apps.apple.com/us/app/ez-receipts/id412650768)",
+    "Upload receipts for reimbursement (same src)",
+    "Scan product barcodes to check eligibility (same src)",
+    "Live chat support (same src)",
+    "Covers FSA, LPFSA, DCFSA, HRA and commuter benefits (same src)",
+    "From reviews: PIN and Face ID login, express/quick receipt entry, automatic receipt reading and auto-approve, auto-claim payments, pay-me-back claims, transit card (src: https://itunes.apple.com/us/rss/customerreviews/page=1/id=412650768/sortby=mostrecent/json)"
+   ],
+   "complaints": [
+    {
+     "theme": "Cannot log in: 'technical difficulties' and server-unavailable errors, Face ID never sticks, password field missing, passkeys",
+     "count": 261,
+     "share_of_low_star": "261/463 (56.4%); Face ID mentioned in 44, technical-difficulties/server errors in 26, passkey in 19, missing password field in 6",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "For months the app has shown a technical-difficulties error right after the username, while the website works",
+      "Face ID is offered at every login but has expired again by the next visit",
+      "After an update the login screen had no password field"
+     ]
+    },
+    {
+     "theme": "Crashes and general unreliability",
+     "count": 171,
+     "share_of_low_star": "171/463 (36.9%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The app crashes the moment the user tries to log a claim",
+      "The app freezes after each receipt, so the user has to force-quit and log in again"
+     ]
+    },
+    {
+     "theme": "Receipt upload and claim submission failures, single-page/PDF limits",
+     "count": 90,
+     "share_of_low_star": "90/463 (19.4%); one-page/PDF limits mentioned in 7",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A 3-page receipt can't be submitted because the camera takes one page and the PDF wasn't readable",
+      "A server error at the end wiped several entered receipts",
+      "The app keeps saying a receipt is needed even after it was uploaded"
+     ]
+    },
+    {
+     "theme": "Denials of valid receipts, inconsistency, appeal burden",
+     "count": 44,
+     "share_of_low_star": "44/463 (9.5%); same receipt accepted then denied in 5",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Claims are denied for 'missing information' that is clearly on the receipt; resubmitting the same receipt sometimes works",
+      "Every non-e-receipt is denied on the first pass, the appeal has to be mailed, and the money is held meanwhile",
+      "A receipt accepted one month was denied the next"
+     ]
+    },
+    {
+     "theme": "Clunky entry UX: date picker, categories, no way to explain a claim",
+     "count": 36,
+     "share_of_low_star": "36/463 (7.8%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The date slider jumps back to today, so the service date can't be set",
+      "There's no text box to explain a partial copay, so it took five back-and-forth submissions"
+     ]
+    },
+    {
+     "theme": "Session timeouts and re-login per receipt",
+     "count": 14,
+     "share_of_low_star": "14/463 (3.0%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The user must log in again with a code after every receipt submission"
+     ]
+    },
+    {
+     "theme": "Capture/OCR: camera rejects good photos, automatic reading fails",
+     "count": 9,
+     "share_of_low_star": "9/463 (1.9%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The camera keeps saying 'get closer', which then cuts off half the receipt",
+      "The automatic entry never fills in anything"
+     ]
+    },
+    {
+     "theme": "Privacy: biometric and ID collection for passkeys",
+     "count": 8,
+     "share_of_low_star": "8/463 (1.7%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Setting up a passkey requires sending an ID and a face scan to a third party"
+     ]
+    }
+   ],
+   "praise_themes": [
+    "Simple: the app states exactly what documentation it needs",
+    "Quick to scan a receipt and claim, with on-time payment",
+    "Works with a password manager (1Password) for passkeys"
+   ]
+  },
+  {
+   "app_id": "1497613952",
+   "name": "Benepass",
+   "storefront": "us",
+   "reviews_analyzed": 50,
+   "star_distribution": "5:23 4:0 3:0 2:3 1:24 (only 50 reviews available via RSS, 2021-01..2026-09; store average 4.70 from 1,094 ratings)",
+   "features": [
+    "Visa card plus app to spend flexible benefits (src: https://apps.apple.com/us/app/benepass/id1497613952)",
+    "Lifestyle spending accounts across categories: wellness, WFH, professional development, family care, food, rewards/recognition (src: https://www.getbenepass.com/)",
+    "HSA with Visa debit card and low-minimum investing; health and dependent-care FSAs; HRA including a weight-health/GLP-1 HRA (same src)",
+    "Commuter benefits with tap-to-pay (same src)",
+    "AI 'Benefits Compliance GPT' aimed at HR and consultants (same src)",
+    "From reviews: virtual card, document upload for reimbursement, spending-category suggestions, AI chat support, investing account setup (src: https://itunes.apple.com/us/rss/customerreviews/page=1/id=1497613952/sortby=mostrecent/json)"
+   ],
+   "complaints": [
+    {
+     "theme": "App won't launch or crashes (white flashing screen, auth-token errors)",
+     "count": 12,
+     "share_of_low_star": "12/27 (44%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "On a new iPhone the screen just flashes white and the app never loads",
+      "After an update the app fails to fetch authorization tokens"
+     ]
+    },
+    {
+     "theme": "No reachable human support (AI chat loops, email-only, slow replies)",
+     "count": 7,
+     "share_of_low_star": "7/27 (26%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The AI chat couldn't help activate a card, and a human replied two days later repeating the bot's answer",
+      "There's no phone number, just forms and tickets"
+     ]
+    },
+    {
+     "theme": "Denials and over-documentation (LMN for OTC, receipts not actually read)",
+     "count": 4,
+     "share_of_low_star": "4/27 (15%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Reviewers, human or AI, don't read receipts; the user had to highlight line items and was still asked for a letter of medical necessity for OTC medicine",
+      "Two statements in the same format: one approved, one rejected with no notes"
+     ]
+    },
+    {
+     "theme": "Slow reimbursement",
+     "count": 3,
+     "share_of_low_star": "3/27 (11%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "About 5 business days to decide, then another 3-5 to pay out: nearly two weeks in total"
+     ]
+    },
+    {
+     "theme": "Receipt submission and reading limits",
+     "count": 3,
+     "share_of_low_star": "3/27 (11%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The app can't read the amount from a receipt and is weaker than rival apps for submitting receipts"
+     ]
+    },
+    {
+     "theme": "Card declines despite balance",
+     "count": 1,
+     "share_of_low_star": "1/27 (4%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The card keeps declining with hundreds of dollars available, forcing manual reimbursement"
+     ]
+    }
+   ],
+   "praise_themes": [
+    "Flexible: spend the stipend where you want, across many categories",
+    "Intuitive, smooth and fun to use; easy on the eyes",
+    "Virtual card and a card accepted widely",
+    "Easy document upload and category suggestions",
+    "Responsive support when it works"
+   ]
+  },
+  {
+   "app_id": "400760695",
+   "name": "Benefits by WEX (WEX Health)",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:226 4:15 3:22 2:39 1:198 (2025-10-15..2026-10-08; store average 4.21 from 12,588 ratings)",
+   "features": [
+    "Balances 24/7, account charts, claims needing receipts, statements and notifications (src: https://apps.apple.com/us/app/benefits-by-wex/id400760695)",
+    "Barcode scanning to check product eligibility (same src)",
+    "File FSA/HRA claims; take or upload a receipt photo for a new or existing claim (same src)",
+    "HSA contributions and distributions; pay bills and add payees; HSA investments (same src)",
+    "Expense manager with supporting documentation; Touch ID/Face ID; report a lost card (same src)",
+    "From reviews: receipt organizer, AI auto-analyze/auto-scan of receipts (added 2026), EOB import from some insurers, Apple Wallet card, lifestyle spending account, email claim-status updates, direct deposit for some users, security questions at login (src: https://itunes.apple.com/us/rss/customerreviews/page=1/id=400760695/sortby=mostrecent/json)"
+   ],
+   "complaints": [
+    {
+     "theme": "Denials of valid claims, inconsistent decisions, vague reasons, excessive documentation",
+     "count": 78,
+     "share_of_low_star": "78/237 (32.9%); vague/generic reason mentioned in 10, same receipt approved then denied in 9, LMN/EOB/itemized demands in 10",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The exact same receipt is approved one time and denied the next, with only a generic explanation",
+      "An itemized invoice is required for every claim except chain pharmacies, even with doctor's offices",
+      "Status shows 'Receipt Pending' when nobody has looked yet, then a vague denial arrives a week later"
+     ]
+    },
+    {
+     "theme": "Crashes and slowness, especially on 'Reimburse myself'",
+     "count": 61,
+     "share_of_low_star": "61/237 (25.7%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Tapping 'reimburse myself' crashes the app every time",
+      "Every action reloads slowly and errors are cryptic"
+     ]
+    },
+    {
+     "theme": "Receipt upload and claim submission failures, including the AI auto-analyze update",
+     "count": 38,
+     "share_of_low_star": "38/237 (16.0%); 9 reviews blame the 2026 AI auto-scan/auto-analyze update (manual count)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Upload said success, but weeks later the claim was denied because the file couldn't be opened",
+      "After the auto-analyze update, two-page receipts can't be uploaded and receipts attach as separate claims",
+      "Claims allow only 4 attachments, so the extra documents requested can't be added"
+     ]
+    },
+    {
+     "theme": "Too many steps: one claim at a time, no bulk upload, providers not saved, code per claim",
+     "count": 36,
+     "share_of_low_star": "36/237 (15.2%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Fewer than 20 reimbursements took nearly an hour because each is submitted one by one",
+      "Daycare provider and tax ID have to be retyped every time"
+     ]
+    },
+    {
+     "theme": "Login: security questions after Face ID, Face ID never activates",
+     "count": 32,
+     "share_of_low_star": "32/237 (13.5%); Face ID mentioned in 10, security questions in 4",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "After Face ID unlocks the app it still asks three security questions every time"
+     ]
+    },
+    {
+     "theme": "Offshore or unhelpful support",
+     "count": 25,
+     "share_of_low_star": "25/237 (10.5%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Agents can't explain why a claim was denied and promised reprocessing never happens"
+     ]
+    },
+    {
+     "theme": "Card declined at checkout or suspended pending receipts",
+     "count": 14,
+     "share_of_low_star": "14/237 (5.9%); suspended/blocked in 7, POS declines in 7",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The in-app scanner says products are eligible, then the card is declined at the register, which is embarrassing",
+      "A denied claim can't be deleted, so the card is suspended again every week"
+     ]
+    },
+    {
+     "theme": "Slow reimbursement, checks instead of direct deposit",
+     "count": 10,
+     "share_of_low_star": "10/237 (4.2%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Expected direct deposit but got a mailed check after 10+ business days, with no payout-method option in the app"
+     ]
+    }
+   ],
+   "praise_themes": [
+    "Snap-type-submit simplicity: claims submitted in seconds or a few minutes",
+    "Fast reimbursement when direct deposit is set up",
+    "Email and notification status updates tell users what is still needed",
+    "Some users praise the photo-first auto-fill update",
+    "Receipt organizer and screenshot upload",
+    "Barcode eligibility scanner"
+   ]
+  },
+  {
+   "app_id": "1597767196",
+   "name": "Reimbursement by WEX",
+   "storefront": "us",
+   "reviews_analyzed": 53,
+   "star_distribution": "5:25 4:4 3:4 2:2 1:18 (2022-04..2026-08; store average 4.37 from 284 ratings)",
+   "features": [
+    "Same feature set as Benefits by WEX: balances, claims requiring receipts, barcode eligibility scan, photo receipt upload, bill pay, HSA transactions, Touch/Face ID (src: https://apps.apple.com/us/app/reimbursement-by-wex/id1597767196)",
+    "From reviews: dependent-care claims, notes on transactions, product scan to check coverage (src: https://itunes.apple.com/us/rss/customerreviews/page=1/id=1597767196/sortby=mostrecent/json)"
+   ],
+   "complaints": [
+    {
+     "theme": "Upload failures: 8 MB image cap, no camera access, useless error messages",
+     "count": 5,
+     "share_of_low_star": "5/20 (25%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Photos are about 8 MB and the app rejects anything bigger",
+      "Uploads fail for days with a 'contact administrator' error"
+     ]
+    },
+    {
+     "theme": "Slow, reloading, crashing",
+     "count": 5,
+     "share_of_low_star": "5/20 (25%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Every view reloads on navigation, and a popup appears at each launch"
+     ]
+    },
+    {
+     "theme": "Unhelpful support",
+     "count": 4,
+     "share_of_low_star": "4/20 (20%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Declined child-care claims with no explanation and callbacks that never come"
+     ]
+    },
+    {
+     "theme": "Slow payout",
+     "count": 3,
+     "share_of_low_star": "3/20 (15%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Even approved claims take weeks to be paid"
+     ]
+    },
+    {
+     "theme": "Wrong defaults and unclear resubmission status",
+     "count": 3,
+     "share_of_low_star": "3/20 (15%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The claim defaults to reimbursing a child instead of the account holder every time",
+      "After resubmitting a denied claim it's unclear whether it is back under review"
+     ]
+    }
+   ],
+   "praise_themes": [
+    "Under 5 minutes to submit",
+    "Claims processed in a few days",
+    "Scan a product to check coverage"
+   ]
+  },
+  {
+   "app_id": "1458289932",
+   "name": "Lively Benefits (Lively HSA/FSA)",
+   "storefront": "us",
+   "reviews_analyzed": 112,
+   "star_distribution": "5:51 4:9 3:8 2:10 1:34 (2019-04..2026-10; store average 4.85 from 9,493 ratings)",
+   "features": [
+    "One view of what matters, balances, transactions, debit card management (src: https://apps.apple.com/us/app/lively-benefits/id1458289932)",
+    "Paperless claim verification with step-by-step instructions; list of eligible expenses (same src)",
+    "2FA and biometrics (same src)",
+    "Free individual HSA, interest-bearing cash, optional investing (src: https://livelyme.com/)",
+    "AI that flags missed tax-free reimbursements, plus an AI benefits assistant (same src)",
+    "Claims synced with carrier data; a card that routes funds automatically at checkout (same src)",
+    "From reviews: add receipts to pending transactions the same day, Apple Wallet, contributions pie chart, Schwab investing, easy HSA rollover, captcha puzzles at login (src: https://itunes.apple.com/us/rss/customerreviews/page=1/id=1458289932/sortby=mostrecent/json)"
+   ],
+   "complaints": [
+    {
+     "theme": "Login friction: captcha puzzles, Face ID broken, verification errors",
+     "count": 11,
+     "share_of_low_star": "11/44 (25%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Login requires solving six image puzzles",
+      "Face ID has never worked despite updates"
+     ]
+    },
+    {
+     "theme": "Crashes, black screens, blocked input",
+     "count": 10,
+     "share_of_low_star": "10/44 (22.7%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Receipts had to be attached 4-5 times because the app crashes"
+     ]
+    },
+    {
+     "theme": "Strict adjudication: everything kicked back for more evidence, LMN wording disputes",
+     "count": 8,
+     "share_of_low_star": "8/44 (18.2%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Pharmacy and hospital purchases still have to be justified even though the card already knows they are eligible",
+      "Claims were denied over the wording of a doctor's letter of medical necessity"
+     ]
+    },
+    {
+     "theme": "Slow reimbursement and contributions",
+     "count": 4,
+     "share_of_low_star": "4/44 (9.1%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Reimbursement takes 5-10 days; the next month's childcare is due before last month's is paid"
+     ]
+    },
+    {
+     "theme": "Unhelpful support or chat that logs out",
+     "count": 5,
+     "share_of_low_star": "5/44 (11.4%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The support chat stops sending messages mid-conversation because the session silently expired"
+     ]
+    },
+    {
+     "theme": "Receipt scanner and upload issues",
+     "count": 3,
+     "share_of_low_star": "3/44 (6.8%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The scanner said the receipt had no date when the date was clearly printed",
+      "The amount keypad covers the Next button in the AI scan flow"
+     ]
+    }
+   ],
+   "praise_themes": [
+    "Clean, colorful, beautiful design that feels modern",
+    "Receipts can be added the same day, even on pending transactions",
+    "Some claims approved instantly",
+    "Low or no fees and Schwab investing",
+    "Apple Wallet support",
+    "Named, patient support agents",
+    "Easy HSA rollover"
+   ]
+  },
+  {
+   "app_id": "471713959",
+   "name": "Expensify - Travel & Expense",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:49 4:12 3:28 2:62 1:349 (2024-02..2026-10; store average 4.63 from 157,523 ratings)",
+   "features": [
+    "SmartScan: snap a receipt and details are extracted; receipts also by email (receipts@expensify.com) or text to 47777; PDF upload and bulk web upload up to 30 files (src: https://apps.apple.com/us/app/expensify-travel-expense/id471713959 and https://help.expensify.com/articles/new-expensify/reports-and-expenses/Create-an-Expense)",
+    "Smart Receipt Detection flags AI-generated receipts and prohibited expenses at upload (src: Expensify help URL above)",
+    "Distance tracking on a map, manual expenses, learned categorization, merchant rules (App Store and help srcs)",
+    "Auto-submit cadence, multi-level approvals, chat on every expense and report (App Store src)",
+    "Global reimbursements; Expensify Card with up to 2% cash back; corporate card import (App Store src)",
+    "Invoices, travel booking and trip chat rooms; accounting sync; 2FA, SOC1/SOC2 (App Store src)",
+    "From reviews: Concierge AI assistant, 'Classic' mode toggle, dark app icon (src: https://itunes.apple.com/us/rss/customerreviews/page=1/id=471713959/sortby=mostrecent/json)"
+   ],
+   "complaints": [
+    {
+     "theme": "Redesign/UX churn: more taps, hidden functions, forced relearning",
+     "count": 128,
+     "share_of_low_star": "128/411 (31.1%); redesign or 'classic' mentioned in 67",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Things that took 1-2 taps now take 4-5 and functions are hidden",
+      "Each update means relearning the app; users switch back to Classic",
+      "One reviewer called the new look a 'gen z fail' that adds work"
+     ]
+    },
+    {
+     "theme": "Crashes, hangs, outages",
+     "count": 118,
+     "share_of_low_star": "118/411 (28.7%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Crashes on launch after an update, at the airport with expenses due"
+     ]
+    },
+    {
+     "theme": "Receipts lost, uploads stuck, expenses vanish, no multi-page/PDF/share-sheet",
+     "count": 108,
+     "share_of_low_star": "108/411 (26.3%); lost receipts mentioned in 16, PDF/multi-page limits in 8",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "About 10% of photographed receipts are lost, especially on weak signal",
+      "It says it is SmartScanning, then the receipt vanishes",
+      "A PDF receipt can't be shared into the app"
+     ]
+    },
+    {
+     "theme": "Billing traps: annual plans, cannot cancel, surprise charges",
+     "count": 33,
+     "share_of_low_star": "33/411 (8.0%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The account can't be closed while it shows an unpaid balance from a trial the user never meant to continue"
+     ]
+    },
+    {
+     "theme": "Login loops (magic codes, 2FA, SSO)",
+     "count": 32,
+     "share_of_low_star": "32/411 (7.8%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The emailed magic code is repeatedly rejected; four days without being able to submit"
+     ]
+    },
+    {
+     "theme": "Support is AI-only or unhelpful",
+     "count": 27,
+     "share_of_low_star": "27/411 (6.6%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The AI chat repeats steps that don't work and there's no way to reach a person"
+     ]
+    },
+    {
+     "theme": "Rating-prompt nagging mid-task",
+     "count": 26,
+     "share_of_low_star": "26/411 (6.3%); rating-popup mentions 21",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A review prompt pops up every few seconds while filing a report and loses progress when dismissed"
+     ]
+    },
+    {
+     "theme": "OCR errors: false mismatches, no extraction",
+     "count": 17,
+     "share_of_low_star": "17/411 (4.1%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The app flags date and amount mismatches when the receipt and the expense match exactly"
+     ]
+    },
+    {
+     "theme": "Unwanted AI features",
+     "count": 16,
+     "share_of_low_star": "16/411 (3.9%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "AI suggestions and the Concierge get in the way of simple manual entry and can't be turned off"
+     ]
+    },
+    {
+     "theme": "Conflicting or unclear status",
+     "count": 13,
+     "share_of_low_star": "13/411 (3.2%)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The app says both 'report to submit' and 'awaiting approval' for the same report"
+     ]
+    }
+   ],
+   "praise_themes": [
+    "Snap a receipt and it is categorized automatically",
+    "Merchant rules and image recognition rarely need fixing (some users)",
+    "Mileage tracking that maps the route",
+    "Reimbursement lands in the bank account with no mailing",
+    "Per-business reports and PDF export for taxes",
+    "Dark-mode app icon was appreciated"
+   ]
+  }
+ ],
+ "cross_app_themes": [
+  "1. Access failures are the biggest driver of 1-star reviews for the receipt apps. Login/authentication is the top theme in HealthEquity Mobile (272/474, 57%; passkey named in 166) and EZ Receipts (261/463, 56%; Face ID in 44, server/technical-difficulties errors in 26). It is also significant for WEX (32/237) and Expensify (32/411). Security added without a working fallback is read as the company keeping people's own money from them. (RSS feeds for ids 642959434, 412650768, 400760695, 471713959)",
+  "2. Proof verification is judged on transparency and consistency, not strictness. WEX's top theme is denials (78/237, 33%): generic reasons in 10, the same receipt approved then denied in 9, and itemized/EOB/LMN demands in 10. The same pattern appears in EZ Receipts (44/463), Lively (8/44) and Benepass (4/27). Users repeatedly call it a scheme to keep their money. Explaining the decision is as important as getting it right.",
+  "3. Uploads are unreliable everywhere. Receipt/claim submission failures are 15-26% of low-star reviews: HealthEquity 75, EZ Receipts 90, WEX 38, Expensify 108 (16 explicitly about lost receipts). Recurring sub-issues are single-page limits, PDF/share-sheet gaps, attachment and size caps (8 MB, 4 attachments, a phantom 80-document limit), and 'success' shown when the file was actually unreadable.",
+  "4. AI receipt reading earns trust only when users can see and edit it. WEX's 2026 AI auto-analyze update drew 9 complaints that it broke uploads or misread receipts, while at least one 5-star review praised the photo-first auto-fill. Expensify has 17 OCR complaints (false date/amount mismatches) plus 16 complaints about unwanted AI and AI-only support. Inference: AI that silently overrides users, or replaces humans, loses trust.",
+  "5. Card checkout declines and later card suspensions remain unsolved. WEX has 14 such complaints (7 suspended or blocked pending receipts, 7 declined at the register even after the in-app eligibility scanner said yes); there are more in HealthEquity, Lively and Benepass. IRS rules already allow auto-substantiation via copay matching, recurring expenses, real-time merchant confirmation and item-level IIAS (https://www.irs.gov/irb/2006-31_IRB). This is exactly the gap 'Pay with Vaultwise' targets.",
+  "6. Speed and status: approvals plus payouts take about 5-10 business days (Benepass, Lively, WEX), sometimes paid by mailed check. Users want direct deposit, an ETA and step-by-step status. WEX's 4-5 star reviews specifically credit email status updates and fast direct deposit.",
+  "7. Users want a human. Unreachable or offshore support and AI-chat walls appear in HealthEquity (36), WEX (25), Expensify (27) and Benepass (7 of 27). Lively's praise names individual agents.",
+  "8. Redesigns that add steps are punished. Expensify's top theme is redesign/UX churn (128/411; 67 mention the new version or Classic mode), and one reviewer called the new look a 'gen z fail'. A Gen Z visual refresh must not add taps to the core snap, submit, get-paid flow.",
+  "9. Interruptions cost stars: mid-task rating prompts (Expensify 26), undismissable popups and in-app ads (HealthEquity), and session timeouts that wipe drafts (HealthEquity 11, EZ Receipts 14, WEX 3).",
+  "10. Delight is praised where it exists. Lively reviewers praise a colorful, beautiful design; Benepass users call it fun and flexible; there are dark-mode requests for WEX and Expensify. No review in this cluster mentions haptics or animations, so there is nothing to copy there; this is open ground.",
+  "11. Method caveat: written RSS reviews are far more negative than store averages (for example, HealthEquity Mobile has 4.27 stars from 14,669 ratings, yet 474 of its 500 recent written reviews are 1-2 stars). Shares describe complaint mix, not overall satisfaction."
+ ],
+ "opportunities": [
+  {
+   "idea": "Explainable verdict card: every 'needs more proof', 'declined' or 'sent to reviewer' result shows the exact failing field highlighted on the receipt image (e.g. missing service date, provider name or itemization), the one document that would fix it, and a one-tap 'add this and resubmit' that keeps the original attached. Include an 'Ask a reviewer' button that opens a thread on that claim.",
+   "beats_competitors_because": "WEX, EZ Receipts, Benepass and Lively give one-line or generic reasons, no in-app recourse, and sometimes require mailed appeals. Vaultwise's AI and forensics pipeline already knows which checks failed; exposing that turns a denial into a 30-second fix.",
+   "complaint_evidence": "Denials: WEX 78/237 (generic reason 10, inconsistent 9, LMN/EOB/itemized 10); EZ Receipts 44/463; Lively 8/44; Benepass 4/27 (approved vs rejected with no notes); Reimbursement by WEX status confusion after resubmitting.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Proof review result",
+    "Withdrawal status",
+    "Proof upload / camera",
+    "Reviewer chat thread"
+   ]
+  },
+  {
+   "idea": "Pre-submit proof checklist with live detection: before or during capture, show what this vault's proof needs (merchant, date, amount, line items, beneficiary) and tick each item as the camera or OCR detects it. Warn before submission ('no date found, add page 2?') instead of denying afterwards.",
+   "beats_competitors_because": "Competitors deny after the fact. EZ Receipts' best praise is that it states exactly what it needs; Vaultwise can make that live and per vault (Health, Education, Housing).",
+   "complaint_evidence": "WEX denials 78/237 and 'unclear what's needed' reviews; Lively scanner claiming 'no date' on a dated receipt; EZ Receipts 'get closer' capture loop (OCR/capture 9/463).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Proof upload / camera",
+    "Withdrawal request",
+    "Vault detail (proof rules)"
+   ]
+  },
+  {
+   "idea": "Precedent memory: when a merchant, category and amount pattern was approved before, auto-approve the repeat with an 'approved before' badge (mirrors the IRS recurring-expense rule). Never auto-deny something that diverges from a previous approval; send it to a human reviewer instead.",
+   "beats_competitors_because": "The angriest WEX and EZ Receipts reviews come from identical receipts being approved one time and denied the next. Guaranteed consistency is a concrete trust promise.",
+   "complaint_evidence": "Same receipt or provider approved then denied: WEX 9, EZ Receipts 5, Benepass 1. HealthEquity user whose card was suspended over repeat receipts from the same provider (in the 14 denial/burden reviews). Auto-substantiation methods in IRS Notice 2006-69 (https://www.irs.gov/irb/2006-31_IRB).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Proof review result",
+    "Vault history",
+    "Withdrawal status"
+   ]
+  },
+  {
+   "idea": "Verify at checkout with an item-level split (Pay with Vaultwise): the merchant invoice is verified at payment, so nothing has to be proved later and the vault is never frozen for missing receipts. Eligible line items are paid from the vault and the rest from a fallback source (an IIAS-style split). A 'Check before you buy' scan uses the same rules engine, and a pass there is honored at checkout.",
+   "beats_competitors_because": "WEX's barcode eligibility scanner says yes, then the card is declined at the register. FSA cards get suspended pending receipts. Vaultwise verifying at the moment of payment removes both failure modes.",
+   "complaint_evidence": "Card decline/suspension: WEX 14/237 (7 suspended or blocked, 7 POS declines despite the scanner); HealthEquity FSA card repeatedly suspended; Lively and Benepass declines with funds available. IIAS and real-time merchant substantiation are allowed under IRS Notice 2006-69.",
+   "fits_vaultwise_scope": true,
+   "effort": "L",
+   "screens_affected": [
+    "Pay with Vaultwise checkout",
+    "Payment confirmation",
+    "Eligibility pre-check scanner",
+    "Vault detail"
+   ]
+  },
+  {
+   "idea": "Zero-loss capture pipeline: offline-first capture queue, a receipts inbox with per-item upload state and auto-retry, multi-page stitching, PDF and share-sheet import (from mail and Files), no tiny size or attachment caps (compress on device), and 'uploaded' shown only after the server confirms the file is readable.",
+   "beats_competitors_because": "Competitors lose receipts, cap attachments (8 MB, 4 files, a phantom 80-document limit), take one page at a time, and show 'success' for files that later prove unreadable.",
+   "complaint_evidence": "Upload/submit failures: HealthEquity 75/474 (80-document bug in 6); EZ Receipts 90/463 (one-page/PDF limits 7); WEX 38/237; Reimbursement by WEX 5/20 (8 MB cap); Expensify 108/411 (lost receipts 16, PDF/multi-page 8).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Proof upload / camera",
+    "Receipts inbox",
+    "Withdrawal request"
+   ]
+  },
+  {
+   "idea": "Editable OCR with confidence: show extracted fields next to the image, with the source region highlighted and a low-confidence flag. The user confirms or edits, and edits are never overwritten. Keep a manual path always available and ship AI changes behind flags rather than replacing a working flow.",
+   "beats_competitors_because": "WEX's AI auto-analyze update and Expensify's SmartScan errors drew complaints because the AI acted silently and blocked manual fixes. Visible, correctable AI keeps the speed users praised in photo-first auto-fill without the distrust.",
+   "complaint_evidence": "WEX: 9 manually counted complaints about the AI auto-scan update. Expensify: OCR 17/411 and unwanted AI 16/411. EZ Receipts: OCR 9/463. Lively: 1 'no date' misread. Positive counter-signal: a WEX 5-star review praising photo-first auto-fill.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Proof upload review step",
+    "Withdrawal request"
+   ]
+  },
+  {
+   "idea": "Lockout-proof sign-in: email plus in-app PIN plus Face ID or fingerprint (already settled), with passkeys optional rather than forced. Remember the device, support password-manager autofill, give a clear self-serve recovery path, and require step-up identity checks only for risky actions (Tier 2 emergency, new payout account), never for routine access to balances.",
+   "beats_competitors_because": "HealthEquity's mandatory passkey with ID and selfie re-verification, and WEX's security questions after Face ID, lock people out of their own money. Reliable access is the cheapest differentiator in this cluster.",
+   "complaint_evidence": "Login: HealthEquity 272/474 (passkey 166, ID/selfie 18); EZ Receipts 261/463 (Face ID 44, server/technical-difficulties 26, missing password field 6); WEX 32/237 (security questions 4, Face ID 10); Expensify 32/411 (magic-code loops); Lively 11/44 (captcha puzzles).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Sign in",
+    "PIN pad",
+    "Biometric unlock",
+    "Settings > Security",
+    "Account recovery",
+    "Emergency Tier 2 step-up"
+   ]
+  },
+  {
+   "idea": "Live release tracker with ETAs and fast payout: a timeline running Submitted → AI check → Human review (with expected time) → Released. Push a notification at each step, show the expected release time before submitting, release instantly to the linked account, and publish a human-review time target.",
+   "beats_competitors_because": "Competitors take about 5-10 business days with ambiguous labels like 'Receipt Pending' and sometimes mail checks. WEX's happiest reviewers cite status emails and fast direct deposit, which Vaultwise can make the default.",
+   "complaint_evidence": "Slow payout: WEX 10/237 (checks instead of direct deposit), Lively 4/44, Benepass 3/27 (about 5 + 3-5 business days), Reimbursement by WEX 3/20. Status confusion: Expensify 13/411, WEX 'Receipt Pending' ambiguity.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Withdrawal status",
+    "Notifications",
+    "Home",
+    "Vault detail"
+   ]
+  },
+  {
+   "idea": "Drafts that survive timeouts: autosave every withdrawal or proof draft; after a security timeout, re-authenticate with Face ID or PIN and resume on the same screen with nothing lost. Support and assistant threads persist across sessions.",
+   "beats_competitors_because": "HealthEquity, EZ Receipts, WEX and Lively all discard in-progress claims or chats on timeout, which users read as deliberate friction.",
+   "complaint_evidence": "Session timeouts and lost work: HealthEquity 11/474, EZ Receipts 14/463, WEX 3/237, Lively chat logging out mid-conversation.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Withdrawal request",
+    "Proof upload",
+    "Assistant chat",
+    "PIN/biometric re-auth sheet"
+   ]
+  },
+  {
+   "idea": "Saved payees and batch proofs: remember providers, schools, landlords and merchants per vault with one-tap reuse; submit several receipts in one batch; default the beneficiary sensibly.",
+   "beats_competitors_because": "HealthEquity never saves providers and WEX submits one claim at a time with wrong participant defaults. Recurring Education, Housing or childcare-style vault spending makes this a frequent need.",
+   "complaint_evidence": "HealthEquity providers not saved: 8 mentions (within UX 35/474). WEX UX 36/237 (bulk-submit requests, retyping daycare details). Reimbursement by WEX defaulting to the wrong participant.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Withdrawal request",
+    "Vault detail",
+    "Payees list"
+   ]
+  },
+  {
+   "idea": "One-tap human escalation: the AI assistant must hand off, with the claim context attached, to a named human reviewer and show the expected response time. Reviewers' replies appear in the same thread as the verdict.",
+   "beats_competitors_because": "Benepass and Expensify users are stuck in AI-chat loops; WEX and HealthEquity users get offshore scripts. Vaultwise already routes uncertain proofs to human reviewers, so this mostly needs to be surfaced in the UI.",
+   "complaint_evidence": "Support: HealthEquity 36/474, WEX 25/237, Expensify 27/411 (AI-only), Benepass 7/27 (no phone, AI chat). Praise for named agents in Lively 5-star reviews.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Assistant chat",
+    "Proof review result",
+    "Help"
+   ]
+  },
+  {
+   "idea": "Respectful interruptions: no ads and no undismissable modals. Request a rating only after a successful release, using the native StoreReview API and never mid-task (in line with Expo StoreReview guidance: https://docs.expo.dev/versions/latest/sdk/storereview/).",
+   "beats_competitors_because": "Expensify's mid-task rating nags and HealthEquity's undismissable release-notes popup and ads generate 1-star reviews by themselves.",
+   "complaint_evidence": "Expensify rating-nag popups 26/411; HealthEquity undismissable popups (within crash/bug and nag themes, 8 nag) and fees/ads 26/474.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Global (release-success moment)",
+    "What's-new sheet"
+   ]
+  },
+  {
+   "idea": "Gen Z visuals without added steps: keep snap → confirm → submit at 3 taps or fewer in every redesign; make tab labels match their destinations; ship dark mode and a dark or tinted app icon; roll out UI changes gradually instead of all at once.",
+   "beats_competitors_because": "Expensify's redesign drew the largest complaint theme, and one reviewer called it a 'gen z fail'. Lively and Benepass are praised for colorful, fun, simple UIs. Users reward visual appeal only when the flow gets faster.",
+   "complaint_evidence": "Expensify UX/redesign 128/411 (67 mention the new version or Classic; complaints that bottom-bar icons don't go where labelled); dark-mode requests in WEX and Expensify reviews; Lively and Benepass praise for design and fun.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Bottom tab bar",
+    "Home",
+    "Proof upload / camera",
+    "Settings > Appearance"
+   ]
+  },
+  {
+   "idea": "Screenshot-friendly by default, with exports: allow screenshots of status and proof screens, masking only full account or card numbers. Add 'Share / export PDF' for proofs, releases and yearly statements, and keep receipt history available after a vault is closed.",
+   "beats_competitors_because": "HealthEquity's iOS screenshot blocking stops family coordination and record-keeping, and Lively wiped receipts after an account was closed.",
+   "complaint_evidence": "HealthEquity privacy/screenshot 20/474 (screenshot blocking 6; no export or print); Lively receipts lost after account closure (1).",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Vault history",
+    "Proof detail",
+    "Settings > Export"
+   ]
+  }
+ ]
+}

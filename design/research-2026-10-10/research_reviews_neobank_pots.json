@@ -1,0 +1,971 @@
+{
+ "method_notes": "WHAT WAS FETCHED (all UK storefront 'gb', fetched 2026-10-10). App IDs came from the iTunes Search API (https://itunes.apple.com/search?term=<name>&entity=software&country=gb&limit=5); trackName and sellerName were checked for each. Revolut — Mobile Finance (Revolut Ltd) id 932493382, https://apps.apple.com/gb/app/revolut-mobile-finance/id932493382. Monzo Bank - Mobile Banking (Monzo Bank Limited) id 1052238659, https://apps.apple.com/gb/app/monzo-bank-mobile-banking/id1052238659. Plum: Smart Saving & Investing (Plum Fintech Limited) id 1456139507, https://apps.apple.com/gb/app/plum-smart-saving-investing/id1456139507. Chip – Savings and Investments (Chip Financial Ltd) id 1141297472, https://apps.apple.com/gb/app/chip-savings-and-investments/id1141297472. Moneybox - Save and Invest (Digital Moneybox Limited) id 1049797239, https://apps.apple.com/gb/app/moneybox-save-and-invest/id1049797239. Store averages from the API: Revolut 4.86 (1,088,013 ratings), Monzo 4.86 (360,674), Plum 4.68 (70,939), Chip 4.66 (39,466), Moneybox 4.75 (79,097). Minimum iOS: Monzo 17.0, Chip 17.0, Plum 16.6, Moneybox 16.0, Revolut 15.0.\n\nReviews came from Apple's RSS feed, https://itunes.apple.com/gb/rss/customerreviews/page=<1..10>/id=<id>/sortby=mostrecent/json. Every page returned 50 entries, so each app reached the feed's 500-review cap. No app failed, so there was no web fallback, and every complaint is data_basis app_store_rss_counted. Date windows of the most-recent samples: Revolut 2026-10-05 to 10-08 (3 days), Monzo 2026-07-17 to 10-08, Plum 2025-01-09 to 2026-10-05, Chip 2023-02-12 to 2026-09-29, Moneybox 2023-08-19 to 2026-10-05.\n\nSUPPLEMENT (deviation from plan, flagged). Revolut's 500 most-recent reviews held only 9 one- or two-star reviews, and 4 of those were praise left with the wrong star rating. I therefore also pulled sortby=mosthelpful (10 pages each) for Revolut and Monzo. I kept reviews dated 2023-01-01 or later and dropped any already in the recent sample: Revolut +200 reviews (70 one- or two-star), Monzo +333 (145 one- or two-star). Most-helpful sorting favours long, dramatic reviews, so those counts are reported split recent/supplement.\n\nCODING. I read every one- and two-star review: Revolut 9+70, Monzo 84+145, Plum 320, Chip 248, Moneybox 208, total 1,084. I also skimmed the three-star reviews. I wrote a codebook of 21 themes after the first ~60 reviews per app, then implemented it as regex rules in scripts/classify.js. Each review gets at most 2 themes (most pattern hits, then a priority order). Short positive texts are flagged MISRATED and get no theme. Rules were refined over 4 passes. Fixes included straight versus curly apostrophes, 'challenger' falsely matching 'challenge', 'moved house', closures 'without explanation' falsely counted as unwanted debits, and 'funds have been held'.\n\nAccuracy check on two random samples. Before the refinements, 37 of 45 reviews had the right primary theme. After them, 36 of 40 did. Small themes, such as Revolut fees and unwanted debits, are noisier. Theme counts per app add up to more than the number of reviews because each review can carry 2 themes.\n\nPraise was measured with keyword buckets over 4- and 5-star reviews (scripts/praise.js), plus a cross-rating search for locking, sounds, widgets and personalisation.\n\nCAVEATS. Written RSS reviews are far more negative than the store averages; for example, Plum's sample is 54% one-star against a 4.68 average. Treat the shares as shares of complaints, not of all users. Feature facts come from App Store descriptions (URLs above) and these web sources:\n- https://help.revolut.com/en-US/help/app-features/vaults/how-do-spare-change-round-ups-work/ (read via search result; direct fetch returned 403)\n- https://www.revolut.com/news/revolut_launches_group_vaults_transforming_the_way_friends_and_family_save/\n- https://monzo.com/blog/take-on-the-spare-change-saving-challenge (Jan 2020)\n- https://monzo.com/legal/savings-challenge/terms-and-conditions (v1.1, 9 Jan 2026)\n- https://monzo.com/blog/2018/07/03/custom-app-icons\n- https://community.monzo.com/t/we-re-launching-grow-tab-sign-up-for-early-access/190853\n- https://help.withplum.com/en/articles/11721138-new-subscriptions-comparison-table\n- https://blog.withplum.com/1p-challenge/\n- https://withplum.com/\n- https://www.getchip.uk/\n- https://becleverwithyourcash.com/chip-app-autosave/ (third party)\n- https://www.moneyboxapp.com/support/deposits-and-withdrawals/round-ups/how-do-round-ups-work (via search result)\n- https://moneyboxapp.com/support/deposits-and-withdrawals/depositing/how-can-i-pay-in (via search result)\n\nFeatures tagged [reviews] are user-reported only. FILES under C:/Users/shaik/AppData/Local/Temp/claude/C--Users-shaik-VaultWise/9e11eaa3-37f8-4e12-90a3-5e69f6c8b8c9/scratchpad/research/reviews/neobank_pots/:\n- raw/ holds the search JSON and RSS pages: <app>-<p>.json, plus revolutmh-* and monzomh-*.\n- scripts/ holds search_summary.js, parse_reviews.js, supplement.js, classify.js and praise.js.\n- out/ holds <app>-low.txt, <app>-coded.tsv, theme-counts.json and *-praise-examples.json.",
+ "apps": [
+  {
+   "name": "Revolut",
+   "app_id": "932493382",
+   "storefront": "gb",
+   "reviews_analyzed": 700,
+   "star_distribution": "most-recent 500 (2026-10-05..10-08): 5:470 4:19 3:2 2:1 1:8 | most-helpful 2023+ supplement 200: 5:104 4:14 3:12 2:9 1:61",
+   "features": [
+    "Pockets for bills and savings, Savings Vaults, and Group Vaults/Group Pockets for saving together [App Store desc; https://www.revolut.com/news/revolut_launches_group_vaults_transforming_the_way_friends_and_family_save/]",
+    "Spare-change round-ups into a chosen Pocket or Vault from all linked cards, with x1–x10 multipliers in some regions [https://help.revolut.com/en-US/help/app-features/vaults/how-do-spare-change-round-ups-work/]",
+    "Savings that earn daily interest in GBP, EUR and USD; withdraw anytime with no penalty [App Store desc]",
+    "No 'lock until date' vault confirmed in the sources checked; reviewers ask to pay straight from a Vault or Pocket, which suggests this is not available [reviews 2025-03-07, 2026-10-05]",
+    "Wealth Protection: extra biometric check for savings and investment withdrawals above a limit you set [App Store desc]",
+    "'AI by Revolut' chat assistant: manage cards, track spending, plan trips [App Store desc]",
+    "Analytics by category, shop and country; connect other banks [App Store desc]",
+    "Group Bills split and settle; instant P2P; Joint accounts; Kids & Teens accounts [App Store desc]",
+    "Stocks & Shares ISA, global stocks and ETFs from £1 [App Store desc]",
+    "RevPoints rewards (airline miles, discounts, gift cards) [App Store desc; reviews]",
+    "Card freeze; single-use virtual cards [App Store desc]",
+    "Apple Watch listed in supported devices [iTunes Search API supportedDevices]",
+    "Themes, including a 'minimal' theme, and card colour choice [reviews 2025-02-21, 2025-04-23, 2025-05-14]",
+    "Transfer sound users find delightful ('tic-toc' while a transfer runs) [review 2026-07-10]"
+   ],
+   "complaints": [
+    {
+     "theme": "Support: bots and scripted replies, no phone, bounced between agents",
+     "count": 32,
+     "share_of_low_star": "40.5% (32/79; recent 0/9, supplement 32/70)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Each new chat agent restarts the same questions and pastes the same script; no one owns the case.",
+      "There is no phone line, and if you are locked out of the app you can't reach the in-app chat at all.",
+      "AI support gave contradicting answers about whether a referral reward was due."
+     ]
+    },
+    {
+     "theme": "Account frozen, restricted or closed; funds held for review with no timeline",
+     "count": 15,
+     "share_of_low_star": "19.0% (15/79; recent 1, supplement 14)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Salary is held for checks every month; this time it was held for over a week, so the mortgage and food shop couldn't be paid.",
+      "Account restricted twice over reimbursements from a cousin; the same documents were requested again and again for months.",
+      "Account was closed with no explanation given."
+     ]
+    },
+    {
+     "theme": "Money stuck or slow outgoing transfers",
+     "count": 13,
+     "share_of_low_star": "16.5% (13/79; all supplement)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A transfer to their own high-street account sat on hold with only a generic 'delays' banner on the day a bill was due.",
+      "Two large transfers to their own bank stayed 'pending' for days with no explanation of what pending meant."
+     ]
+    },
+    {
+     "theme": "Fraud and scam victims not refunded; disputes rejected quickly",
+     "count": 12,
+     "share_of_low_star": "15.2% (12/79; all supplement)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Card details were cloned and used through Apple Pay at the same time the customer was elsewhere; the claim was rejected as 'unlikely fraud'.",
+      "After an ATM kept the card, several fraudulent withdrawals followed and the chargeback was declined."
+     ]
+    },
+    {
+     "theme": "Onboarding and ID verification failures",
+     "count": 12,
+     "share_of_low_star": "15.2% (12/79; recent 2, supplement 10)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Scanning each side of a driving licence was slow, the face scan failed three times, then the app froze.",
+      "A valid EU passport was rejected seven times with only a template reason."
+     ]
+    },
+    {
+     "theme": "App crashes, lockouts and forced security upgrades",
+     "count": 10,
+     "share_of_low_star": "12.7% (10/79; recent 2, supplement 8)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A 'device not secure' block appeared overnight on an older phone, with no other way to reach funds.",
+      "The app froze and closed itself for days and rent was missed."
+     ]
+    },
+    {
+     "theme": "Fees and surprise charges (card delivery, weekend FX, paid-plan value)",
+     "count": 10,
+     "share_of_low_star": "12.7% (10/79; supplement; lower precision)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The card delivery fee and weekend FX mark-up only appeared after verification.",
+      "A paid Metal plan sold as including insurance turned out to be purchase protection only."
+     ]
+    },
+    {
+     "theme": "Referral and promo rewards not honoured",
+     "count": 5,
+     "share_of_low_star": "6.3% (5/79)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A friend completed every step, but the reward was refused over a deadline that card delivery made impossible to meet."
+     ]
+    },
+    {
+     "theme": "Exit friction (closing the account)",
+     "count": 4,
+     "share_of_low_star": "5.1% (4/79)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Closing took dozens of taps and needed a top-up just to clear a few pence."
+     ]
+    },
+    {
+     "theme": "Savings vault balance shown as £0 after a plan upgrade",
+     "count": 1,
+     "share_of_low_star": "1.3% (1/79)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "After upgrading to Metal for a higher rate, the vault showed zero in the app for weeks while the statement still showed the money."
+     ]
+    }
+   ],
+   "praise_themes": [
+    "Easy to use, modern, sleek and clean: 96 of 489 4–5★ reviews mention ease",
+    "Travel and FX: 46 of 489",
+    "Rewards (RevPoints turned into gift cards and travel perks): 15",
+    "Savings interest and pockets ('love the pockets'); themes and card colour customisation",
+    "Sensory delight: one long review says the transfer sound made every transaction feel exciting"
+   ]
+  },
+  {
+   "name": "Monzo",
+   "app_id": "1052238659",
+   "storefront": "gb",
+   "reviews_analyzed": 833,
+   "star_distribution": "most-recent 500 (2026-07-17..10-08): 5:388 4:13 3:15 2:9 1:75 | most-helpful 2023+ supplement 333: 5:158 4:10 3:20 2:26 1:119",
+   "features": [
+    "Pots: personalised savings and bills pots; Instant Access Savings Pots pay interest [App Store desc]",
+    "Round-ups of spare change into a Pot; optional lock on a Pot until a chosen date: deposits still allowed, withdrawals blocked [https://monzo.com/blog/take-on-the-spare-change-saving-challenge (2020); review 2025-11-11 praises locking]",
+    "1p Savings Challenge Pot (daily auto-transfers, pause and restart; not locked); current terms require 18+ and a paid Monzo plan [https://monzo.com/legal/savings-challenge/terms-and-conditions v1.1, 9 Jan 2026]",
+    "'Grow' tab gathering savings, investments, pension and net worth; Pots moved off Home [https://community.monzo.com/t/we-re-launching-grow-tab-sign-up-for-early-access/190853; reviews Aug–Sep 2026]",
+    "Instant payment notifications with signature sounds; sounds changed around Oct 2026 [App Store desc; reviews 2026-10-01..06]",
+    "Weekly and monthly insights and Trends; scheduled payments; subscription management [App Store desc]",
+    "Split bills, payment links, shared tabs; joint accounts [App Store desc; reviews]",
+    "Get paid one day early; undo a payment within seconds [App Store desc]",
+    "Investments from £1; Flex credit card [App Store desc]",
+    "Business accounts with automated Tax Pots [App Store desc]",
+    "24/7 in-app chat support [App Store desc]",
+    "Custom app icons; pot images; wallpaper and card colour personalisation [https://monzo.com/blog/2018/07/03/custom-app-icons; reviews 2025-06-07, 2026-08-21, 2026-10-07]",
+    "Interactive animations, e.g. dragging your pay into your wallet on payday [review 2026-09-03]",
+    "Home-screen widget, which users say was broken or removed [reviews 2024-02-28, 2025-04-23]",
+    "No Apple Watch in supported devices [iTunes API]; a reviewer contrasts Monzo with rivals that put cards on the Watch easily"
+   ],
+   "complaints": [
+    {
+     "theme": "Support: in-app chat bots, scripted replies, slow escalation",
+     "count": 64,
+     "share_of_low_star": "27.9% (64/229; recent 11/84, supplement 53/145)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A string of different agents pasted the same fixes that had already failed.",
+      "Asked daily for a phone call for a week and was kept in chat."
+     ]
+    },
+    {
+     "theme": "Account frozen or closed without reason; money held for weeks",
+     "count": 41,
+     "share_of_low_star": "17.9% (41/229; recent 7, supplement 34)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Funds moved in for a hospital trip were blocked, then the account was closed; the customer had to walk to the appointment.",
+      "Account closed with a 'commercial decision' line; benefits income was stuck for weeks."
+     ]
+    },
+    {
+     "theme": "App outages, crashes and login lockouts",
+     "count": 40,
+     "share_of_low_star": "17.5% (40/229; recent 16, incl. a 19 Aug 2026 outage cluster of 6 reviews)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The app went down on holiday, so hotel and taxi payments failed.",
+      "Couldn't get money out of a savings pot at the shop because nothing would load."
+     ]
+    },
+    {
+     "theme": "Onboarding refusals, ID checks and age limits (incl. minors)",
+     "count": 39,
+     "share_of_low_star": "17.0% (39/229; recent 14)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Account refused with no reason and no way to reapply.",
+      "Under-16s describe ID requests they can't satisfy and limits like no Apple Pay."
+     ]
+    },
+    {
+     "theme": "Confusing redesigns, clutter, too many taps",
+     "count": 37,
+     "share_of_low_star": "16.2% (37/229; recent 12)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Every redesign adds noise; the home screen shows the balance two or three times.",
+      "Sending from the right account now takes three attempts."
+     ]
+    },
+    {
+     "theme": "Withdrawals and transfers delayed",
+     "count": 30,
+     "share_of_low_star": "13.1% (30/229; recent 5)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Moving cash out of a savings pot took three working days."
+     ]
+    },
+    {
+     "theme": "Savings Pots hidden, moved or made harder to use (Grow tab)",
+     "count": 23,
+     "share_of_low_star": "10.0% (23/229; recent 7). Separately, 9 of the 1–3★ recent reviews (Jul–Sep 2026) mention pots or Grow.",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Savings were moved into a 'Grow' tab; the pots that made the app useful are now several taps away.",
+      "Pots were bundled with other accounts at the bottom of the screen; out of sight meant missed payments."
+     ]
+    },
+    {
+     "theme": "Fraud claims and disputes rejected",
+     "count": 21,
+     "share_of_low_star": "9.2% (21/229; recent 4)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A card was skimmed abroad and the bank blamed the customer, then closed the account."
+     ]
+    },
+    {
+     "theme": "Older iPhones and iOS dropped (iOS 17 minimum)",
+     "count": 15,
+     "share_of_low_star": "6.6% (15/229; recent 12, all dated 2026-07-26..09-20)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Can't reach my money unless I buy a new phone, and there is no web version.",
+      "Support's reply of 'get a newer device' felt rude in a cost-of-living crisis."
+     ]
+    },
+    {
+     "theme": "Paid-plan value, fees and upsell pop-ups",
+     "count": 18,
+     "share_of_low_star": "7.9% (fees 12 + upsell 6 of 229)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Stop the pop-ups pushing Extra.",
+      "Loan notifications keep arriving, then the customer is told they're ineligible."
+     ]
+    },
+    {
+     "theme": "Payment and notification sounds changed",
+     "count": 3,
+     "share_of_low_star": "1.3% of low-star (3/229); 7 of the 500 recent reviews across all star ratings, dated 1–6 Oct 2026",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The old 'ka-ching' was satisfying and part of the brand's personality; let us choose or restore it.",
+      "The new sound sounds like a declined payment."
+     ]
+    },
+    {
+     "theme": "Accessibility (no Dynamic Type or large fonts)",
+     "count": 2,
+     "share_of_low_star": "0.9%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A partially sighted user has asked for years for system large-text support."
+     ]
+    }
+   ],
+   "praise_themes": [
+    "Easy to use: 68 of 401 4–5★ reviews",
+    "Pots, savings challenges and round-ups: 22. Users lock pots so they aren't tempted to dip in, separate bills automatically, and add an image per goal, which makes saving feel engaging.",
+    "Early payday: 9; instant notifications and the money-in/out sound: several",
+    "Personalisation (app icon, wallpaper, card colour) and playful animations make banking feel 'fun'",
+    "Kids and family accounts; a whole family switching to Monzo"
+   ]
+  },
+  {
+   "name": "Plum",
+   "app_id": "1456139507",
+   "storefront": "gb",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:111 4:25 3:44 2:48 1:272 (2025-01-09..2026-10-05)",
+   "features": [
+    "Pockets: primary pocket plus 15 on paid tiers, pocket goals; Splitter divides deposits across pockets and investments [https://help.withplum.com/en/articles/11721138-new-subscriptions-comparison-table]",
+    "Automations: Automatic (AI-based), Weekly, PayDays, No-Spend on all tiers; Rainy Days and Sunny Days on Plus and above [same URL]",
+    "Round-ups on all tiers [same URL]",
+    "Challenges: 52-week, 1p and Naughty, on Plus (£3.99/mo) and above [same URL; https://blog.withplum.com/1p-challenge/]",
+    "Tiers: Basic free, Plus £3.99, Boost £7.99, Max £14.99. From late Sep 2026 users report interest-earning pockets limited to Max and 95-day notice [https://withplum.com/; reviews 2026-09-24..10-05]",
+    "Easy Access savings account provided by Lloyds; 95-day notice; Plum Interest money-market fund [App Store desc]",
+    "Cash ISA, Lifetime ISA, US stocks, 26 funds, SIPP [App Store desc]",
+    "Spend tracker (limited on lower tiers) [help.withplum URL]",
+    "AI help bot in support [reviews]; 'AI-powered tools' [App Store desc]",
+    "Home-screen widget [reviews 2025-06-12, 2025-12-21, 2026-06-24]; app colour picker screen [review 2026-01-12]; no dark mode [reviews 2025-04-27, 2025-05-13]",
+    "Biometric login; support 7 days a week via app or email; 30-day free trial on paid tiers [https://withplum.com/]"
+   ],
+   "complaints": [
+    {
+     "theme": "Support: AI bot first, no phone, hours or days per reply, chat history lost",
+     "count": 75,
+     "share_of_low_star": "23.4% (75/320)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Leaving the app to check your bank wipes the bot conversation and you start over.",
+      "Clicked 'chat to a human', got the bot, then waited eight hours for a holding reply."
+     ]
+    },
+    {
+     "theme": "Withdrawals slow or failing; money 'missing' between pockets and the bank",
+     "count": 66,
+     "share_of_low_star": "20.6% (66/320)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A transfer from Primary to the interest pocket showed as withdrawn on one side and cancelled on the other for days.",
+      "Money was promised back by a date; on that day there was still nothing and no food in the house."
+     ]
+    },
+    {
+     "theme": "App bugs, login lockouts, Face ID resets, dead buttons",
+     "count": 62,
+     "share_of_low_star": "19.4% (62/320)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Face ID turns itself off every launch.",
+      "The withdraw button was greyed out with no explanation."
+     ]
+    },
+    {
+     "theme": "Savings tools broken, removed or paywalled (pockets interest, round-ups, challenges, Splitter)",
+     "count": 35,
+     "share_of_low_star": "10.9% (35/320). 11 one-to-three-star reviews since mid-Aug 2026 cite the move of pocket interest to the £14.99 Max tier.",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Interest on individual pockets is gone unless you pay for the top plan, so the reason to use the app is gone.",
+      "Round-ups never appeared on the promised Monday, and the home total and pocket total disagree.",
+      "The 52-week challenge ran past a year and quietly released the savings into the main pocket."
+     ]
+    },
+    {
+     "theme": "Interest withheld a month, paid late, cut or unclear",
+     "count": 32,
+     "share_of_low_star": "10.0%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Interest is held a month and the last month is forfeited when you transfer out.",
+      "Interest is repeatedly not paid on time."
+     ]
+    },
+    {
+     "theme": "Confusing UI and redesigns",
+     "count": 31,
+     "share_of_low_star": "9.7%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The new look shrank pocket totals and dropped the colourful backgrounds; it feels less trustworthy.",
+      "Like a coat with too many pockets, you lose track of everything."
+     ]
+    },
+    {
+     "theme": "Fees, subscriptions and trials that auto-charge",
+     "count": 28,
+     "share_of_low_star": "8.8%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A free trial converted to a paid plan with no reminder.",
+      "The challenges that drew them in need a paid tier."
+     ]
+    },
+    {
+     "theme": "Can't close the account or transfer an ISA out",
+     "count": 28,
+     "share_of_low_star": "8.8%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Closure is blocked by a pending deposit the user never wanted.",
+      "The ISA transfer request was ignored for months."
+     ]
+    },
+    {
+     "theme": "Onboarding (ID upload buttons dead, SMS codes not arriving)",
+     "count": 23,
+     "share_of_low_star": "7.2%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The ID upload button does nothing, so the account can't be finished."
+     ]
+    },
+    {
+     "theme": "Bank linking and funding errors",
+     "count": 20,
+     "share_of_low_star": "6.3%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The app keeps asking to re-link the bank and pay-ins fail with errors."
+     ]
+    },
+    {
+     "theme": "Unwanted auto-debits ('welcome deposit', pulls after cancelling, into overdraft)",
+     "count": 19,
+     "share_of_low_star": "5.9%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A deposit was set up at signup without clear consent and pushed the user into their overdraft.",
+      "Money was still taken after deleting the app."
+     ]
+    },
+    {
+     "theme": "Balances and figures inaccurate; pending transfers invisible",
+     "count": 16,
+     "share_of_low_star": "5.0%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Money seems to vanish for 20+ minutes because the transfer doesn't show as in progress."
+     ]
+    },
+    {
+     "theme": "Account blocked",
+     "count": 14,
+     "share_of_low_star": "4.4%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Investing and withdrawals were blocked with no notification."
+     ]
+    },
+    {
+     "theme": "Investing execution and dashboard changes",
+     "count": 11,
+     "share_of_low_star": "3.4%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The investment dashboard now shows one return figure for every time period."
+     ]
+    },
+    {
+     "theme": "Marketing spam and notifications",
+     "count": 6,
+     "share_of_low_star": "1.9%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Unsubscribing only stops one of many email categories."
+     ]
+    }
+   ],
+   "praise_themes": [
+    "Saves without noticing: automated deposits; 'helped me save thousands' (automated-saving 9, habit 8 of 136 4–5★)",
+    "Pockets for named goals such as Christmas, holidays and rainy day; the 1p challenge (21 mention pockets, goals or challenges)",
+    "Feels like a fun mini-game but practical; the colourful earlier design",
+    "Simple, not intimidating entry to investing (31 mention investing)",
+    "Widget, with requests to expand it"
+   ]
+  },
+  {
+   "name": "Chip",
+   "app_id": "1141297472",
+   "storefront": "gb",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:182 4:28 3:42 2:29 1:219 (2023-02-12..2026-09-29)",
+   "features": [
+    "AI Autosave: works out what you can afford from spending; 45p per save may apply [App Store desc; https://becleverwithyourcash.com/chip-app-autosave/]",
+    "Recurring deposits into savings or funds [App Store desc]",
+    "Savings goals ('set your financial goals, link an account') [App Store desc; https://www.getchip.uk/]",
+    "Prize Savings Account: monthly prize draw instead of interest [App Store desc]",
+    "Instant Access; Easy Access (3 penalty-free withdrawals a year); Smart Cash ISA (flexible); the 90-day notice account was withdrawn in 2024 [App Store desc; reviews 2024-01-05, 2024-03-01, 2024-08-17]",
+    "Stocks & Shares ISA, GIA, pension, 40+ funds, 0.25% platform fee [App Store desc]",
+    "Open-banking account link required for withdrawals; deposits capped around £5k per open-banking transfer [reviews 2023]",
+    "Biometric login plus 6-digit PIN; fraud monitoring [https://www.getchip.uk/]",
+    "UK-based support 7 days a week [App Store desc]",
+    "2026 rebrand, including a new logo [reviews 2026-09]"
+   ],
+   "complaints": [
+    {
+     "theme": "App crashes, outages, update loops, login lockouts",
+     "count": 85,
+     "share_of_low_star": "34.3% (85/248), incl. 34 reviews from a crash-on-launch release 25–30 Apr 2024, a full-day outage on 20 Mar 2024 and an update loop on 24 Jun 2026",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "After the update the app closes instantly, support is off until Monday, and no one can reach their money.",
+      "Reinstalling says 'too many attempts' on the first try."
+     ]
+    },
+    {
+     "theme": "Bank linking and open banking required; deposit limits; no sort code or account number",
+     "count": 50,
+     "share_of_low_star": "20.2%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "You can only withdraw after giving 90-day read access to your whole current account.",
+      "No sort code or account number makes it feel like a pretend bank."
+     ]
+    },
+    {
+     "theme": "Withdrawals slow or failing ('connectivity issues')",
+     "count": 45,
+     "share_of_low_star": "18.1%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Easy to put money in, impossible to get out: 'connectivity issue' for three weeks.",
+      "Needed £60k for an emergency and the link to the bank wouldn't connect."
+     ]
+    },
+    {
+     "theme": "Support: bots, email only, multi-day replies",
+     "count": 34,
+     "share_of_low_star": "13.7%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The help bot forces canned options, none of which match the question."
+     ]
+    },
+    {
+     "theme": "Onboarding bugs (sign-in goes to sign-up, spinner, SMS codes)",
+     "count": 29,
+     "share_of_low_star": "11.7%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The final sign-up button just spins forever."
+     ]
+    },
+    {
+     "theme": "Rates cut, uncompetitive, boost codes not applied",
+     "count": 27,
+     "share_of_low_star": "10.9%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The rate dropped with no notice, found only by accident.",
+      "Boost codes shown at setup were not applied and can't be found again."
+     ]
+    },
+    {
+     "theme": "Confusing UI, home-screen clutter, 2026 rebrand",
+     "count": 21,
+     "share_of_low_star": "8.5%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The home screen is buried under adverts for other accounts.",
+      "The rebrand sucked the character out of the brand."
+     ]
+    },
+    {
+     "theme": "Trust and safety doubts (deposit protection, no password, phone-number login)",
+     "count": 11,
+     "share_of_low_star": "4.4%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Only a short PIN, no password; worried about brute force."
+     ]
+    },
+    {
+     "theme": "Older iOS dropped",
+     "count": 10,
+     "share_of_low_star": "4.0% (cluster in Nov 2024 around the iOS 16 requirement)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Locked out of savings because the phone can't run iOS 16."
+     ]
+    },
+    {
+     "theme": "Exit friction and ISA transfers out rejected",
+     "count": 10,
+     "share_of_low_star": "4.0%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "ISA transfer requests were rejected twice for 'missing info' that had been provided."
+     ]
+    },
+    {
+     "theme": "Autosave surprise debits and per-save fees",
+     "count": 10,
+     "share_of_low_star": "4.0% (unwanted debits 5 + fees 5)",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Autosave, which the user never switched on, took extra money on top of a large deposit and froze their bank account.",
+      "The 45p per autosave quietly eats the headline rate."
+     ]
+    },
+    {
+     "theme": "Goals and savings tools buggy",
+     "count": 5,
+     "share_of_low_star": "2.0%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Deposits aren't allocated to goals, goals vanish and goal balances are wrong."
+     ]
+    },
+    {
+     "theme": "Ad-style notifications and review pop-ups",
+     "count": 4,
+     "share_of_low_star": "1.6%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Notifications push other accounts and there is no way to opt out while keeping important alerts."
+     ]
+    }
+   ],
+   "praise_themes": [
+    "Easy to use (87 of 210 4–5★) and simple deposits and withdrawals",
+    "Interest rates: 74 of 210; rates rise promptly when the Bank of England rate rises",
+    "AI autosave takes 'just-right' amounts and has thresholds you can set",
+    "Prize draw makes saving fun (29 mention prizes or rewards)",
+    "Some miss the 90-day notice account because it helped impulsive spenders save"
+   ]
+  },
+  {
+   "name": "Moneybox",
+   "app_id": "1049797239",
+   "storefront": "gb",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:188 4:46 3:58 2:47 1:161 (2023-08-19..2026-10-05)",
+   "features": [
+    "Round-ups from a linked card: automatic 2 days after a transaction appears, or swipe to round up manually; collected in a weekly batch by Direct Debit [https://www.moneyboxapp.com/support/deposits-and-withdrawals/round-ups/how-do-round-ups-work]",
+    "Weekly deposit, Payday Boost and one-off deposits; instant bank transfer only for £100 or more [https://moneyboxapp.com/support/deposits-and-withdrawals/depositing/how-can-i-pay-in; reviews]",
+    "Cash ISA (up to 3 withdrawals a year) and Open Access Cash ISA; Lifetime ISA (25% bonus, 25% penalty); Junior ISA; savings and notice accounts (45/95-day per reviews) [App Store desc; reviews 2023-12]",
+    "Stocks & Shares ISA, GIA, curated portfolios, US stocks; pension finder and SIPP; mortgage advice [App Store desc]",
+    "Planning tools: ISA Time Machine, LISA deposit calculator [App Store desc]",
+    "Fees: £1/month plus 0.45% a year on investments [App Store desc]",
+    "AI or LLM support chat added around 2026 [reviews 2026-09-09, 2026-09-23]",
+    "No Face ID or widget according to some reviewers [reviews 2025-01-01, 2025-11-17]"
+   ],
+   "complaints": [
+    {
+     "theme": "Confusing navigation; home cluttered with upsell; redesigns",
+     "count": 42,
+     "share_of_low_star": "20.2%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Ten ways to add money on every screen, but no one can find withdraw.",
+      "The finished onboarding card can't be dismissed and hides the balances."
+     ]
+    },
+    {
+     "theme": "Slow transfers in and out (weekly collections, days to settle)",
+     "count": 40,
+     "share_of_low_star": "19.2%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A deposit took 10 days to arrive.",
+      "Withdrawals took almost three weeks."
+     ]
+    },
+    {
+     "theme": "Support: AI-first, 2-day replies, chat hard to find",
+     "count": 38,
+     "share_of_low_star": "18.3%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "There are two chats, AI and human, and the human thread with the history disappeared."
+     ]
+    },
+    {
+     "theme": "App bugs, crashes after updates, login failures",
+     "count": 30,
+     "share_of_low_star": "14.4%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "A bad update locked them out of the ISA for days; there is no desktop fallback."
+     ]
+    },
+    {
+     "theme": "Onboarding and KYC loops",
+     "count": 25,
+     "share_of_low_star": "12.0%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The passport was requested four times and the account never opened."
+     ]
+    },
+    {
+     "theme": "Rates hidden or new-customer-only",
+     "count": 24,
+     "share_of_low_star": "11.5%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Can't see my own ISA rate anywhere after year one."
+     ]
+    },
+    {
+     "theme": "Funding friction (£100 minimum, no sort code, Direct Debit only)",
+     "count": 19,
+     "share_of_low_star": "9.1%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Can't set a simple monthly standing order under £100; only weekly collections."
+     ]
+    },
+    {
+     "theme": "Fees and LISA penalty surprises",
+     "count": 15,
+     "share_of_low_star": "7.2%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Platform fees far exceed the fund fees that are shown up front."
+     ]
+    },
+    {
+     "theme": "Investing execution delays (3–5 day trades)",
+     "count": 11,
+     "share_of_low_star": "5.3%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The sell price isn't the price you saw, because the order settles days later."
+     ]
+    },
+    {
+     "theme": "Upsell and spam on home and notifications",
+     "count": 9,
+     "share_of_low_star": "4.3%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Marketing notifications arrive despite opting out."
+     ]
+    },
+    {
+     "theme": "Exit and ISA transfer out slow or wrong",
+     "count": 9,
+     "share_of_low_star": "4.3%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "An ISA was transferred out as non-ISA cash, putting the allowance at risk."
+     ]
+    },
+    {
+     "theme": "Savings tools rigid (weekly-only cadence, round-ups hidden, amounts revert)",
+     "count": 7,
+     "share_of_low_star": "3.4%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "The round-up section is now several screens deep.",
+      "The weekly deposit keeps reverting from £5 to £25."
+     ]
+    },
+    {
+     "theme": "Unwanted debits and dark-pattern defaults",
+     "count": 6,
+     "share_of_low_star": "2.9%",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Hard to avoid setting up a monthly LISA payment, so money was paid in by mistake and is now locked."
+     ]
+    }
+   ],
+   "praise_themes": [
+    "Easy to use: 92 of 234 4–5★",
+    "Round-ups as an easy start; watching funds grow is 'good fun'",
+    "Notice accounts and the LISA penalty are valued as a commitment device; users say it stops them dipping in",
+    "Weekly top-ups built a 3-month emergency fund",
+    "Competitive ISA and LISA rates (51 mention rates)"
+   ]
+  }
+ ],
+ "cross_app_themes": [
+  "1. Losing access to your own money is the top source of anger in every app. Frozen or closed accounts make up 18–19% of one- and two-star reviews at Monzo and Revolut. Slow, failed or 'missing' withdrawals and transfers make up 18–21% at Plum, Chip and Moneybox. Vaultwise deliberately restricts access, so this is its biggest risk: users already hate opaque release. Data: theme-counts.json.",
+  "2. Support that hides behind bots is the most-cited problem at Revolut (41%), Monzo (28%) and Plum (23%), and it is 14–18% at Chip and Moneybox. The complaints are about not having a human with case memory and an ETA, not about AI as such.",
+  "3. Reliability and device cut-offs. Chip had a crash-on-launch release (34 reviews in 6 days, Apr 2024). Monzo's iOS 17 minimum produced 12 one- and two-star reviews in Jul–Sep 2026 (minOS 17.0 per the iTunes API). Lockouts compound point 1.",
+  "4. Redesigns that hide savings. Monzo's Grow tab moved Pots (23 coded complaints; 9 recent 1–3★ mentions). Moneybox and Plum redesigns buried round-ups and shrank pocket totals. Users want their pots one tap away and stable.",
+  "5. Paywalling the savings mechanics backfires. Plum moved pocket interest to the £14.99 Max tier in Sept 2026 (11 reviews in ~6 weeks, users switching to Monzo). Challenges are on paid tiers at Plum, and Monzo's 1p challenge needs a paid plan. Chip charges 45p per autosave.",
+  "6. Consent and control over automated pulls. Unexpected 'welcome deposits', deposits continuing after cancelling, overdrafts, and an autosave the user never enabled: 19 at Plum, 6 at Moneybox, 5 at Chip.",
+  "7. Demand for commitment devices is real (inferred from praise). Monzo users praise locking pots against temptation. Chip users mourn the 90-day account as help for impulsive spenders. Moneybox users like notice accounts that stop them dipping in. The same users hate it when a legitimate release needs a chat with an agent (Moneybox LISA).",
+  "8. Pay directly from a pot or vault is requested unprompted (Revolut 2025-03-07 and 2026-10-05; Monzo 2025-05-25). This validates Pay with Vaultwise.",
+  "9. Sensory identity matters to users. Monzo's Oct 2026 sound change drew 7 reviews across all star ratings in 6 days, asking to restore it or let them choose. A Revolut user says the transfer sound made every transaction feel exciting. Monzo's paycheck-drag animation and pot images are praised.",
+  "10. Personalisation and glanceable surfaces are wanted: home-screen widgets (6 requests or complaints across Monzo, Plum and Moneybox), dark mode (Plum, 2), app icons, wallpapers, themes and card colours (Monzo, Revolut).",
+  "11. Trust signals. Chip users question deposit protection and the lack of a password. Plum's SMS-plus-PIN login is called weak. Missing sort codes or account numbers make savings apps feel 'not a real bank' (Chip, Moneybox).",
+  "12. Onboarding failures (12–17% at Monzo, Revolut, Chip and Moneybox): camera ID failures, loops, unexplained refusals. Teenagers try to sign up and are rejected without guidance (Monzo, Moneybox, Plum).",
+  "13. Fraud handling (Revolut 15%, Monzo 9%). Victims describe fast automated rejections. Purpose locks could double as scam protection (inference)."
+ ],
+ "opportunities": [
+  {
+   "idea": "Release Tracker: every vault release or proof review gets a live timeline (Submitted, Reading invoice, Checks, Approved or Human review) with an ETA, a plain reason code, and an exact 'we need X from you' action. A push notification fires on each step change.",
+   "beats_competitors_because": "Competitors show generic 'pending' or 'the team is working on it' with no ETA (Plum, Chip, Revolut, Monzo). Vaultwise holds money by design, so a transparent release is the trust contract.",
+   "complaint_evidence": "Withdraw/stuck money: Plum 66 (20.6%), Chip 45 (18.1%), Moneybox 40 (19.2%), Monzo 30, Revolut 13. Frozen with no timeline: Monzo 41, Revolut 15.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Vault detail",
+    "Release request / proof upload",
+    "Activity",
+    "Notifications",
+    "Home"
+   ]
+  },
+  {
+   "idea": "Guaranteed emergency floor: Tier 1 instant release from the Health vault, plus a capped Tier 2, stays usable even while another vault is under review, during a support backlog, or in degraded mode. The screen says what is and isn't affected.",
+   "beats_competitors_because": "At Monzo and Revolut one flag freezes everything, including money for hospital trips and food. Vaultwise can promise that a review never cuts off emergency money.",
+   "complaint_evidence": "Frozen-account harm stories: Monzo 41, Revolut 15. Moneybox's 'can't withdraw in case of emergency'. Chip's emergency £60k withdrawal blocked.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Emergency tab",
+    "Home",
+    "Vault detail"
+   ]
+  },
+  {
+   "idea": "AI assistant with a real handoff: a 'Talk to a person' button is always visible. The assistant summarises the case so the human never re-asks. One persistent case thread with a visible queue position and ETA. The history survives leaving the app.",
+   "beats_competitors_because": "Plum's chat resets when you leave the app, Moneybox's human thread disappears, and Revolut and Monzo agents re-ask questions and paste scripts.",
+   "complaint_evidence": "Support: Revolut 32/79 (40.5%), Monzo 64/229, Plum 75/320, Moneybox 38/208, Chip 34/248.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "AI assistant chat",
+    "More > Help",
+    "Release request"
+   ]
+  },
+  {
+   "idea": "Stable, pinned Vaults: the Vaults tab and Home vault cards are never moved by redesigns. Users can reorder, rename and add an image to each vault. Home has no promos; offers go to a separate Discover area.",
+   "beats_competitors_because": "Monzo moved Pots behind a Grow tab and Moneybox buried round-ups under promos. Users read hidden pots as lost money.",
+   "complaint_evidence": "Monzo savings tools 23 plus 9 recent 1–3★ pots/Grow mentions. UX/navigation: Moneybox 42, Monzo 37, Plum 31. Upsell: Moneybox 9, Monzo 6, Plum 6, Chip 4.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Home",
+    "Vaults tab",
+    "Vault detail"
+   ]
+  },
+  {
+   "idea": "Consent-first contribution rules. No auto-deposit is created at signup. A 'next pull' preview shows date, amount and source. A balance-aware guard never pulls into overdraft. One-tap pause. Weekly, payday and monthly cadences. Round-ups show live as they accrue.",
+   "beats_competitors_because": "Plum's 'welcome deposit' and post-cancel pulls, Chip's autosave the user never switched on, and Moneybox's weekly-only collections and LISA default payments are the dark patterns users name.",
+   "complaint_evidence": "Unwanted debits: Plum 19, Moneybox 6, Chip 5. Moneybox rigid cadence 7. Plum round-ups not working (several reviews).",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Create vault",
+    "Contribution rules",
+    "Round-ups settings",
+    "Notifications"
+   ]
+  },
+  {
+   "idea": "Keep core savings mechanics free: round-ups, challenges and streaks, and interest or yield on every vault. One plain fee page, and a notice before any change.",
+   "beats_competitors_because": "Plum's Sept 2026 move of pocket interest to Max (£14.99) is sending users to Monzo. Challenges are paywalled at Plum and Monzo. Chip charges 45p per autosave.",
+   "complaint_evidence": "Plum savings tools 35 (11 on the interest-paywall change since Aug 2026), Plum fees 28. Chip fee and debit complaints 10. Monzo challenge terms require a paid plan.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Vault detail",
+    "More > Plans & fees",
+    "Create vault"
+   ]
+  },
+  {
+   "idea": "Money in motion is never invisible. Every inbound and outbound transfer shows instantly as 'in transit' with source, destination and expected arrival. Home, vault and statement totals always reconcile.",
+   "beats_competitors_because": "Plum users panic when money 'disappears' for 20+ minutes or days between pockets. Totals disagree across screens at Plum and Chip.",
+   "complaint_evidence": "Balance accuracy: Plum 16. 'Missing money' phrasing within withdraw complaints at Plum and Moneybox. Chip goal-balance bugs.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Activity",
+    "Vault detail",
+    "Home"
+   ]
+  },
+  {
+   "idea": "Release discipline for the Expo app. Staged rollouts, and an OTA rollback path via EAS Update. A force-update screen that can't loop. A read-only web or PWA fallback for balances and the emergency request. Support the widest iOS and Android range the SDK allows, and warn months before dropping any OS version.",
+   "beats_competitors_because": "Chip's broken release locked out savers for days, and Monzo's iOS 17 cut-off left users unable to see their money without a new phone, with no web access.",
+   "complaint_evidence": "Chip app reliability 85 (34 in the Apr 2024 crash week; Jun 2026 update loop). Monzo device cut-off 15 (12 in Jul–Sep 2026), Chip device 10. Moneybox update lockouts.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "App shell / force-update",
+    "Sign-in & PIN",
+    "Emergency tab"
+   ]
+  },
+  {
+   "idea": "Pay with Vaultwise from the matching vault, plus 'pay from vault' for one-off card or QR payments. The invoice is verified at checkout and the receipt is auto-attached to the vault.",
+   "beats_competitors_because": "Revolut and Monzo users ask to pay directly from a pocket or pot instead of shuffling money first. No competitor checked offers verified, purpose-bound spending.",
+   "complaint_evidence": "Feature requests: Revolut 2025-03-07 (3★) and 2026-10-05 (5★); Monzo 2025-05-25 (5★).",
+   "fits_vaultwise_scope": true,
+   "effort": "L",
+   "screens_affected": [
+    "Checkout (Pay with Vaultwise)",
+    "Vault detail",
+    "Activity"
+   ]
+  },
+  {
+   "idea": "Signature sensory kit: distinct haptic and sound pairs for money in, money out, release approved and goal reached. Users can switch sound and haptics independently or pick from alternates. The default stays stable after launch, and it respects Do Not Disturb.",
+   "beats_competitors_because": "Monzo's unannounced sound change drew 7 reviews in a week asking to restore it or let them choose. Revolut and Monzo users cite sounds and animations as joy. Owning the moment with user control avoids both failure modes.",
+   "complaint_evidence": "Monzo sound change: 3 one- and two-star plus 4 three- to five-star reviews, 1–6 Oct 2026. Praise: Revolut transfer sound (2026-07-10), Monzo paycheck-drag animation (2026-09-03).",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "More > Sounds & haptics",
+    "Release approved",
+    "Goal reached",
+    "Deposit confirmation"
+   ]
+  },
+  {
+   "idea": "Personalisation and glanceability: vault images and emoji, dark mode and themes, alternate app icons, and a home-screen widget showing vault progress, with an optional emergency-balance glance.",
+   "beats_competitors_because": "Users praise Monzo pot images and app-icon and wallpaper choice. Plum lacks dark mode. Widgets are requested or broken at Monzo, Plum and Moneybox. This is cheap delight that fits the Gen Z brief.",
+   "complaint_evidence": "Widget requests or complaints 6 (Monzo 2, Plum 3, Moneybox 1). Dark mode 2 (Plum). Personalisation praise at Monzo and Revolut, about 7 reviews.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Create / edit vault",
+    "More > Appearance",
+    "Home-screen widget"
+   ]
+  },
+  {
+   "idea": "Commitment locks done kindly. Unlock rules are shown before money goes in. A cooling-off delay, not cash penalties, applies to early unlocks. A legitimate release is self-serve with proof upload and never needs an agent chat. Streaks and celebrations reward not dipping in.",
+   "beats_competitors_because": "Users value locks and notice accounts (Monzo, Chip, Moneybox) but hate the Moneybox LISA 'message an agent to withdraw' flow and 25% penalty surprises. Chip removed its 90-day account that helped impulsive spenders.",
+   "complaint_evidence": "Demand: 7 reviews praising locking or notice accounts as anti-temptation. Pain: Moneybox fees and penalty 15, Moneybox withdraw-via-agent review (2026-06-09), Chip 90-day removal (2024).",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Create vault",
+    "Vault detail",
+    "Release request"
+   ]
+  },
+  {
+   "idea": "Locks as scam protection: a large early unlock or transfer out of a purpose vault triggers proof plus a short cooling-off and an optional trusted-contact alert. The app tells the user plainly that a scammer can't drain a locked vault.",
+   "beats_competitors_because": "Revolut and Monzo fraud victims describe fast automated rejections after the money is gone. Vaultwise can prevent the loss up front (inference: not tested with users).",
+   "complaint_evidence": "Fraud: Revolut 12 (15%), Monzo 21 (9%).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Release request",
+    "More > Security",
+    "Notifications"
+   ]
+  },
+  {
+   "idea": "Friction-free funding and exit. Any amount (no £100 minimum). Visible account details or a reference for bank transfer. Open banking is optional. One-screen close and export, and move-out without a chat. This builds on the existing Delete account flow.",
+   "beats_competitors_because": "Chip forces open banking with full current-account read access and shows no sort code. Moneybox has a £100 minimum. Plum and Chip block closure on pending items.",
+   "complaint_evidence": "Funding: Chip 50 (20%), Plum 20, Moneybox 19. Exit friction: Plum 28, Chip 10, Moneybox 9, Monzo 6, Revolut 4.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Add money",
+    "More > Statements",
+    "More > Delete account"
+   ]
+  },
+  {
+   "idea": "Onboarding that doesn't dead-end. Camera primer (already planned) plus live capture guidance. Save-and-resume. A clear 18+ gate up front, with a friendly 'come back at 18' path. Specific rejection reasons and a retry route.",
+   "beats_competitors_because": "Revolut, Monzo, Moneybox and Chip users describe repeated ID rejections with template reasons, spinners and loops. Teenagers bounce off without guidance.",
+   "complaint_evidence": "Onboarding and KYC: Monzo 39 (17%), Chip 29, Moneybox 25, Plum 23, Revolut 12.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Sign-up",
+    "Camera primer",
+    "ID capture",
+    "Age gate"
+   ]
+  },
+  {
+   "idea": "Trust panel and transparent yield: per-market deposit-protection facts, passkey or biometric plus PIN, a visible security log, and each vault's current rate or yield with advance notice of changes. No new-customer-only rates.",
+   "beats_competitors_because": "Chip users doubt deposit protection and the lack of a password. Moneybox and Chip users can't find their own rate or learn of cuts by accident.",
+   "complaint_evidence": "Trust/safety: Chip 11. Rates: Plum 32, Chip 27, Moneybox 24.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "More > Security",
+    "Vault detail",
+    "Notifications"
+   ]
+  }
+ ]
+}

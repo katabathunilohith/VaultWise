@@ -1,0 +1,779 @@
+{
+ "method_notes": "WHAT WAS FETCHED (US storefront only, 2026-10-10)\n1) App IDs from the iTunes Search API (https://itunes.apple.com/search?term=<name>&entity=software&country=us&limit=5). I matched trackName and sellerName against the results:\n- Cash App: 711923939, seller Block, Inc.\n- Venmo: 351727428. The seller field reads \"The Delancey Corporation, LLC\". It is still the real Venmo app (trackName Venmo, 15.47M ratings). I'm reporting the seller name as the API returned it and have not looked into it.\n- PayPal - Pay, Send, Save: 283646709, seller PayPal, Inc.\n- Klarna: Smarter everyday money: 1115120118, seller Klarna Bank AB.\nOverall ratings in the same metadata: Cash App 4.79 (8.75M), Venmo 4.85 (15.47M), PayPal 4.78 (6.30M), Klarna 4.86 (2.45M). Install sizes from fileSizeBytes: PayPal 808 MB, Venmo 705 MB, Cash App 453 MB, Klarna 311 MB.\n\n2) Apple customer-reviews RSS, pages 1-10, sorted most recent (https://itunes.apple.com/us/rss/customerreviews/page=N/id=<id>/sortby=mostrecent/json). Every page returned 50 entries, so I got 500 reviews per app with no RSS failures and no web fallback.\nDate windows:\n- Cash App: 2026-09-21 to 10-08\n- Venmo: 2026-09-29 to 10-08 (only about 9 days)\n- PayPal: 2026-08-06 to 10-08\n- Klarna: 2026-09-03 to 10-08\nRaw files are in C:/Users/shaik/AppData/Local/Temp/claude/C--Users-shaik-VaultWise/9e11eaa3-37f8-4e12-90a3-5e69f6c8b8c9/scratchpad/research/reviews/payments/raw/ (<app>-<p>.json and search-*.json).\n\n3) Parsing: scripts/parse.js dedupes by review id, counts stars and writes the 1-2 star and 3-star review text to parsed/.\nNumber of 1-2 star reviews: Cash App 181, Venmo 429, PayPal 424, Klarna 157.\nI read every 1-2 star review for all four apps, including Venmo and PayPal even though they are over 300, so there was no sampling. I also read all 3-star reviews and a sample of 4-5 star reviews (scripts/high.js) for praise.\n\n4) Coding: I wrote the codebook after reading roughly the first 60 low-star reviews per app, then extended it after reading the rest. It has 17 themes: account closed/frozen, holds/delays, payment failures, support, redesign/navigation, ads/notification noise, scam/fraud, disputes/refunds, credit decisions, fees, login/onboarding, bugs/performance, privacy/social, rewards/promos, BNPL repayment control, account exit, card issues.\n- The rules are in scripts/classify.js. Each review gets at most 2 themes: the top 2 by number of distinct rule hits, with very specific single-rule themes weighted higher and ties broken by codebook order.\n- I refined the rules three times after reading unclassified items and spot-check output. Fixes included a substring bug (\"spending\" was matching \"pending\"), separating phone-queue \"on hold\" from fund holds, and removing bare words such as scammer/merchant that over-matched.\n- Spot-check: I hand-judged 215 coded reviews (Cash App 40, Venmo 70, PayPal 65, Klarna 40). The primary theme was right in about 9 of 10 (roughly 36/40, 63/70, 60/65, 36/40) before the final fixes, which targeted the errors I saw. Secondary themes are noisier.\n- Unclassified reviews are mostly content-free, such as \"sucks\" or \"scam\" with no detail: Cash App 23, Venmo 31, PayPal 35, Klarna 19.\n- Shares can add up to more than 100% because a review can carry 2 themes.\n- Outputs: coded/theme-counts.json and coded/<app>-coded.json.\n\n5) Supporting counts: scripts/subcounts.js counts mentions of specific sub-issues in 1-2 star reviews (for example, no reason given, AI/bot support, sounds, app size, passkey). scripts/praise.js counts praise keywords in 4-5 star reviews. These are keyword mention counts, not themes. I verified a few by reading the matches; for example, 1 of the 6 Venmo \"sound\" hits was a false positive, so the real figure is 5.\n\n6) Features come from each App Store description (in the search API result) plus three official pages I fetched: https://www.klarna.com/us/klarna-app/, https://venmo.com/ and https://www.paypal.com/us/digital-wallet/manage-money. cash.app returned HTTP 403. The session's web-search budget was used up, so I could not check further features on the web, such as Cash App savings goals or AI assistants. Those are marked unverified or left out.\n\nCAVEATS\n- The star mix of recent written reviews (for example, 86-89% 1-2 star for Venmo and PayPal) is far below the overall 4.8+ ratings. Two likely reasons, both my inference: written reviews skew negative, and the windows overlap redesign backlash (Venmo's fall-2026 UI, which reviewers describe, and PayPal 10.0). Treat the shares as the makeup of recent complaints, not overall satisfaction.\n- US storefront only. Klarna and PayPal reviews from other markets were not fetched.\n- Opportunity reasoning is my inference unless it says otherwise. All review content is paraphrased, with no reviewer names.",
+ "apps": [
+  {
+   "name": "Cash App",
+   "app_id": "711923939",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:273 4:22 3:24 2:15 1:166",
+   "features": [
+    "P2P send/receive by phone, email, $cashtag or QR, plus bitcoin incl. Lightning transfers (https://apps.apple.com/us/app/cash-app/id711923939)",
+    "Round-ups of spare change into savings; savings interest up to 3.5% with Green status (same URL)",
+    "Customizable debit card added to digital wallet; real-time transaction alerts and 24/7 fraud monitoring (same URL)",
+    "Direct deposit up to 2 days early; free in-network ATM and up to $200 overdraft coverage with Green status (same URL)",
+    "Commission-free stocks/ETFs and bitcoin with custom orders or auto-invest (same URL)",
+    "Exclusive card discounts, offers and concert presales; Cash App Pay counts toward Green (same URL)",
+    "Borrowing referenced in Green terms; reviewers mention Borrow and Afterpay inside the app (RSS reviews)",
+    "Teen accounts 13-17 sponsored by a parent/guardian (same URL)",
+    "Phone support number listed in the description (same URL)",
+    "Not verified this session: savings goals, AI assistant, widgets, Apple Watch (cash.app returned 403; search budget exhausted)"
+   ],
+   "praise_themes": [
+    "Ease and speed of sending money: 33 of 295 4-5 star reviews mention easy/simple, 9 fast/instant",
+    "Family use: 26 of 295 4-5 star mention kids/teens/family (allowances, a first card for a child)",
+    "Designing your own card is fun and personal (5 mentions); strong Gen Z hook",
+    "Some users got scam refunds quickly; support praised in a minority of reviews",
+    "Referral bonuses and promos feel like free money"
+   ],
+   "complaints": [
+    {
+     "theme": "Account closed/banned/frozen with no explanation; appeals denied",
+     "count": 44,
+     "share_of_low_star": "24.3% of 181",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Long-time user banned for a vague terms violation and never told which rule; appeal rejected",
+      "New account closed within days, before the card was even designed",
+      "Account closed because an ex used the reviewer's identity; support said the ban can't be reversed"
+     ]
+    },
+    {
+     "theme": "Support: AI/bot loops, scripted replies, no human or phone help",
+     "count": 39,
+     "share_of_low_star": "21.5% of 181",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Support chat felt like a bot repeating copy-paste paragraphs",
+      "Waited 30 minutes for a supposed human who closed the chat unresolved",
+      "Promised follow-up email never came after two months"
+     ]
+    },
+    {
+     "theme": "Scam victim / unauthorized charges / account takeover, no recovery",
+     "count": 23,
+     "share_of_low_star": "12.7% of 181",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "19-year-old lost $2,000 to a fake car seller; told completed payments can't be reversed",
+      "Small repeated unauthorized merchant charges drained the balance with no alert",
+      "Scanned a QR code at a tattoo shop that led to the wrong profile; $360 not recovered"
+     ]
+    },
+    {
+     "theme": "Login, sign-up and ID verification failures",
+     "count": 22,
+     "share_of_low_star": "12.2% of 181",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Stuck on a legal-name onboarding screen with no back button even after reinstalling",
+      "Selfie/ID check keeps rejecting the user's own ID",
+      "Teen sponsor setup hit a request limit after a typo"
+     ]
+    },
+    {
+     "theme": "Payments blocked, declined or erroring",
+     "count": 21,
+     "share_of_low_star": "11.6% of 181",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Randomly blocked from sending/receiving despite 2FA and PIN, no explanation",
+      "Card declined for a small purchase despite promised overdraft coverage"
+     ]
+    },
+    {
+     "theme": "Bugs: ghost notification badge, crashes, iOS version cut-off",
+     "count": 21,
+     "share_of_low_star": "11.6% of 181",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Phantom badge on the icon for months with nothing to clear",
+      "App requires iOS 17, so older-iPhone users can't reach their money",
+      "Update made the pay screen freeze while paying rent"
+     ]
+    },
+    {
+     "theme": "Holds and slow/failed transfers",
+     "count": 13,
+     "share_of_low_star": "7.2% of 181",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Free standard transfer usually fails, but the paid instant one works",
+      "Refund from a large retailer stuck pending though the merchant says it was sent",
+      "Bitcoin transaction paused 15 days for review"
+     ]
+    },
+    {
+     "theme": "Disputes and refunds not honored",
+     "count": 12,
+     "share_of_low_star": "6.6% of 181",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Photo evidence of an unfinished car repair ignored; no refund",
+      "Restaurant took a Local Cash payment but never served the order"
+     ]
+    },
+    {
+     "theme": "Rewards/promos not received (Local Cash, bitcoin bonus, free-card bonus)",
+     "count": 8,
+     "share_of_low_star": "4.4% of 181",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Buy-$10-get-$20 bitcoin promo never paid out",
+      "Couldn't figure out how to use claimed Local Cash; chatbot no help"
+     ]
+    },
+    {
+     "theme": "Fees and overdraft/borrow changes",
+     "count": 8,
+     "share_of_low_star": "4.4% of 181",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Overdraft limit changed without notice or reason",
+      "Charged for a replacement card that never arrived"
+     ]
+    },
+    {
+     "theme": "Card ordering/delivery problems",
+     "count": 7,
+     "share_of_low_star": "3.9% of 181",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Card order fails with a generic error for two years",
+      "Can't ship a card to a PO box in a town without street delivery"
+     ]
+    },
+    {
+     "theme": "Privacy: forced legal last name shown to payers",
+     "count": 4,
+     "share_of_low_star": "2.2% of 181",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Can't hide legal last name from people paying them, which feels unsafe",
+      "Wants to use a professional name rather than a legal name"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Venmo",
+   "app_id": "351727428",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:39 4:8 3:24 2:46 1:383",
+   "features": [
+    "Social P2P payments with notes; split one request across multiple friends with custom amounts (https://apps.apple.com/us/app/venmo/id351727428)",
+    "Groups for shared expenses, scheduled payments, stickers/GIFs (https://venmo.com/)",
+    "Checkout with Venmo at participating apps and sites (https://venmo.com/)",
+    "Venmo debit card with cash back; Venmo credit card up to 3% back (App Store URL)",
+    "Stash rewards program with higher rewards for more monthly spend (https://venmo.com/)",
+    "Buy/hold/sell/transfer crypto from $1 (App Store URL; venmo.com)",
+    "Teen accounts 13-17 with their own debit card (App Store URL)",
+    "Business profiles for side gigs (App Store URL)",
+    "Instant Transfer to bank and early direct deposit; description says transfers are reviewed and may be delayed, frozen or removed (App Store URL)",
+    "Home-screen widget exists; a reviewer complains it lacks transparent-icon support (RSS review)",
+    "Completion sound/jingle and celebratory animation on payments, reported by reviewers as not mutable (RSS reviews)",
+    "No dark mode per reviewers asking for it (RSS reviews)"
+   ],
+   "praise_themes": [
+    "Fast, easy splitting and paying friends right away (10 of 47 4-5 star mention easy/simple)",
+    "Teen accounts with guardian controls are easy to set up; used to teach budgeting",
+    "Feels secure and trustworthy for everyday small transfers",
+    "A minority liked the new UI as smoother, showing the redesign split opinion"
+   ],
+   "complaints": [
+    {
+     "theme": "Support: AI-only phone/chat loops, can't reach a human, tickets closed",
+     "count": 133,
+     "share_of_low_star": "31.0% of 429",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Phone line tells you to use in-app chat, and the in-app chat can't be found",
+      "Agents promise an escalation email that never arrives",
+      "Bot repeats the same canned steps; formal ticket closed without a reply"
+     ]
+    },
+    {
+     "theme": "Redesign: can't find balance, transaction history, requests; more steps; bubble contact picker",
+     "count": 110,
+     "share_of_low_star": "25.6% of 429",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "After the update, own transaction history and balance are hard to find while friends' payments are front and centre",
+      "Paying now takes several screens; the public/private toggle is hidden in tiny text",
+      "Contact bubbles replaced the list; picked a same-name stranger and sent $144 to the wrong person"
+     ]
+    },
+    {
+     "theme": "Payments failing or blocked (risk flags, bank/card won't link, 'something went wrong', limits)",
+     "count": 75,
+     "share_of_low_star": "17.5% of 429",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Payments to a long-time recipient flagged as a scam and blocked for days",
+      "Bank no longer eligible; new debit card refused for having added too many cards",
+      "Error on every attempt while the bank confirms nothing was blocked"
+     ]
+    },
+    {
+     "theme": "Holds and slow transfers (21-day business holds, bank-funded payments now 3-5 days)",
+     "count": 46,
+     "share_of_low_star": "10.7% of 429",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Business payment held 21 days and fee taken before release",
+      "Bank-funded payments now go as eCheck and take several business days instead of instant",
+      "Free transfer to bank fails, but the paid instant option works on the same account"
+     ]
+    },
+    {
+     "theme": "Account suspended/frozen with no reason or timeline",
+     "count": 46,
+     "share_of_low_star": "10.7% of 429",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Frozen the day the user ordered a teen card; 15+ days with funds inaccessible",
+      "Frozen since spring with no email explaining why",
+      "Suspended after reporting fraud, still frozen weeks past the promised date"
+     ]
+    },
+    {
+     "theme": "Bugs/crashes after the update",
+     "count": 36,
+     "share_of_low_star": "8.4% of 429",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Crashes whenever adding money",
+      "White screen on launch",
+      "Crypto transfers to external wallets fail for months"
+     ]
+    },
+    {
+     "theme": "Scams, account takeover and unauthorized charges",
+     "count": 32,
+     "share_of_low_star": "7.5% of 429",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Hacker changed the phone number and added a bank account; no alert caught it",
+      "Stolen-wallet card drained; cancellation instructions in the help center were wrong",
+      "Sender scam: money sent, goods handed over, then the payment was reversed"
+     ]
+    },
+    {
+     "theme": "Ads, upsells and noise (gambling ad on the confirmation screen, marketing pushes, unmutable sounds)",
+     "count": 24,
+     "share_of_low_star": "5.6% of 429",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Gambling ad popped up on the payment confirmation page",
+      "A one-hour make-it-instant-for-a-fee push after every transfer",
+      "Loud payment sound ignores the silent switch and can't be turned off (5 low-star + 3 three-star reviews on sounds/animation)"
+     ]
+    },
+    {
+     "theme": "Login/recovery and verification",
+     "count": 21,
+     "share_of_low_star": "4.9% of 429",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Codes go to an old phone number with no alternative",
+      "ID verification resubmits the same wrong data each time"
+     ]
+    },
+    {
+     "theme": "Disputes decided against the user",
+     "count": 18,
+     "share_of_low_star": "4.2% of 429",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Seller with written proof still lost to a buyer's admitted false dispute",
+      "Police report number ignored; dispute declined"
+     ]
+    },
+    {
+     "theme": "Privacy: public-by-default feed and other people's payments",
+     "count": 11,
+     "share_of_low_star": "2.6% of 429",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Payments are public unless you dig into settings",
+      "Doesn't want to see strangers' payment comments in the feed"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "PayPal",
+   "app_id": "283646709",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:30 4:11 3:35 2:47 1:377",
+   "features": [
+    "Purchase Protection on eligible transactions (https://apps.apple.com/us/app/paypal-pay-send-save/id283646709)",
+    "Debit card with 5% back in points on a chosen monthly category (App Store URL)",
+    "Send/request money in the US and to 110+ countries (App Store URL)",
+    "Pay in 4 BNPL for $10-$2,000 (App Store URL)",
+    "Package tracking and subscription management in the app (App Store URL)",
+    "New 'Me' tab for money, accounts and settings in the 10.x redesign (App Store URL)",
+    "PayPal Savings at 3.55% APY with automatic weekly/biweekly transfers (https://www.paypal.com/us/digital-wallet/manage-money)",
+    "Direct deposit up to 2 days early; add cash at stores (manage-money page)",
+    "Crypto incl. PYUSD; bill tracking and splitting (manage-money page)",
+    "Passkey login prompts, dark mode now enabled, QR 'get paid' code, invoices and shipping labels in the app (RSS reviews)",
+    "Cashback Mastercard rewards area (RSS reviews say it fails to load)"
+   ],
+   "praise_themes": [
+    "Buyer protection resolved merchant problems quickly for some users (refund within hours)",
+    "Feels safer than entering a card on unknown websites",
+    "Rewards (5% back) appreciated",
+    "A few users like the new look and dark mode"
+   ],
+   "complaints": [
+    {
+     "theme": "10.0 redesign: home dominated by ads, features removed (package tracking, ATM locator, memos), logout hard to find",
+     "count": 120,
+     "share_of_low_star": "28.3% of 424",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "About three-quarters of the launch screen is ads; balance needs scrolling",
+      "Package-tracking menu removed; must hunt through transactions to print labels",
+      "Logout button missing or off-screen on iPad after the update"
+     ]
+    },
+    {
+     "theme": "Support: AI chat gives wrong info, chats closed early, can't reach a person",
+     "count": 73,
+     "share_of_low_star": "17.2% of 424",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "AI bot gave outdated directions; human agent repeated the bot's answer",
+      "Agent ended the chat while the user was still typing",
+      "Promised supervisor callback never happened"
+     ]
+    },
+    {
+     "theme": "Ads and marketing in push notifications; can't opt out",
+     "count": 54,
+     "share_of_low_star": "12.7% of 424",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Offers toggle switched back on without consent and pushes resumed",
+      "Card ad arrived as a notification, so the user disabled all alerts",
+      "Pop-ups pushing credit products on every open"
+     ]
+    },
+    {
+     "theme": "Bugs, app bloat and performance",
+     "count": 53,
+     "share_of_low_star": "12.5% of 424",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "App grew to about 800 MB (13 low-star reviews complain about size)",
+      "Feels like a slow web wrapper; screens with no back/close button",
+      "Cashback screen stuck on an error"
+     ]
+    },
+    {
+     "theme": "Account limited/banned, funds held up to 120-180 days",
+     "count": 50,
+     "share_of_low_star": "11.8% of 424",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Freelancer permanently deactivated after one payment; funds held 180 days, no reason given",
+      "Closed as 'inactive' while actively in use",
+      "Small business restricted mid-order; document upload broken"
+     ]
+    },
+    {
+     "theme": "Login/recovery: forced passkey, repeated password resets, ID scans failing",
+     "count": 49,
+     "share_of_low_star": "11.6% of 424",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Passkey setup sheet can't be dismissed (8 reviews object to forced passkeys)",
+      "Password reset loop; must re-verify after leaving the app to read the code"
+     ]
+    },
+    {
+     "theme": "Payments failing: can't add money/link card, false scam flags, limits",
+     "count": 42,
+     "share_of_low_star": "9.9% of 424",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Purchase declined for insufficient funds while the balance covered it",
+      "Bank re-added 8 times and still not recognized"
+     ]
+    },
+    {
+     "theme": "Holds and pending payments (eCheck, 21-day new-seller holds, shifting clearance dates)",
+     "count": 40,
+     "share_of_low_star": "9.4% of 424",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Payment silently converted to eCheck; reps gave three different clearance dates",
+      "A $20 payment still not cleared after six days"
+     ]
+    },
+    {
+     "theme": "Disputes and Purchase Protection fail (tracking-only checks, evidence ignored)",
+     "count": 33,
+     "share_of_low_star": "7.8% of 424",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Wrong items delivered; claim denied because tracking said delivered",
+      "Refund reversed based on a fake tracking number",
+      "Duplicate charge refused although the merchant agreed it was a duplicate"
+     ]
+    },
+    {
+     "theme": "Fees",
+     "count": 19,
+     "share_of_low_star": "4.5% of 424",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Surprise ~3% fee on a large transfer, never reversed",
+      "Fee on receiving plus another fee to move money to the bank"
+     ]
+    },
+    {
+     "theme": "Rewards/cashback broken",
+     "count": 10,
+     "share_of_low_star": "2.4% of 424",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Cashback page can't load since the update",
+      "Cashback stores split into confusing lists"
+     ]
+    },
+    {
+     "theme": "Can't close/delete account",
+     "count": 7,
+     "share_of_low_star": "1.7% of 424",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Can't close a limited account until an old card is verified",
+      "Couldn't delete the account for years"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Klarna",
+   "app_id": "1115120118",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:320 4:11 3:12 2:25 1:132",
+   "features": [
+    "Pay in 4 interest-free, pay in full, pay in 30 days or financing (https://apps.apple.com/us/app/klarna-smarter-everyday-money/id1115120118)",
+    "Cashback up to 10% in-app (App Store) / up to 12% (https://www.klarna.com/us/klarna-app/)",
+    "Paid membership with Klarna Card, travel perks, subscriptions (App Store URL)",
+    "Klarna balance with instant refunds; savings account with interest and member APY boost (App Store URL)",
+    "Price comparison across stores; report a return to pause payments (App Store URL)",
+    "24/7 chat support; AI assistant (App Store URL; klarna.com/us/klarna-app/)",
+    "Home-screen widgets for purchases, returns and refunds; payment reminders (klarna.com/us/klarna-app/)",
+    "Approve purchases with Face ID; order tracking (release notes in App Store metadata)",
+    "Klarna Mobile phone plan $35/month (App Store URL)",
+    "Purchase power limits, one-time cards, loyalty cards from the Stocard acquisition, Apple upgrade financing (RSS reviews)"
+   ],
+   "praise_themes": [
+    "Easy to use: 63 of 331 4-5 star reviews mention easy/simple/smooth",
+    "Splitting purchases into small payments eases budget stress; used as an emergency backup",
+    "Autopay means no due-date worries; easy to pay off early (for some)",
+    "Quick virtual card creation at checkout",
+    "Feels like accountability or budgeting help (10 mentions)"
+   ],
+   "complaints": [
+    {
+     "theme": "Repayment control: can't pay in full or larger amounts, schedule/due-date errors, missed-payment alerts",
+     "count": 29,
+     "share_of_low_star": "18.5% of 157",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "New version removed the easy pay-full-balance option",
+      "Shown as overdue before the due date; separated plans caused missed payments",
+      "No payment reminder until a collections-style email arrived"
+     ]
+    },
+    {
+     "theme": "Support: escalations take weeks, callbacks never come, cases closed silently",
+     "count": 27,
+     "share_of_low_star": "17.2% of 157",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Account-linking escalation quoted at 3-4 weeks, then closed without notice",
+      "Bounced between Klarna and a gift-card issuer for two weeks"
+     ]
+    },
+    {
+     "theme": "Redesign made navigation and payments confusing",
+     "count": 24,
+     "share_of_low_star": "15.3% of 157",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Old single Manage tab replaced by a busy layout",
+      "Loyalty cards now buried several screens deep"
+     ]
+    },
+    {
+     "theme": "Fees, interest, membership, late fees and collections",
+     "count": 23,
+     "share_of_low_star": "14.6% of 157",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Sent to collections over $14 after autopay wasn't retried",
+      "Membership fee needed for a physical card"
+     ]
+    },
+    {
+     "theme": "Opaque credit decisions: purchase power slashed, denials with no reason",
+     "count": 20,
+     "share_of_low_star": "12.7% of 157",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Limit dropped from $1,033 to $366 overnight with an on-time history",
+      "815-credit-score applicant denied for the Apple upgrade program; support said it's the algorithm"
+     ]
+    },
+    {
+     "theme": "Disputes and refunds after returns/cancellations not honored",
+     "count": 19,
+     "share_of_low_star": "12.1% of 157",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Still billed for an order the merchant never received",
+      "Unauthorized hotel charge dispute denied with no investigation details"
+     ]
+    },
+    {
+     "theme": "Payments failing / payment methods not accepted",
+     "count": 12,
+     "share_of_low_star": "7.6% of 157",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Can't add a bank or debit card, then charged late fees",
+      "Credit cards refused for repayment"
+     ]
+    },
+    {
+     "theme": "Bugs/crashes",
+     "count": 12,
+     "share_of_low_star": "7.6% of 157",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "App crashes before opening for a month",
+      "Keys need several taps to register"
+     ]
+    },
+    {
+     "theme": "Funds held after a failed or cancelled order",
+     "count": 7,
+     "share_of_low_star": "4.5% of 157",
+     "data_basis": "app_store_rss_counted",
+     "paraphrased_examples": [
+      "Approved but the order failed; money held 24 hours",
+      "Cancelled-order refund held up to 14 days in the Klarna balance"
+     ]
+    }
+   ]
+  }
+ ],
+ "cross_app_themes": [
+  "Opaque automated risk decisions are the top trust-killer. Accounts closed or frozen with no stated reason: Cash App 44/181, PayPal 50/424, Venmo 46/429. Reviews explicitly saying no reason was given: Cash App 28, Venmo 25, PayPal 26. Klarna's version is unexplained purchase-power cuts and denials (20/157). Source: Apple RSS reviews counted by classify.js and subcounts.js.",
+  "Support is AI-first and loops; reaching a human is the second-biggest complaint in every app. SUPPORT theme: Venmo 133 (31%), PayPal 73, Cash App 39, Klarna 27. Reviews mentioning a bot or AI: Venmo 25, PayPal 25, Cash App 13. Escalations close silently and chats end mid-conversation.",
+  "Redesign backlash buries the core money views. Venmo 110 (26%) and PayPal 120 (28%) in this window; Venmo has 27 reviews about not finding history or balance. PayPal gave the home screen to ads; Venmo replaced the contact list with face bubbles. Reviewers ask for simple, stable layouts with history and balance always visible.",
+  "Money in limbo: holds, eCheck or bank-funded delays, 21/120/180-day reserves (Venmo 9 mentions, PayPal 9), shifting clearance dates, and pending refunds. HOLDS theme: Venmo 46, PayPal 40, Cash App 13, Klarna 7.",
+  "Scam and dispute outcomes feel automated. Scam victims are told payments can't be reversed, and protection checks look only at whether tracking says 'delivered'. SCAM plus DISPUTE themes: Cash App 35, Venmo 50, PayPal 53, Klarna 25. Evidence-ignored complaints recur.",
+  "Monetization noise in money surfaces. Ads and marketing pushes (PayPal 54, Venmo 24); a gambling ad on Venmo's payment confirmation; credit-card upsells (Klarna, PayPal, Venmo); forced passkey sheets (PayPal 8); unmutable payment sounds (Venmo 5 low-star + 3 three-star); forced repeat confetti (PayPal).",
+  "Confirmation and recipient mistakes come from UI choices. Venmo's bubble picker sent money to a same-name stranger and reviewers say decimals aren't auto-placed; PayPal's confirmation showed $1 for a $1k send; a Cash App QR led to the wrong profile. Small counts, but each costs real money.",
+  "Fee and speed dark patterns: free standard transfers fail while paid instant ones succeed (Cash App, Venmo), and an 'instant for a fee' push follows every transfer.",
+  "Account exit and recovery traps: can't delete an account while it's limited (PayPal 7, Venmo 3); onboarding screens with no back button (Cash App); recovery tied to old phone numbers (all four).",
+  "What users praise: dead-simple fast sending (Cash App, Venmo); family and teen use (Cash App, with 26 mentions in 4-5 star); a card they can design; Klarna's flexibility, autopay and early payoff when they work; PayPal's buyer protection when it delivers."
+ ],
+ "opportunities": [
+  {
+   "idea": "Reason-coded decisions. Every decline, hold, limit or human-review routing (proof-of-use verdicts and Pay with Vaultwise checkouts) shows a plain-language reason category, the exact invoice/receipt field or rule that failed, what to do next, and one-tap fix-and-resubmit plus 'ask a human reviewer'.",
+   "beats_competitors_because": "Competitors cite 'terms violations' or 'the algorithm', and their agents say they can't see the reason. Vaultwise's AI + forensics pipeline already produces structured verdicts, so it can show them. My inference: give category-level reasons for fraud signals so attackers aren't tipped off.",
+   "complaint_evidence": "ACCOUNT_CLOSED: Cash App 44/181 (24%), PayPal 50/424, Venmo 46/429. 'No reason given' mentions: Cash App 28, Venmo 25, PayPal 26. Klarna CREDIT_DECISIONS 20/157. Disputes where evidence was ignored (PayPal, Klarna).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Proof review result",
+    "Release request detail",
+    "Pay with Vaultwise checkout result",
+    "Activity detail",
+    "Notifications"
+   ]
+  },
+  {
+   "idea": "Money-in-motion tracker. A live timeline for every release, emergency Tier 2 hold and checkout (submitted, AI check, human review, released) with an ETA countdown, a push at each step, and a 'why this is held' explainer. The Tier 2 short hold is shown as a countdown the user can cancel.",
+   "beats_competitors_because": "PayPal and Venmo reviewers were given shifting or no clearance dates and found out about holds after the fact. A visible, owned countdown turns a hold from a mystery into a promise.",
+   "complaint_evidence": "HOLDS_DELAYS: Venmo 46, PayPal 40, Cash App 13, Klarna 7. Mentions of 21/120/180-day holds: Venmo 9, PayPal 9. PayPal eCheck cases with three different promised dates.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Emergency Tier 2",
+    "Release status",
+    "Home in-progress card",
+    "Notifications"
+   ]
+  },
+  {
+   "idea": "A human within reach. The AI assistant answers first but always shows 'talk to a person' with the expected wait, and hands over context into a numbered case with status, transcript and SLA. Escalations never close without notifying the user. Reuse the existing human-reviewer role.",
+   "beats_competitors_because": "Every competitor's #1 or #2 complaint is a bot loop or unreachable human; Klarna closed an escalation without telling the customer. Visible cases and SLAs build trust for a product that holds people's money.",
+   "complaint_evidence": "SUPPORT: Venmo 133/429 (31%), PayPal 73/424, Cash App 39/181, Klarna 27/157. Bot/AI mentions: Venmo 25, PayPal 25, Cash App 13.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "AI assistant",
+    "More > Help & cases",
+    "Case detail"
+   ]
+  },
+  {
+   "idea": "Stable, ad-free core. Home always shows total and per-vault balances plus the last 5 activities above the fold. Activity gets search and filters. No third-party ads or credit upsells in money screens. Keep the settled 5-tab bar fixed and introduce changes with a one-time 'what moved' hint.",
+   "beats_competitors_because": "PayPal 10.0 and Venmo's fall-2026 redesign buried balance, history and logout under promotions. Being the boring-reliable core with a delightful visual layer is the gap.",
+   "complaint_evidence": "REDESIGN_NAV: PayPal 120/424 (28%), Venmo 110/429 (26%), Klarna 24/157. Venmo can't-find-history/balance: 27. PayPal ads theme: 54.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Home",
+    "Activity",
+    "Vault detail",
+    "Tab bar"
+   ]
+  },
+  {
+   "idea": "Transactional-only notifications. Separate channels for money movement, security, reminders and product news (product news off by default), never mix marketing into money alerts, keep the app badge in sync with the in-app inbox, and offer quiet hours.",
+   "beats_competitors_because": "PayPal users disabled all alerts, including security ones, after ads arrived as pushes; Cash App users have phantom badges. Apple's App Review Guideline 4.5.4 also requires explicit opt-in before push is used for promotions (https://developer.apple.com/app-store/review/guidelines/#4.5.4), so this design avoids review risk.",
+   "complaint_evidence": "ADS_NOTIF: PayPal 54, Venmo 24, Cash App 8, Klarna 6. Ads inside push: PayPal 9. Ghost-badge complaints in Cash App low- and mid-star reviews.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Settings > Notifications",
+    "Notification inbox",
+    "Home"
+   ]
+  },
+  {
+   "idea": "Feedback you can feel and turn off. Map outcomes to distinct haptics (success when approved, warning when routed to review, error when declined), keep sound off by default or following the silent switch, and save confetti for real milestones (a vault goal reached) shown once. Provide a Sounds & Haptics settings toggle. Make the PIN pad and Pay button respond on first tap.",
+   "beats_competitors_because": "Venmo's unmutable payment jingle and flying icons, and PayPal's repeat confetti, read as noise. Tactile, opt-out feedback delivers the Opal-style delight the user wants without annoyance.",
+   "complaint_evidence": "Venmo sound/animation complaints: 5 low-star + 3 three-star. PayPal forced repeat confetti: 1. Klarna keys needing multiple taps: 1. Small counts, but they directly inform the requested haptics work.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "PIN pad",
+    "Pay with Vaultwise confirm",
+    "Proof review result",
+    "Vault goal reached",
+    "Settings > Sounds & haptics"
+   ]
+  },
+  {
+   "idea": "Merchant and amount certainty before money moves. The Pay with Vaultwise sheet shows the verified merchant legal name and logo, matched invoice lines, which vault is paying, and the amount in large digits with fixed decimals. QR scan resolves only to verified merchants, with no face-bubble pickers.",
+   "beats_competitors_because": "Vaultwise verifies the merchant invoice at payment time, the structural answer to marketplace-seller scams and misdirected payments that P2P apps can't reverse.",
+   "complaint_evidence": "SCAM_FRAUD: Cash App 23, Venmo 32, PayPal 20 (fake sellers, ticket scams, QR to the wrong profile). Venmo bubble-picker misdirection and decimal complaints; PayPal confirmation showing the wrong amount.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Pay with Vaultwise checkout sheet",
+    "Scan to pay",
+    "Merchant detail",
+    "Receipt"
+   ]
+  },
+  {
+   "idea": "Purpose-locked refunds and disputes. Refunds return automatically to the source vault, with a refund tracker. 'Report a problem' opens a guided form pre-attached with the verified invoice. While a dispute is open, the merchant payout stays pending (my design inference). Copy Klarna's 'report a return, pause payments'.",
+   "beats_competitors_because": "PayPal and Klarna disputes turn on tracking-delivered checks and lose evidence; refunds go missing. Vaultwise already holds verified invoices, so the evidence is on file from the start.",
+   "complaint_evidence": "DISPUTE_REFUND: PayPal 33, Klarna 19, Venmo 18, Cash App 12. PayPal evidence-ignored mentions: 4.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Activity detail",
+    "Refund & dispute tracker",
+    "Vault detail"
+   ]
+  },
+  {
+   "idea": "Honest payout speed. Before confirming, show the rail and exact ETA for each release or withdrawal option. Never push a paid-instant upsell after a transfer. If a free transfer fails, explain why and retry free.",
+   "beats_competitors_because": "Cash App and Venmo reviewers see free transfers fail while the paid instant ones work, and Venmo pushes an instant-fee nudge after every transfer. Being transparent here is a trust signal.",
+   "complaint_evidence": "Free-fails-but-instant-works reports (Cash App 1, Venmo 2-3). Venmo eCheck/bank-funded delay mentions: 4. Venmo instant-fee marketing push.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Release confirm",
+    "Withdraw",
+    "Emergency Tier 1"
+   ]
+  },
+  {
+   "idea": "Schedule clarity for contribution rules and Core SIP. Show an upcoming-debits calendar, remind 48 hours before each pull, and let users pay ahead, skip or pause in one tap, with no penalties and no surprise late states.",
+   "beats_competitors_because": "Klarna's top complaint is losing control of the schedule (can't pay in full, wrong overdue flags, missing reminders). Vaultwise's auto-save rules have the same failure risk.",
+   "complaint_evidence": "Klarna REPAYMENT_CONTROL: 29/157 (18.5%), plus missing-reminder complaints.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Rules (round-ups/contributions)",
+    "Invest > Core SIP",
+    "Home upcoming card",
+    "Notifications"
+   ]
+  },
+  {
+   "idea": "Login and recovery that never trap. Face ID plus in-app PIN, passkey offered but always skippable, recovery when the phone number changes (email plus ID), a back button and resume on every onboarding step, and guided ID-capture retries.",
+   "beats_competitors_because": "PayPal forces passkey sheets; Cash App users get stuck on onboarding screens with no back button; all four lock users out through old phone numbers.",
+   "complaint_evidence": "LOGIN_ONBOARD: PayPal 49, Cash App 22, Venmo 21, Klarna 8. PayPal passkey complaints: 8.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Sign in",
+    "Onboarding",
+    "Security settings",
+    "PIN pad"
+   ]
+  },
+  {
+   "idea": "Clean exit. Delete account in Settings opens a guided flow that lists locked vault balances, lets the user withdraw or transfer under vault rules, then confirms a deletion timeline, even if the account is under review.",
+   "beats_competitors_because": "PayPal and Venmo users can't close restricted accounts. Apple requires in-app account deletion (Guideline 5.1.1(v), https://developer.apple.com/app-store/review/guidelines/#5.1.1), so doing it gracefully is both compliance and trust.",
+   "complaint_evidence": "ACCOUNT_EXIT: PayPal 7, Venmo 3, Cash App 1.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Settings > Delete account"
+   ]
+  },
+  {
+   "idea": "Private by default, personal by choice. Joint-vault activity is visible to members only, with no public feed and a choice of display name. Add vault cover art and colors, alternate app icons, and light/dark/system appearance with a user override.",
+   "beats_competitors_because": "Venmo's public-by-default feed and Cash App's forced legal name draw complaints, while Cash App's card customization is a 4-5 star delight. PayPal forced dark mode and Venmo lacks it, so give users the choice. Gen Z gets expression without exposure.",
+   "complaint_evidence": "PRIVACY_SOCIAL: Venmo 11, Cash App 4. Dark-mode complaints and requests (PayPal 4, Venmo 2). Card-design praise: 5 Cash App 4-5 star mentions.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Joint vault",
+    "Profile",
+    "Vault create/edit",
+    "Settings > Appearance"
+   ]
+  },
+  {
+   "idea": "Lean, fast app. Set an install-size budget and a minimum-OS policy for the Expo build, and measure cold start.",
+   "beats_competitors_because": "PayPal is 808 MB and Venmo 705 MB in iTunes metadata (https://itunes.apple.com/search?term=paypal&entity=software&country=us), and users uninstall over it. Cash App's iOS 17 floor stranded older-iPhone users.",
+   "complaint_evidence": "PayPal app-size complaints: 13. Cash App old-iOS cut-off complaints: 3.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Global (build config)"
+   ]
+  },
+  {
+   "idea": "Rewards that land instantly. Any round-up bonus, streak or goal reward shows its accrual immediately, with rules on one screen.",
+   "beats_competitors_because": "PayPal's cashback page broke and Cash App promos weren't honored, eroding goodwill in a Gen Z-critical feature.",
+   "complaint_evidence": "REWARDS_PROMOS: PayPal 10, Cash App 8, Klarna 5.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Rules (round-ups)",
+    "Vault detail",
+    "Home"
+   ]
+  }
+ ]
+}

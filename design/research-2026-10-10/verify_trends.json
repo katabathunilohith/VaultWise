@@ -1,0 +1,157 @@
+{
+ "claims_checked": [
+  {
+   "claim": "Google Material 3 Expressive research: 46 studies, 18,000+ participants; up to 87% of 18–24s preferred expressive design; key elements spotted up to 4x faster; 45+ performed on par; context matters (banking); removing labels hurt usability; a minority prefer calmer designs.",
+   "verdict": "supported",
+   "note": "All figures match the Google Design article. Google's warning is stronger than the research summary puts it. It says expressive design 'might not be suitable for something like a banking interface'. The '45+ on par' finding is only about spotting key elements. The article calls the calm-preferring group 'a strong minority'. This is Google's own research, and the figures are 'up to' maxima, not averages.",
+   "good_source": "https://design.google/library/expressive-material-design-google-research"
+  },
+  {
+   "claim": "Only 40% of Gen Z are satisfied with their bank's digital interface design vs 81% of Boomers and Gen X (Corporate Insight, Q1 survey, n=972).",
+   "verdict": "supported",
+   "note": "Auto Remarketing (2 Jun 2025) reports 81% vs 40% 'high satisfaction' from a first-quarter survey of 972 account holders. The article does not state the survey year; Q1 2025 is an inference. It reports Gen Z being influenced by friends, family and bank values but gives no figures for those.",
+   "good_source": "https://www.autoremarketing.com/autofinjournal/corporate-insight-research-reinforces-how-differently-boomers-gen-z-see-banks/"
+  },
+  {
+   "claim": "FCA 2024 experiment (9,000+): push notifications +11% trades, points & prize draw +12%; risky-trade share +8%/+6%; 18–34s raised end-of-trading portfolio riskiness more than 35+ under every practice except flashing prices.",
+   "verdict": "supported",
+   "note": "Confirmed in the Research Note PDF. Caveats that matter for the spec: (1) flashing prices and the trader leaderboard did NOT significantly increase the number of trades; (2) no treatment raised end-of-trading portfolio risk across all participants; (3) the body text gives +3.5pp (10%) for the push-notification risky-trade share, while the summary says 8%; (4) the leaderboard only raised shares bought (+6%) and trading among low-financial-literacy users.",
+   "good_source": "https://www.fca.org.uk/publication/research-notes/research-note-digital-engagement-practices-trading-apps-experiment.pdf"
+  },
+  {
+   "claim": "The SEC's 2021 request for comment listed streaks, points, leaderboards, celebrations and chatbots as digital engagement practices.",
+   "verdict": "partly_supported",
+   "note": "The cited press release (2021-167, 27 Aug 2021) names only 'behavioral prompts, differential marketing, game-like features'. The list comes from the request for comment itself (Release 34-92766). That release lists 'games, streaks and other contests with prizes; points, badges, and leaderboards; notifications; celebrations for trading; ... chatbots'. It also names 'paper trading (i.e., simulated trading) competitions' under points and leaderboards. That bears directly on the Satellite practice mode.",
+   "corrected_claim": "SEC Release 34-92766 (Aug 2021) lists streaks, points, badges, leaderboards, trading celebrations, chatbots and paper-trading competitions as DEPs.",
+   "good_source": "https://www.sec.gov/rules/other/2021/34-92766.pdf"
+  },
+  {
+   "claim": "Massachusetts settled with Robinhood in Jan 2024 for $7.5M; Robinhood agreed to stop celebratory imagery tied to trading frequency, push notifications highlighting specific lists, and game-of-chance features, for Massachusetts customers.",
+   "verdict": "partly_supported",
+   "note": "WealthManagement (18 Jan 2024) confirms the $7.5M and all three practices, plus list disclosures and a compliance consultant. It does not say the limits apply only to Massachusetts customers. Robinhood disputes that the app is gamified, and the order makes no finding of a violation.",
+   "good_source": "https://www.wealthmanagement.com/regulation-compliance/robinhood-pays-7-5m-to-settle-massachusetts-gamification-charge"
+  },
+  {
+   "claim": "Daily framing ('$5 a day' vs '$150 a month') roughly quadrupled sign-ups to a recurring savings plan in a fintech app and eliminated the income gap (Hershfield, Shu & Benartzi).",
+   "verdict": "supported",
+   "note": "The SSRN working paper abstract (Jan 2018, with Acorns) says daily framing 'quadruples' enrolment. Under monthly framing, three times as many top-income as bottom-income users enrolled; under daily framing the gap disappeared. The Marketing Science DOI page returned 403, so the published version's volume and issue were not checked.",
+   "good_source": "https://anderson-review.ucla.edu/wp-content/uploads/2021/03/Hershfield_Shu_Benartzi_2018_SSRN-id3097468.pdf"
+  },
+  {
+   "claim": "Ashraf, Karlan & Yin (QJE 2006): 202 of 710 offered took up (28.4%); balances +81 percentage points vs control after 12 months; no crowding out.",
+   "verdict": "supported",
+   "note": "The ISPS abstract confirms 710 offered, 202 (28.4%) took up, and +81 pp for the group assigned to treatment (intent-to-treat). J-PAL's summary describes it differently: a 1,777-client sample, roughly half assigned to commitment, 28% take-up, and balances up 82%. Context: rural Philippines bank clients, so carrying this over to Gen Z apps is an inference.",
+   "good_source": "https://isps.yale.edu/research/publications/isps06-009"
+  },
+  {
+   "claim": "Goal-gradient (Kivetz, Urminsky & Zheng, JMR 2006): a 12-stamp card with 2 pre-filled stamps was completed faster than a 10-stamp card; acceleration predicts re-engagement.",
+   "verdict": "supported",
+   "note": "JMR Vol. 43 (Feb 2006) 39–58. The abstract confirms illusory progress (12-stamp card with 2 bonus stamps) and that acceleration predicts retention and faster re-engagement. Interpurchase times fell 20% toward the reward.",
+   "good_source": "https://business.columbia.edu/sites/default/files-efs/pubfiles/1200/goalgradient.pdf"
+  },
+  {
+   "claim": "Silverman & Barasch, JCR 49(6) 2023, seven studies: broken streaks cause drop-off, amplified by self-attribution and softened by repair; Barasch advises against failure nudges and for a new goal. Duolingo: freezes +0.38% DAU; a 7-day streak makes learners 3.6x likelier to complete.",
+   "verdict": "supported",
+   "note": "UDSpace abstract: seven studies, amplified when people attribute the break to themselves, attenuated by repair; JCR 49(6), Apr 2023, 1095–1117. CU Boulder quotes Barasch: failure-highlighting messages 'typically doesn't work', and she suggests offering a new goal. The Duolingo blog confirms +0.38% and 3.6x; the 3.6x figure is correlational.",
+   "good_source": "https://udspace.udel.edu/handle/19716/34160"
+  },
+  {
+   "claim": "Soman & Cheema (JMR 2011) found that splitting earmarked money into two accounts and adding a visual goal reminder both raised saving. Dai, Milkman & Riis (Mgmt Sci 2014) found that temporal landmarks trigger goal pursuit.",
+   "verdict": "supported",
+   "note": "Soman & Cheema: JMR 48 (Special Issue 2011) S14–S22. Laborers in rural India, paid in cash, with no bank accounts. The visual reminder was a picture of the household's children, so a user-chosen cover photo is only an analogue. Dai et al.: three archival studies (diet searches, gym visits, commitment contracts). The landmarks were a new week, month, year or semester, a birthday, and holidays.",
+   "good_source": "https://www.russellsage.org/sites/default/files/u137/jmr-C-s014-s021-online.pdf"
+  },
+  {
+   "claim": "Expo SDK 57 / RN 0.86.3 need static fonts. Variable fonts arrive in SDK 58 and fontVariationSettings in RN 0.88. @expo-google-fonts/bricolage-grotesque ships 7 static weights with no width or opsz variants.",
+   "verdict": "supported",
+   "note": "The Expo fonts guide says variable fonts work on Android and iOS 'in SDK 58 and later', with fontVariationSettings 'On React Native 0.88 (Expo SDK 58)'. The package has exactly the 200–800 weights and no width or opsz variants. mobile/package.json pins expo ~57.0.27, react-native 0.86.3 and reanimated 4.5.1. expo-haptics ~57.0.3 is ALREADY installed, as are expo-glass-effect and expo-symbols.",
+   "good_source": "https://docs.expo.dev/develop/user-interface/fonts/"
+  },
+  {
+   "claim": "Expo Haptics: on Android, impactAsync and notificationAsync go through Vibrator (not recommended), so use performAndroidHapticsAsync with 19 constants. On iOS the Taptic Engine does nothing in Low Power Mode or while the camera is active.",
+   "verdict": "supported",
+   "note": "Confirmed, including all 19 constants. The token table uses only real names (Segment_Tick, Toggle_On/Off, Keyboard_Tap, Confirm, Gesture_End, Reject, Long_Press, Drag_Start). The docs also list two more iOS no-op conditions the spec leaves out: the user has turned off system haptics, and iOS dictation is active. Android guidance confirmed: 'Given the choice of buzzy haptics or no haptics ... choose no haptics.'",
+   "good_source": "https://docs.expo.dev/versions/latest/sdk/haptics/"
+  },
+  {
+   "claim": "Reanimated defaults to ReduceMotion.System, which makes withTiming/withSpring jump straight to the end. Material motion tokens: short 50–200, medium 250–400, long 450–600 ms; emphasized easing cubic-bezier(0.2,0,0,1).",
+   "verdict": "supported",
+   "note": "Reanimated docs confirm this. Also, an infinite or even-count reversed withRepeat does not start at all, so any looping animation disappears under Reduce Motion. The Material token file confirms every duration and easing value used in the spec, including extra-long4 = 1000 ms.",
+   "good_source": "https://docs.swmansion.com/react-native-reanimated/docs/guides/accessibility"
+  },
+  {
+   "claim": "Liquid Glass HIG: not in the content layer, use sparingly, clear variant only over rich media with a 35% dimming layer, and it adapts to Reduce Transparency and Increase Contrast. iOS 26.1 added Tinted. Expo GlassView is iOS 26+ only and falls back to a plain View.",
+   "verdict": "partly_supported",
+   "note": "The HIG Materials page renders with JavaScript and could not be read, so the content-layer rule and the 35% dimming figure are NOT verified. Six Colors confirms Tinted arrived in iOS 26.1 (Nov 2025). The Expo docs confirm GlassView is iOS 26+ with a View fallback. They also warn that isLiquidGlassAvailable() can return true even when Reduce Transparency limits the effect, so check AccessibilityInfo.isReduceTransparencyEnabled().",
+   "good_source": "https://docs.expo.dev/versions/v57.0.0/sdk/glass-effect/"
+  },
+  {
+   "claim": "EU AI Act Art. 50(1): chatbots must disclose that they are AI by the first interaction, from 2 Aug 2026.",
+   "verdict": "supported",
+   "note": "The article text (artificialintelligenceact.eu) confirms the duty, the 'obvious to a reasonably well-informed person' exception, 'at the latest at the time of the first interaction', and application from 2 Aug 2026. That page marks Art. 50 as amended (Digital Omnibus), with the changed text in para. 7 (marking and labelling), not para. 1. The spec cites a secondary blog; cite the regulation instead.",
+   "good_source": "https://artificialintelligenceact.eu/article/50/"
+  },
+  {
+   "claim": "Prize-linked savings raised saving by 1% of annual income (+38%) in South Africa and was shut down by courts as gambling; US legal limits per Kearney et al.",
+   "verdict": "partly_supported",
+   "note": "Cole/Iverson/Tufano's NBER summary confirms 1% of income, +38% over mean savings, and no cannibalisation. It does NOT mention a court shutdown, so that detail is unverified by the cited source. Its US statement ('not permitted except credit unions ... Save to Win') and Kearney et al. (2010) are out of date. US federal law has since allowed PLS at banks and credit unions where state law permits (American Savings Promotion Act, Dec 2014; not checked in this pass). Apple 5.3.1–5.3.2 and Google Play's odds and selection-method disclosure are confirmed.",
+   "good_source": "https://conference.nber.org/confer/2014/HFDCf14/summaryCole.pdf"
+  },
+  {
+   "claim": "Spotify Wrapped 2025: 200M+ engaged users in about 24 hours (+19% YoY) and 500M+ shares on day one (+41%).",
+   "verdict": "partly_supported",
+   "note": "MBW confirms 200M in about 24 hours (+19%) and about 500M shares (+41%). It does not say the shares figure covers day one only.",
+   "corrected_claim": "Wrapped 2025 reached 200M engaged users in about 24 hours (+19% YoY) and about 500M shares (+41% YoY), per Spotify.",
+   "good_source": "https://www.musicbusinessworldwide.com/spotify-wrapped-campaign-hit-200m-engaged-users-in-24-hours-a-19-yoy-increase"
+  },
+  {
+   "claim": "The FTC's 2018 Venmo settlement cited public-by-default transactions and confusing privacy settings.",
+   "verdict": "partly_supported",
+   "note": "TechCrunch (27 Feb 2018) says the FTC alleged that Venmo misled users about how to keep transactions private. TechCrunch attributes the 'public by default' setting to a 2016 Texas AG settlement, not to the FTC's allegations. The FTC press release URL tried returned 404. The CNN source for Venmo dropping its global feed in July 2021 returned 451 (unreachable).",
+   "good_source": "https://techcrunch.com/2018/02/27/the-ftc-settles-with-venmo-over-a-series-of-privacy-and-security-violations/"
+  },
+  {
+   "claim": "The EU Digital Fairness Act proposal is expected around Nov 2026, and loot boxes are in scope.",
+   "verdict": "partly_supported",
+   "note": "The EP Legislative Train lists the DFA as 'Announced', expected Q4 2026, and not yet tabled. It mentions dark patterns and online gambling but NOT loot boxes, so the spec's 'Loot boxes are in scope of the DFA' is unsupported by the cited source.",
+   "good_source": "https://www.europarl.europa.eu/legislative-train/theme-protecting-our-democracy-upholding-our-values/file-digital-fairness-act"
+  },
+  {
+   "claim": "Gen Z stress and saving stats: BofA 42% paycheck to paycheck, 66% saving, 41% weekly money guilt, 81% care about being seen as responsible. Deloitte 55% delayed decisions, 53% expect improvement. Bankrate 34% no emergency savings, 29% comfortable. Reach3 58%/42% and the bank-choice ranking. CFPB withdrew 67 guidance documents.",
+   "verdict": "supported",
+   "note": "All figures and methodologies match the primary pages. BofA: Ipsos, 10–28 Feb 2026, 1,133 Gen Z aged 18–29, ±3.0. Deloitte: 22,595 respondents, 44 countries, 24 Nov 2025–15 Jan 2026. Bankrate: SSRS, 16–19 May 2025, n=1,030, published 4 Feb 2026. Reach3: n=450, ages 18–34, 19 Mar 2026. CFPB: announced 9 May 2025, and the 2023 abusiveness statement was included. The Credit Karma 'money dysmorphia' 43% figure comes from a Dec 2023 Qualtrics poll of 1,006 adults, so it is older and its Gen Z subsample is small.",
+   "good_source": "https://newsroom.bankofamerica.com/content/newsroom/press-releases/2026/05/bofa-study-finds-fewer-gen-z-rely-on-family-for-financial-assist.html"
+  },
+  {
+   "claim": "J.D. Power 2026 Millennial & Gen Z Checking Satisfaction Study (n=23,386; fintechs 20% of primary relationships vs 28% of new accounts; Gen Z score 701; 14 of 32 KPIs depend on awareness).",
+   "verdict": "source_unreachable",
+   "note": "jdpower.com returned 403 on both URL variants, and the web-search budget was used up, so none of these figures could be checked. Treat them as unverified.",
+   "good_source": "https://www.jdpower.com/business/press-releases/2026-u-s-millennial-gen-z-checking-satisfaction-study/"
+  },
+  {
+   "claim": "Robinhood removed its trade confetti on 31 Mar 2021 under scrutiny.",
+   "verdict": "source_unreachable",
+   "note": "CNBC returned 403. The removal is widely reported but was not verified here. The Massachusetts settlement source does confirm the related restriction on celebratory imagery.",
+   "good_source": "https://www.cnbc.com/2021/03/31/robinhood-gets-rid-of-confetti-feature-amid-scrutiny-over-gamification.html"
+  }
+ ],
+ "spec_corrections": [
+  "Section 0 / organising principle: quote Google accurately. Google says expressive design 'might not be suitable for something like a banking interface'. Present the 87% as an 'up to' maximum from Google's own internal research, not as evidence that Gen Z wants expressive banking. Keep the 'calm core' rule as the stronger constraint.",
+  "Pattern 17: change 'The FCA found leaderboards and points change financial behaviour'. In the FCA experiment the trader leaderboard did NOT significantly increase the number of trades; it raised shares bought by 6% and raised trading among low-literacy users. Only push notifications (+11%) and points & prize draw (+12%) raised trade counts.",
+  "Pattern 19 and the Don't list: add that no treatment raised end-of-trading portfolio risk overall. Say instead that 18–34s ended with riskier portfolios under every practice except flashing prices, and that push notifications and points raised the share of risky trades. Note that the FCA note itself gives two figures for push notifications (8% in the summary, 3.5pp/10% in the body).",
+  "Pattern 19 (Satellite practice mode): cite SEC Release 34-92766 rather than press release 2021-167. Add a rule: no paper-trading competitions, leaderboards or badges, because the SEC request for comment names 'paper trading competitions' under points and leaderboards.",
+  "Don't list (Massachusetts): remove 'for Massachusetts customers' unless the consent order is checked. Note that Robinhood admitted no violation. The settlement date is 18 Jan 2024.",
+  "Pattern 14: change '500M+ shares on day one' to 'about 500M shares (+41% YoY)'. The day-one timing is not supported.",
+  "Pattern 6: expo-haptics ~57.0.3 is already in mobile/package.json, so delete '(not yet installed)'. Add the extra iOS no-op conditions: haptics are also silent when the user has turned off system haptics and while dictation is active. On Android, success, commit, milestone and goal all map to Confirm, so the milestone and goal tokens are indistinguishable there; either accept that or compose a custom VibrationEffect primitive (not buzzy one-shots).",
+  "Pattern 15: the HIG 35% dimming figure and the 'no glass in the content layer' rule could not be verified (the page is JavaScript-rendered). Mark them unverified until re-read. Add: isLiquidGlassAvailable() can return true while Reduce Transparency limits the effect, so also check AccessibilityInfo.isReduceTransparencyEnabled() before choosing glass or a solid surface.",
+  "Pattern 20: the US legal context is out of date. Kearney 2010 and the Cole 2014 summary predate US federal law allowing prize-linked savings at banks and credit unions where state law permits (American Savings Promotion Act, Dec 2014; check this). The South African 'shut down by courts' detail is not in the cited source; cite the court ruling directly or drop it.",
+  "Pattern 17 and the Don't list (Venmo): reword to say the FTC alleged Venmo misled users about how its privacy settings worked. TechCrunch attributes 'public by default' to the 2016 Texas AG settlement. The July 2021 global-feed removal is unverified (CNN unreachable).",
+  "Don't list (loot boxes): drop 'Loot boxes are in scope of the EU Digital Fairness Act'. The EP page lists the DFA as announced for Q4 2026 and not yet tabled, covering dark patterns and online gambling, with no mention of loot boxes. Cite the Massachusetts and SEC game-of-chance language instead.",
+  "Pattern 13 / Don't list (AI Act): cite the regulation text (Art. 50(1), applies from 2 Aug 2026, 'at the latest at the time of the first interaction') rather than the secondary blog. Note that Art. 50 has been amended by the Digital Omnibus, with the visible change in para. 7 (marking and labelling); re-check the final text on EUR-Lex.",
+  "Patterns 2, 3, 8 and the drip-pricing row: every J.D. Power 2026 figure (n=23,386; 20%/28%; 701; 14 of 32 KPIs) is UNVERIFIED (source 403). Mark it [unverified] or replace it with a reachable source before sharing.",
+  "Pattern 1: say that Soman & Cheema's visual reminder was a picture of the household's children, given to cash-paid laborers in rural India. A user cover photo is an analogue, not a replication; label it [I].",
+  "Pattern 9: say the Ashraf et al. 81pp effect is intent-to-treat for clients assigned to treatment (take-up was 28.4%), in the rural Philippines.",
+  "Section 0: the 43% 'money dysmorphia' figure comes from a Dec 2023 Credit Karma/Qualtrics poll of 1,006 US adults, whose Gen Z subsample is small. Credit Karma defines it as a distorted view of one's finances, not 'feeling behind whatever their real position'. Add the date and the caveat."
+ ],
+ "overall": "Most of the decision-critical claims hold up against primary sources. These are confirmed: the behavioural-science citations (Kivetz 2006, Dai/Milkman/Riis 2014, Soman & Cheema 2011, Ashraf et al. 2006, Hershfield et al., Silverman & Barasch 2023), the survey numbers (BofA, Deloitte, Bankrate, Reach3, Corporate Insight), the Google expressive-research figures, and the platform API facts (the Expo font limits at SDK 57/RN 0.86, the expo-haptics Android constants and iOS no-op conditions, Reanimated ReduceMotion defaults, Material motion tokens, Expo GlassView, Apple 5.3/4.5.4/5.1.1(v), Google Play odds disclosure). The main problems are overstatements and dated or misattributed sources. (1) The FCA leaderboard did not raise trade counts, and no practice raised end-of-trading portfolio risk overall; the age effect is real. (2) The SEC list of DEPs comes from Release 34-92766, not the press release, and it explicitly names paper-trading competitions, which matters for Satellite. (3) The Spotify 'day one' shares claim, the Massachusetts-only scope, the Venmo 'public by default' attribution and the loot-box/DFA claim are unsupported by their cited sources. (4) The prize-linked-savings US legal context is about 12 years out of date. (5) Google itself says expressive design may not suit banking. (6) The spec wrongly says expo-haptics is not installed; it is pinned at ~57.0.3. Unreachable, and so unverified: every J.D. Power 2026 figure (403), the HIG Materials specifics including the 35% dimming (JavaScript-rendered page), the Robinhood confetti CNBC piece, and the Venmo feed removal. The web-search budget was exhausted, so all checks used direct fetches of the cited URLs and locally extracted PDFs. Local file checked: C:\\\\Users\\\\shaik\\\\VaultWise\\\\mobile\\\\package.json."
+}

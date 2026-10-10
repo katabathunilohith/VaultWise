@@ -1,0 +1,812 @@
+{
+ "method_notes": "WHAT WAS FETCHED (US App Store, storefront \"us\", 2026-10-10). I found the app IDs with the iTunes Search API and checked trackName and sellerName: Cleo 1447274646 (Cleo AI Ltd), Copilot 1447330651 (Copilot Money, Inc.), Rocket Money 1130616675 (Rocket Money), YNAB 1010865877 (You Need A Budget LLC), Monarch 1459319842 (Monarch Money, Inc.). For each app I downloaded RSS customerreviews pages 1–10 (sortby=mostrecent). All 50 pages returned 50 entries, so there were no failures and no web fallback was needed. That gives 500 reviews per app, 2,500 in total, deduplicated by review id.\n\nDate windows differ a lot because posting rates differ. Cleo covers 2026-08-25 to 10-08, Rocket 2026-08-04 to 10-08, Monarch 2026-02-28 to 10-08, YNAB 2026-01-06 to 10-08, and Copilot 2025-10-24 to 2026-10-08.\n\nThe RSS star mix is far more negative than each app's lifetime average from the Search API (Cleo 4.68 from 264,974 ratings; Copilot 4.75 from 30,569; Rocket 4.47 from 397,843; YNAB 4.79 from 61,827; Monarch 4.89 from 113,335). My inference is that written reviews skew negative compared with rating-only taps. Treat the shares below as shares of complaint text, not of the user base.\n\nCLASSIFICATION. I read every 1–2 star review for each app: Cleo 251, Copilot 163, Rocket 312, YNAB 182, Monarch 140, 1,048 in total. Rocket was just over 300, so I read all of it rather than sampling. I built the codebook after the first ~60 per app, then implemented it as keyword rules in scripts/classify.js. Each review gets at most 2 themes: the top 2 by match count, with ties broken by codebook order. Reviews with no specific issue go to VAGUE.\n\nRefinement loop: (1) I printed every unassigned review and added the missed phrasings, plus three themes that emerged (repayment/debit timing, shallow insights, alerts late or noisy). (2) I made the \"headline feature\" rules app-specific (Rocket cancellation and detection; Cleo advance size). (3) I fixed false positives found in spot checks: \"subs\" matching inside \"subscription\", \"navigate\" matching \"gate\", \"locked behind account access\" counted as a paywall, and over-broad \"log in\" rules. A post-fix re-check found 45 of 47 sampled assignments correct.\n\nThe AI theme is a focus, so I adjudicated by hand every review that mentions AI (out/ai_manual_labels.json). Codes: A = AI-only support with no human escalation; B = AI feature quality (wrong, missing or overhyped, including persona tone); C = AI consent or opacity; X = mentions AI but is not an AI complaint. The AI counts reported are these hand-verified counts. They can be a third tag on a few reviews. Total: 61 genuine AI complaints out of 1,048 (A 41, B 22, C 2).\n\nPraise themes come from keyword hits among 4–5 star reviews (scripts/praise.js). I read the hits for AI, personality, motion and widgets, but praise counts are indicative and not hand-verified. A design-term scan over all 2,500 reviews found 0 mentions of haptic, vibration or taptic. Animation came up 6 times, all in YNAB (ratings 3,1,1,1,1,2), and complains about slowness or unskippable intros.\n\nFEATURES come from each app's App Store description (Search API \"description\" field), the vendors' own sites, and reviews. Sources: Cleo https://apps.apple.com/us/app/cleo-ai-cash-advance-budget/id1447274646; Copilot https://apps.apple.com/us/app/copilot-track-budget-money/id1447330651 and https://www.copilot.money/; Rocket https://apps.apple.com/us/app/rocket-money-bills-budgets/id1130616675 and https://www.rocketmoney.com/; YNAB https://apps.apple.com/us/app/ynab/id1010865877 and https://www.ynab.com/features; Monarch https://apps.apple.com/us/app/monarch-budget-track-money/id1459319842, https://www.monarch.com/ and https://www.monarch.com/pricing. meetcleo.com returned 403, so Cleo features rely on the App Store listing. Rocket's /feature/smart-savings returned 404.\n\nLIMITS. The shared web-search budget ran out during this run, so I could not consult Trustpilot, Reddit, Google Play or press. Everything here is App Store data plus vendor pages. Statements marked 'inference' are my interpretation, not documented fact.\n\nFILES. Raw JSON: C:/Users/shaik/AppData/Local/Temp/claude/C--Users-shaik-VaultWise/9e11eaa3-37f8-4e12-90a3-5e69f6c8b8c9/scratchpad/research/reviews/ai_budget/raw/. Scripts (search.js, parse.js, classify.js, dump_any.js, praise.js): .../ai_budget/scripts/. Derived output (all.json, theme_counts.json, ai_manual_labels.json, <app>-low.txt, <app>-3star.txt): .../ai_budget/out/.",
+ "apps": [
+  {
+   "name": "Cleo AI: Cash Advance & Budget",
+   "app_id": "1447274646",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:208 4:14 3:27 2:19 1:232",
+   "features": [
+    "AI money coach you chat with by text, plus real-time two-way voice (App Store listing)",
+    "Personality-driven AI: reviewers praise being 'roasted' and the sarcastic tone (reviews); the listing says Cleo 'has thoughts' on your spending",
+    "Cash advance of $20–$250 ($20–$100 for first-time users), max $170 disbursed per day, express fees $3.99–$14.99; advances need a Plus or Builder subscription unless requested by email (listing legal text)",
+    "High-yield savings at 2.72% interest / 2.75% APY, variable (listing)",
+    "Savings goals, 'hacks' and challenges in the Grow, Plus and Credit Builder subscriptions (listing)",
+    "Autopilot: automated money moves with a custom roadmap that adjusts to daily spending (listing)",
+    "Credit builder: Cleo Card issued by WebBank, 0% APR, $1 minimum deposit, score coaching (listing)",
+    "Debt Reset: debt dashboard, payment prioritisation and payoff plan; paid subscription required (listing)",
+    "Money IQ: weekly quiz game about your own spending with cash prizes up to $4K (listing)",
+    "Gamified learning (two 5-star reviews mention gamification)",
+    "No round-ups, receipt capture, widgets or Apple Watch mentioned in the listing or reviews; the iTunes API lists no Watch devices"
+   ],
+   "praise_themes": [
+    "The cash advance as a lifeline before payday: 61 of 222 4–5 star reviews (27%, keyword hits)",
+    "A conversational AI that feels like a 'financially responsible friend', answers questions and is kind in hard moments: 28 hits (13%)",
+    "Humour and personality ('roast me', the sarcasm is 'priceless', cute in a way that doesn't intimidate): 13 hits (6%)",
+    "Easy and user-friendly: 16 hits (7%)",
+    "Some users like AI customer service when it resolves things quickly"
+   ],
+   "complaints": [
+    {
+     "theme": "Fees and pay-to-play: subscription required before eligibility is shown, plus per-draw express fees",
+     "count": 87,
+     "share_of_low_star": "34.7% of 251 1–2★",
+     "paraphrased_examples": [
+      "Paid a ~$15 monthly fee plus an instant-transfer fee to borrow $20, so the fees nearly equalled the advance",
+      "Charged a subscription before learning whether they qualified at all",
+      "Each daily draw carries its own fee, so total fees approach the size of the advance"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Headline promise underdelivers: '$250' advertised but $20–$30 offered, limit drip-fed in daily increments, limit drops after on-time repayment",
+     "count": 72,
+     "share_of_low_star": "28.7%",
+     "paraphrased_examples": [
+      "Approved for $200 but could only take $40 every 24 hours, each with a fee",
+      "Repaid early and the next limit fell from ~$500 to $160 with no explanation",
+      "Ads push $250, yet a decent earner was offered $20"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Unexpected or unauthorized debits, can't cancel, refund refused",
+     "count": 53,
+     "share_of_low_star": "21.1%",
+     "paraphrased_examples": [
+      "Kept charging after the subscription was cancelled; refund denied",
+      "Took money before the agreed date and caused overdraft fees",
+      "Re-added a removed bank account without permission"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Support unresponsive or slow; can't reach a person; no phone line",
+     "count": 30,
+     "share_of_low_star": "12.0%",
+     "paraphrased_examples": [
+      "Waited weeks on a ticket and only one ticket can be open at a time",
+      "Agent closed the chat without resolving the issue"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "AI assistant quality: AI gatekeeps support with no human escalation, persona tone, opaque AI-set limits",
+     "count": 18,
+     "share_of_low_star": "7.2% (hand-verified: 16 AI-only support, 3 AI feature or persona, 1 opaque AI decision; the keyword top-2 count was 14)",
+     "paraphrased_examples": [
+      "AI refuses to escalate to a human and there is no number to call",
+      "Asked repeatedly to fix a wrong repayment date; the AI said nothing could be done",
+      "Called the AI sarcastic and disrespectful",
+      "Advance size depends on whatever the AI decides, with no reason given"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Repayment date wrong or debit timing ignores the real pay schedule (freelancers, weekends)",
+     "count": 10,
+     "share_of_low_star": "4.0% (14 any-mention)",
+     "paraphrased_examples": [
+      "Repayment dates wrong from day one and can't be corrected",
+      "Freelancers can't set their own repayment date"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Can't access own money (card or savings held, funds 'hostage')",
+     "count": 7,
+     "share_of_low_star": "2.8%",
+     "paraphrased_examples": [
+      "Money sat in Cleo savings for over a month and couldn't be withdrawn",
+      "Couldn't spend own deposited money to pay rent"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "App bugs: blank or white screens at the borrow step, crashes, login codes not arriving",
+     "count": 13,
+     "share_of_low_star": "5.2%",
+     "paraphrased_examples": [
+      "Screen goes white at the final loan step, for months",
+      "Email login code never arrives"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Vague (just 'scam' or 'terrible')",
+     "count": 40,
+     "share_of_low_star": "15.9%",
+     "paraphrased_examples": [
+      "One-word 'scam' or 'trash' reviews"
+     ],
+     "data_basis": "app_store_rss_counted"
+    }
+   ]
+  },
+  {
+   "name": "Copilot: Track & Budget Money",
+   "app_id": "1447330651",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:235 4:50 3:52 2:52 1:111",
+   "features": [
+    "Apple Editor's Choice; Apple Design Award finalist 2024 (App Store listing)",
+    "'Copilot Intelligence' auto-categorisation that learns your habits (listing; copilot.money)",
+    "Smart, adaptive budgets with category rollovers (listing; copilot.money)",
+    "Subscription and recurring-charge tracking (listing)",
+    "Savings goals linked to accounts and transactions (listing)",
+    "Cash flow visuals; investment tracking with intraday updates and index benchmarks (listing)",
+    "Custom alerts for overdraft fees, unusual spending and paydays (listing)",
+    "Claims real-person in-app support (listing), though 6 low-star reviews say they got a bot",
+    "iOS home-screen widgets (praised in 5 reviews; one asks for a white widget background)",
+    "Web, iPhone, iPad and Mac; US institutions only (listing)",
+    "Pricing: $7.92/month or $95/year, 1-month free trial, no ads, doesn't sell data (copilot.money)",
+    "Links to a separate 'money assistant' agent site (copilot.money); one 1★ says the agent beta waitlist never moves",
+    "No Apple Watch (one 5★ asks for it); no receipt capture, round-ups or money movement (inference: read-only aggregator)"
+   ],
+   "praise_themes": [
+    "Beautiful, smooth, delightful design: 99 of 285 4–5 star reviews hit design terms (35%); one calls it among the smoothest iOS apps; another says the design gamifies finances and makes them fun",
+    "Clarity of budget and spending: 113 hits (40%)",
+    "Categorisation that learns: 53 hits (19%)",
+    "Investments and net worth in one place: 37 hits (13%)",
+    "Widgets that show live spending: 5 mentions",
+    "Couples use: 32 hits (11%)"
+   ],
+   "complaints": [
+    {
+     "theme": "Bank connection and sync failures (Plaid; Amex, Chase, Schwab, Fidelity, USAA, Apple Card)",
+     "count": 44,
+     "share_of_low_star": "27.0% of 163 1–2★",
+     "paraphrased_examples": [
+      "Connections break again days after support repairs them",
+      "A bank issue waited 6+ months for a fix",
+      "Constant reconnecting defeats the purpose"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Data accuracy: duplicates, spending imported as credits, paycheck tagged as insurance, categorisation doesn't learn",
+     "count": 36,
+     "share_of_low_star": "22.1%",
+     "paraphrased_examples": [
+      "Every Discover transaction duplicated",
+      "All bank transactions imported as positive credits",
+      "Have to fix the same transactions every month"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Support slow, bot-first, or never replies",
+     "count": 32,
+     "share_of_low_star": "19.6%",
+     "paraphrased_examples": [
+      "In-app chat is the only channel and is unreachable when the app won't load",
+      "Bot said to wait 24 hours, then nobody replied"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Crashes or the app won't open (spike after the June 2026 update)",
+     "count": 29,
+     "share_of_low_star": "17.8%",
+     "paraphrased_examples": [
+      "After an update the app only shows the logo on a blank screen",
+      "Stuck on a loading spinner"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Missing features: rename and bulk-edit rules, manual debt accounts, historical import, income categories, annual filters, reports",
+     "count": 25,
+     "share_of_low_star": "15.3%",
+     "paraphrased_examples": [
+      "Can't create a rule to rename messy merchant strings",
+      "Can't add transactions to manual credit card accounts",
+      "No annual reporting"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "AI quality: 'AI' overhyped, categorisation not smart, AI budget-balancing broken, agent never ships, AI support hallucinates",
+     "count": 17,
+     "share_of_low_star": "10.4% (hand-verified: 11 AI feature quality, 6 AI support bot)",
+     "paraphrased_examples": [
+      "The name implies AI but it's just a tracker; the AI can't even pull card due dates",
+      "Tapping the AI 'balance budget' set a grocery budget of $3",
+      "The AI support agent hallucinates and there's no human"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Confusing UX: budget math, navigation, can't hide tabs; pretty but low utility",
+     "count": 22,
+     "share_of_low_star": "13.5%",
+     "paraphrased_examples": [
+      "Negatives shown in the same colour as positives",
+      "Flashy dashboard but no income-minus-expenses math"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Price and paywall shown only after linking all accounts; no free tier",
+     "count": 18,
+     "share_of_low_star": "11.0%",
+     "paraphrased_examples": [
+      "Linked every account, then saw the pricing tiers. Show prices first",
+      "An hour of setup before learning it's paid"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Stagnation: no meaningful new features for the price",
+     "count": 8,
+     "share_of_low_star": "4.9%",
+     "paraphrased_examples": [
+      "Same app for two years at ~$95 per year"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Nagging review prompts",
+     "count": 8,
+     "share_of_low_star": "4.9%",
+     "paraphrased_examples": [
+      "Asked for a rating every time the app opens, so dropped to 1 star"
+     ],
+     "data_basis": "app_store_rss_counted"
+    }
+   ]
+  },
+  {
+   "name": "Rocket Money - Bills & Budgets",
+   "app_id": "1130616675",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:126 4:23 3:39 2:52 1:260",
+   "features": [
+    "Find and cancel forgotten subscriptions; Premium adds a cancellation assistant (listing; rocketmoney.com)",
+    "Bill negotiation concierge (listing); reviewers report a fee of a share of the 'savings'",
+    "Rowan: AI financial assistant that lives in text messages, warns of price increases and low balances, and cancels or negotiates via workflows with human verification; built with Anthropic; Premium+ (listing)",
+    "Budgets by category with alerts near limits (listing)",
+    "Automated savings ('put your savings on autopilot'); banking by nbkc bank, Member FDIC (listing; rocketmoney.com)",
+    "Savings goals funded from linked checking (reviews)",
+    "Credit score monitoring, full report, net worth (listing; rocketmoney.com)",
+    "Home-screen widget showing balances (reviews)",
+    "Pay-what-you-choose Premium: reviewers describe sliders and $3–$12/month price points (reviews; I could not verify the current price on the vendor page)",
+    "No Apple Watch, receipt capture or round-ups mentioned"
+   ],
+   "praise_themes": [
+    "One place to see bills and spending: 26 of 149 4–5 star reviews (17%)",
+    "Found forgotten subscriptions: 23 hits (15%)",
+    "Automatic savings that happens without thinking: 15 hits (10%)",
+    "Bill and payday alerts: 7 hits (5%)"
+   ],
+   "complaints": [
+    {
+     "theme": "Surprise Premium charges, charged after cancelling or deleting, auto-enrolled, refund refused",
+     "count": 109,
+     "share_of_low_star": "34.9% of 312 1–2★",
+     "paraphrased_examples": [
+      "The app that finds hidden subscriptions became the hidden subscription",
+      "Deleted the app and still billed monthly directly from the bank (ACH), not via Apple",
+      "Cancelled a week before annual renewal, charged anyway, then hit with an overdraft fee"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Headline feature fails: misses subscriptions, can't cancel most, sends you to do it yourself",
+     "count": 83,
+     "share_of_low_star": "26.6%",
+     "paraphrased_examples": [
+      "Found 3 of 16 subscriptions",
+      "Tried to cancel Netflix, Hulu, Disney and others; none could be cancelled in-app",
+      "The commercial says one tap; in reality you email the company yourself"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Paywall paradox: paying a subscription to cancel subscriptions; core features locked",
+     "count": 31,
+     "share_of_low_star": "9.9%",
+     "paraphrased_examples": [
+      "The subscription view itself is behind a subscription",
+      "Bought a subscription to save money; it cost more"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Ad fatigue and in-app upsell dark patterns (unskippable Premium promos, price sliders)",
+     "count": 27,
+     "share_of_low_star": "8.7%",
+     "paraphrased_examples": [
+      "Seven upgrade pop-ups in the first three minutes",
+      "Must manually slide the price to zero, twice, to skip paying"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Savings goals: easy to deposit, hard to withdraw; money stuck; deductions without notice",
+     "count": 14,
+     "share_of_low_star": "4.5%",
+     "paraphrased_examples": [
+      "Withdrawal from a goal kept erroring; support demanded bank statements",
+      "Deleted a savings goal and the $400 never came back",
+      "Set a goal with no warning that money would be pulled from checking"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Bank sync and relink failures",
+     "count": 34,
+     "share_of_low_star": "10.9%",
+     "paraphrased_examples": [
+      "Says connected but shows nothing",
+      "Relinking created thousands of duplicates and wiped manual edits"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Data accuracy: duplicates, miscategorisation, invented subscriptions, lost history",
+     "count": 26,
+     "share_of_low_star": "8.3%",
+     "paraphrased_examples": [
+      "Labelled a utility as entertainment",
+      "Five years of categorised history lost after an unlink"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Bill-negotiation fee disputes",
+     "count": 10,
+     "share_of_low_star": "3.2% (14 any-mention)",
+     "paraphrased_examples": [
+      "Claimed $500/yr saved, cut the bill by $10/mo, then billed $235"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "AI quality: AI-bot-only support, AI detection misses subscriptions",
+     "count": 9,
+     "share_of_low_star": "2.9% (hand-verified: 6 AI support, 3 AI feature)",
+     "paraphrased_examples": [
+      "Support is an AI bot and you can't call a person",
+      "Paid for Plus but couldn't get the AI to even show subscriptions"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Alerts late or noisy (renewal alert after the charge hits)",
+     "count": 6,
+     "share_of_low_star": "1.9%",
+     "paraphrased_examples": [
+      "Notified about an overdraft 3 days after the bank did"
+     ],
+     "data_basis": "app_store_rss_counted"
+    }
+   ]
+  },
+  {
+   "name": "YNAB",
+   "app_id": "1010865877",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:251 4:22 3:45 2:53 1:129",
+   "features": [
+    "Zero-based envelope plan ('assign every dollar') with targets and goals (listing; ynab.com/features)",
+    "Share one subscription with up to 6 people; real-time sync (listing)",
+    "Loan Planner for debt payoff (listing)",
+    "Bank import via Plaid plus manual entry; Siri shortcuts (listing)",
+    "Spending and net-worth reports (ynab.com/features)",
+    "Mobile widgets (ynab.com/features); the iTunes API lists Apple Watch devices for this app",
+    "Transaction photos and memos; new swipe-style transaction review cards with opt-out (reviews)",
+    "App icon options, budget-bar display choices, light/dark mode (one review)",
+    "Price: $14.99/month or $109/year; 34-day free trial, no card required (ynab.com/features)",
+    "Support moved to an AI chatbot first (reviews); the listing still promotes a 'freakishly nice' human team"
+   ],
+   "praise_themes": [
+    "Budget clarity and control: 135 of 273 4–5 star reviews (49%)",
+    "Life-changing, less money stress: 76 hits (28%)",
+    "Budgeting with a partner or family: 39 hits (14%)",
+    "Assigning money 'gamifies' budgeting and gives satisfying dopamine hits (several 5★)"
+   ],
+   "complaints": [
+    {
+     "theme": "Redesign churn: every update adds taps, hides key numbers (cleared toggle, assigned column, progress bars changed to rings), forced Home tab; 'change for change's sake'",
+     "count": 113,
+     "share_of_low_star": "62.1% of 182 1–2★; 58 of 182 low-star reviews were posted Jun 1–9 2026 (v26.19–26.20) and 15 on Aug 12–15 2026 (v26.30)",
+     "paraphrased_examples": [
+      "Marking a transaction cleared now needs a 'show more' tap",
+      "Bring back the progress bars; the circles can't be read at a glance",
+      "Long-time users say the designers can't be using their own app"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Gimmicky motion and onboarding: unskippable intro animation, startup confetti and cartoon, slow sliders and sparkles before you can continue",
+     "count": 8,
+     "share_of_low_star": "4.4%",
+     "paraphrased_examples": [
+      "Useless animations turn a 2-second task into nearly a minute",
+      "Couldn't skip the intro animation when setting up a new phone"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Price hikes and no free tier",
+     "count": 25,
+     "share_of_low_star": "13.7%",
+     "paraphrased_examples": [
+      "Price doubled while the app got worse"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Bank sync slow or dropped",
+     "count": 25,
+     "share_of_low_star": "13.7%",
+     "paraphrased_examples": [
+      "Imports days late; told to reset the connection again"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Data accuracy (balances wrong, duplicates, debits shown as credits)",
+     "count": 23,
+     "share_of_low_star": "12.6%",
+     "paraphrased_examples": [
+      "Debits showed up as credits after reconnecting"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Ads in a paid app (in-app promo for the founder's book)",
+     "count": 12,
+     "share_of_low_star": "6.6%",
+     "paraphrased_examples": [
+      "Paying $100+ a year and still getting pop-up ads"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "AI chatbot replaced human support",
+     "count": 7,
+     "share_of_low_star": "3.8% (hand-verified: 6 AI support, 1 'smart' auto-assign overriding the user)",
+     "paraphrased_examples": [
+      "Support now opens an AI chatbot that knows nothing",
+      "The AI agent cancelled the account instead of answering the question"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Steep learning curve / not for neurodivergent users",
+     "count": 0,
+     "share_of_low_star": "inside the UX theme; qualitative",
+     "paraphrased_examples": [
+      "Triggered shame spirals and added a job instead of acting like an assistant"
+     ],
+     "data_basis": "app_store_rss_counted"
+    }
+   ]
+  },
+  {
+   "name": "Monarch: Budget & Track Money",
+   "app_id": "1459319842",
+   "storefront": "us",
+   "reviews_analyzed": 500,
+   "star_distribution": "5:272 4:47 3:41 2:38 1:102",
+   "features": [
+    "All accounts in one view, net worth, investments, real estate (listing; monarch.com)",
+    "Flex or Category budgeting; visual progress bars; dashboard and home-screen budget widget (listing; reviews)",
+    "Savings goals with monthly contributions inside the budget (listing; monarch.com)",
+    "Household collaboration at no extra cost; invite an advisor (listing)",
+    "Bills and subscriptions calendar with notifications (listing)",
+    "Customisable reports (listing)",
+    "Receipt scanning that auto-categorises purchases (5 five-star reviews, 2026)",
+    "AI assistant ('Meet your new AI assistant'); AI merchant clean-up (reviews)",
+    "Plus tier adds forecasting, multiple income streams and deeper investment tools (monarch.com/pricing); reviewers say forecasting and retirement planning moved into Plus at $199–$299/yr",
+    "Price: $14.99/month or $99.99/year; 7-day trial (monarch.com/pricing; listing)",
+    "Listing promises no ads, but reviewers report upsell ads in the transaction view",
+    "No Apple Watch (one 5★ asks for it)"
+   ],
+   "praise_themes": [
+    "Clarity of budget and spending: 125 of 319 4–5 star reviews (39%)",
+    "Clean design and best UI after Mint: 74 hits (23%)",
+    "Couples and household finance: 45 hits (14%)",
+    "Reports and insights: 34 hits (11%)",
+    "New receipt scan praised (5 five-star mentions)",
+    "Home-screen budget widget influenced one family's spending"
+   ],
+   "complaints": [
+    {
+     "theme": "Pricing: no free tier, 7-day trial too short, and new features gated behind the Plus tier",
+     "count": 38,
+     "share_of_low_star": "27.1% of 140 1–2★; 22 of 140 low-star reviews were posted Apr 20–26 2026, at the Plus launch",
+     "paraphrased_examples": [
+      "Forecasting should be core, not behind a $299 tier",
+      "Need a card just to see what the app does"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Bank sync drops",
+     "count": 34,
+     "share_of_low_star": "24.3%",
+     "paraphrased_examples": [
+      "Keeping accounts synced is a full-time job"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Data accuracy: duplicates, AI overriding the user's categories, rules and merchants, transactions that don't exist",
+     "count": 25,
+     "share_of_low_star": "17.9%",
+     "paraphrased_examples": [
+      "The app 'hallucinated' transactions for 4 months",
+      "An AI process changed merchants and ignored the user's own rules"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Support slow or AI-gated",
+     "count": 24,
+     "share_of_low_star": "17.1%",
+     "paraphrased_examples": [
+      "Had to beg an AI to reach a person, then DM them on Instagram"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Performance: laggy, no tap feedback, queued taps open 10+ duplicate screens",
+     "count": 23,
+     "share_of_low_star": "16.4%",
+     "paraphrased_examples": [
+      "Tapping shows no loading state, so you tap again and later get a dozen copies of the screen"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Cancellation and billing: must cancel on the web, charged after trial cancellation, no renewal reminder",
+     "count": 20,
+     "share_of_low_star": "14.3%",
+     "paraphrased_examples": [
+      "Cancelled during the trial and was still charged $99"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "AI quality: AI support dead ends, wrong AI advice, opted into AI analysis without consent",
+     "count": 10,
+     "share_of_low_star": "7.1% (hand-verified: 7 AI support, 4 AI quality, 1 consent)",
+     "paraphrased_examples": [
+      "After the AI update the help chat switched to another language and gave wrong advice",
+      "Was opted into AI analysis despite tapping cancel; doesn't want their data used to train models"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Notification overload",
+     "count": 1,
+     "share_of_low_star": "0.7%",
+     "paraphrased_examples": [
+      "0 notifications one day, 100+ the next"
+     ],
+     "data_basis": "app_store_rss_counted"
+    },
+    {
+     "theme": "Privacy: Facebook/Meta trackers in a paid app",
+     "count": 6,
+     "share_of_low_star": "4.3%",
+     "paraphrased_examples": [
+      "A paying user found Meta trackers embedded in the app"
+     ],
+     "data_basis": "app_store_rss_counted"
+    }
+   ]
+  }
+ ],
+ "cross_app_themes": [
+  "Trust in money movement is the biggest single driver of 1-star reviews. Unexpected or unauthorised charges, charges after cancelling, and refused refunds account for 197 of 1,048 low-star reviews (Rocket 109, Cleo 53, Monarch 20, YNAB 9, Copilot 6). Cleo adds 10 about repayment dates that ignore real pay schedules.",
+  "The 'pay to save' paradox. Fees or paywalls appear in 199 of 1,048 low-star reviews (Cleo 87, Monarch 38, Rocket 31, YNAB 25, Copilot 18). Showing the price only after account linking or KYC is called out specifically (Copilot, YNAB, Cleo).",
+  "Overpromised headline features. Rocket's 'find and cancel' (83) and Cleo's '$250 advance' (72) generate a quarter of each app's low-star reviews, while marketing keeps repeating the promise.",
+  "Bank aggregation is fragile and erodes trust in the numbers. 144 low-star reviews cite sync or linking failures and 115 cite data errors (duplicates, wrong signs, miscategorisation, lost history), across all five apps.",
+  "The dominant AI complaint is AI as a support gatekeeper. 41 of 61 hand-verified AI complaints are about AI-only support with no human escalation; 22 are about AI feature quality (categorisation that doesn't learn, wrong advice, overwriting the user's edits, overhyped 'AI'); 2 are about consent or opacity. Copilot's and YNAB's listings still advertise human support while reviewers report a bot (inference: a credibility gap).",
+  "AI with personality wins when it is warm and optional. Cleo's conversational, roast-style AI drives praise (28 AI-helpful and 13 personality hits in 4–5★), but one 1★ found it sarcastic and disrespectful during money stress.",
+  "Design delight is praised only when it costs no time. Copilot's design is its top praise theme (35% of 4–5★). Meanwhile 62% of YNAB's low-star reviews attack redesigns that add taps, and 8 attack unskippable or slow animations. Monarch users punish missing tap feedback.",
+  "Haptics are not mentioned once across 2,500 reviews (0 hits for haptic, vibration or taptic). Animation is mentioned only in YNAB, mostly negatively. Inference: users notice motion only when it slows them down, so haptics should confirm state, not decorate.",
+  "Savings that are easy to put in and hard to take out destroy trust: Rocket 14 and Cleo 7 low-star reviews describe money stuck in goals or savings, extra verification demands, or deductions without notice. This is the exact risk area for Vaultwise's locked vaults.",
+  "Cancelling and leaving is hard: web-only cancellation (Monarch), billing via ACH outside Apple (Rocket), no in-app delete (Copilot, YNAB). Reviewers treat this as a dark pattern in a money app.",
+  "Notifications fail both ways: 100+ in a day (Monarch), alerts after the charge has already hit (Rocket), review-prompt nagging (Copilot 8).",
+  "Couples and household features are a consistent praise driver (Monarch 45, YNAB 39, Copilot 32 hits in 4–5★). Monarch's receipt scan is newly praised, which supports Vaultwise's receipt and invoice capture."
+ ],
+ "opportunities": [
+  {
+   "idea": "'No surprise money movement' contract. Every scheduled debit (contributions, round-ups, SIP buys, emergency repayments, subscription renewal) appears 24–48h ahead on Home as an 'Upcoming moves' card with a push notification, offers one-tap skip or pause, and leaves a receipt afterwards. Remind 3 days before any trial or plan renewal.",
+   "beats_competitors_because": "Rocket, Cleo and Monarch reviewers mostly learn about charges from their bank app afterwards. Vaultwise would make every movement visible and reversible beforehand.",
+   "complaint_evidence": "Unexpected or unauthorised charges: Rocket 109, Cleo 53, Monarch 20, YNAB 9, Copilot 6 (197 of 1,048 low-star). Cleo repayment-timing 10. Rocket late alerts 6.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Home",
+    "Vault detail",
+    "Contribution rules / round-ups",
+    "Invest (Core SIP)",
+    "Notifications",
+    "Settings > Plan & billing"
+   ]
+  },
+  {
+   "idea": "AI assistant with a guaranteed human exit. Show a persistent 'Talk to a person' path after 2 unresolved turns, or immediately for money-missing, fraud, locked-funds or emergency topics. Show a ticket timeline with an ETA. For proof-of-use declines, the AI explains which line of the invoice failed and offers one-tap appeal to the human reviewer that already exists in the pipeline.",
+   "beats_competitors_because": "Cleo, YNAB, Monarch, Copilot and Rocket all route support through bots that can't escalate. Vaultwise already has a human-review step, so it can promise escalation honestly.",
+   "complaint_evidence": "41 of 61 hand-verified AI complaints are AI-only support (Cleo 16, Monarch 7, Copilot 6, Rocket 6, YNAB 6). Unresponsive support: 124 low-star across apps.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "AI assistant chat",
+    "Proof review result",
+    "Help & support",
+    "Emergency"
+   ]
+  },
+  {
+   "idea": "Transparent release rules and a withdrawal status tracker. Before the first deposit, the vault shows exactly what unlocks money (proof types, Tier 1/Tier 2 limits, hold length) as deterministic rules, not AI-decided amounts. Each withdrawal or proof shows a tracker: Submitted → AI read → (Human review) → Released, with an ETA.",
+   "beats_competitors_because": "Rocket goals are 'easy in, hard out' and Cleo limits change unpredictably. Vaultwise locks money by design, so predictability is the trust guarantee that makes locking acceptable.",
+   "complaint_evidence": "Savings stuck or withdrawal problems: Rocket 14, Cleo 7. Cleo's fluctuating, drip-fed limits: 72. Cleo opaque AI-set limit: 1. Monarch AI consent: 1.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Create vault wizard",
+    "Vault detail",
+    "Withdrawal / proof submission",
+    "Emergency tiers"
+   ]
+  },
+  {
+   "idea": "Price before personal data. Show the plan and price on the second onboarding screen, before email sign-in or bank linking. Keep core vaults free. Never require payment to see whether emergency access applies.",
+   "beats_competitors_because": "Copilot, YNAB and Cleo users say they did an hour of setup or linking before seeing the price. Doing the opposite is cheap and directly addresses a repeated trust hit.",
+   "complaint_evidence": "Fees and paywall: 199 low-star (Cleo 87, Monarch 38, Rocket 31, YNAB 25, Copilot 18), including explicit 'show prices first' complaints in Copilot and YNAB, and Cleo's 'pay before eligibility'.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Onboarding",
+    "Plan / paywall",
+    "Settings > Plan & billing"
+   ]
+  },
+  {
+   "idea": "Position the Emergency tab as a no-fee alternative to cash advances. Tier 1 is instant access to your own Health vault and Tier 2 uses PIN plus a short hold, with no express fees and no subscription gate. Use plain, calm copy on emergency screens with the AI persona turned off.",
+   "beats_competitors_because": "Cleo's 1-star reviews are dominated by fees on small advances. Vaultwise's emergency path uses the user's own money, so it can credibly promise fee-free speed.",
+   "complaint_evidence": "Cleo: fees 87 and drip-fed or low advances 72 (63% of Cleo low-star combined).",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Emergency",
+    "Onboarding value props",
+    "Home"
+   ]
+  },
+  {
+   "idea": "User-owned data. AI categorisation and invoice extraction always show what was read and how confident it is, side by side with the receipt image. User corrections become rules and AI never silently overwrites a user edit. Imports are idempotent so relinking never duplicates.",
+   "beats_competitors_because": "Monarch reviewers report AI overriding their rules and inventing transactions; Copilot and Rocket report duplicates after relinking. Showing the evidence fits Vaultwise's verified-proof model.",
+   "complaint_evidence": "Data accuracy: 115 low-star (Copilot 36, Rocket 26, Monarch 25, YNAB 23, Cleo 5). AI feature-quality complaints: 22 (Copilot 11).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Proof capture result",
+    "Invoice verification",
+    "Transaction detail",
+    "Linked accounts"
+   ]
+  },
+  {
+   "idea": "A tap budget and a stable-UI pledge. Cap core flows: add money ≤3 taps, submit proof ≤4, Tier 1 emergency ≤3, all within the bottom thumb zone. Keep motion at or under ~250ms, never block input, make it skippable, and respect Reduce Motion. Show immediate pressed-state feedback on every tap and debounce repeat taps. Ship big UI changes behind an opt-in 'try new layout' toggle.",
+   "beats_competitors_because": "YNAB loses long-time users to added taps and slow animations, and Monarch to missing tap feedback. Vaultwise can be visually richer for Gen Z without paying that time cost (inference from review evidence).",
+   "complaint_evidence": "YNAB redesign or taps: 113 (62% of its low-star), with 58 posted in the 9 days after the June 2026 release. YNAB animation and onboarding: 8. Monarch lag or queued taps: in its 23 performance complaints.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Bottom tab bar",
+    "Home",
+    "Vault detail",
+    "Emergency",
+    "Proof capture",
+    "Onboarding"
+   ]
+  },
+  {
+   "idea": "Haptics that confirm meaning. Use Expo Haptics for state changes only: success on 'money locked' and 'proof approved', warning on Tier 2 hold or decline, light selection ticks on the PIN pad and amount stepper. Provide a settings toggle and never pair haptics with delays.",
+   "beats_competitors_because": "No competitor's reviewers mention haptics. This is unclaimed territory for a 'feels premium' Gen Z signal at low cost (inference; there is no review evidence either way).",
+   "complaint_evidence": "0 haptic mentions in 2,500 reviews. 6 animation mentions, all YNAB and mostly negative. Copilot's smooth, delightful design is its top praise (99 hits).",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "PIN pad",
+    "Add money",
+    "Proof result",
+    "Emergency",
+    "Settings > Accessibility & feedback"
+   ]
+  },
+  {
+   "idea": "AI persona with a tone switch. Offer Coach (default), Hype and Straight-talk tones. Disable jokes automatically on Emergency, declined-proof and overdraft-risk screens.",
+   "beats_competitors_because": "Cleo shows personality drives Gen Z love but can feel disrespectful in hard moments. A tone switch keeps the upside without the risk.",
+   "complaint_evidence": "Cleo praise: 13 personality and 28 AI-chat hits in 4–5★. One Cleo 1★ called the AI sarcastic and disrespectful.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "AI assistant chat",
+    "Settings > Assistant"
+   ]
+  },
+  {
+   "idea": "A notification budget. Cap pushes per day, batch everything else into one daily digest, alert before contributions or bills (never after), let users mute per vault, and never ask for an App Store rating more than once per version or after a failure.",
+   "beats_competitors_because": "Monarch floods, Rocket alerts late, and Copilot nags for ratings. Calm and timely is a differentiator.",
+   "complaint_evidence": "Monarch 100+ notifications in a day; Rocket late or noisy alerts 6; Copilot review nagging 8.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Settings > Notifications",
+    "Home digest card"
+   ]
+  },
+  {
+   "idea": "Pay with Vaultwise as a headline promise Vaultwise can actually keep. Market only what the merchant integration verifiably does. At checkout, show the merchant-verified invoice, the vault debited, and the remaining balance, with a receipt stored automatically as proof.",
+   "beats_competitors_because": "Rocket's cancellation and Cleo's advance promises fail because they depend on third parties or opaque limits. Vaultwise controls both the checkout and the verification.",
+   "complaint_evidence": "Headline feature underdelivers: Rocket 83, Cleo 72.",
+   "fits_vaultwise_scope": true,
+   "effort": "L",
+   "screens_affected": [
+    "Checkout sheet",
+    "Merchant directory",
+    "Receipt / transaction detail"
+   ]
+  },
+  {
+   "idea": "Easy exits: in-app plan cancellation (or a native store-subscription deep link), account deletion in Settings (already planned), CSV export of vault history and proofs, and revoking bank links from one screen.",
+   "beats_competitors_because": "Monarch forces cancellation on the web, Rocket bills by ACH outside Apple, and Copilot and YNAB make deletion hard. A one-screen exit is a trust signal in itself.",
+   "complaint_evidence": "Cancellation and billing complaints in Monarch (20) and Rocket (109). Copilot and YNAB deletion complaints. Rocket CSV-export complaint.",
+   "fits_vaultwise_scope": true,
+   "effort": "S",
+   "screens_affected": [
+    "Settings > Account",
+    "Settings > Plan & billing",
+    "Linked accounts"
+   ]
+  },
+  {
+   "idea": "Bank-link health panel: each linked account shows last-synced time and status, guided reconnect, and a manual-entry fallback, so a vault contribution never silently fails.",
+   "beats_competitors_because": "Every competitor loses users to silent sync failures. Vaultwise only needs a funding link, so it can keep the surface small and transparent.",
+   "complaint_evidence": "Bank sync: 144 low-star (Copilot 44, Rocket 34, Monarch 34, YNAB 25, Cleo 7).",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Linked accounts",
+    "Home",
+    "Contribution rules"
+   ]
+  },
+  {
+   "idea": "Joint vaults done right: the partner joins free, invitation status is visible, there is a resend option, and approval rules apply for withdrawals from shared vaults.",
+   "beats_competitors_because": "Monarch and YNAB win praise for couples features, but Monarch has invitation and shared-card duplicate bugs. Vaultwise adds locked, purpose-bound joint goals that the others lack.",
+   "complaint_evidence": "Praise: Monarch 45, YNAB 39, Copilot 32 couples hits in 4–5★. Monarch complaints: household invite won't send; duplicate transactions make family sharing unusable.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "Joint vault",
+    "Invite partner",
+    "Withdrawal approval"
+   ]
+  },
+  {
+   "idea": "Home-screen and lock-screen widgets for vault progress and a one-tap 'Emergency' shortcut.",
+   "beats_competitors_because": "Copilot and Monarch users praise widgets as behaviour nudges; none offers an emergency shortcut.",
+   "complaint_evidence": "Praise: Copilot 5 and Monarch 1 widget mentions. Requests for Apple Watch in Copilot and Monarch 5★ reviews.",
+   "fits_vaultwise_scope": true,
+   "effort": "M",
+   "screens_affected": [
+    "iOS/Android widgets",
+    "Emergency deep link"
+   ]
+  }
+ ]
+}

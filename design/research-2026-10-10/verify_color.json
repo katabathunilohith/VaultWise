@@ -1,0 +1,103 @@
+{
+ "claims_checked": [
+  {
+   "claim": "Lazyweb Research (2026-07-07): 520 design systems, 51.3% default dark, mobile 71% dark, web 68% light; finance 22 light / 20 dark of n=42 (directional); entertainment about 90% dark.",
+   "verdict": "partly_supported",
+   "note": "Both Lazyweb pages exist and confirm 520 systems, 267/520 = 51.3% dark, mobile 71% dark, web 68% light, date 2026-07-07, author Ali Abouelatta, and finance 22 light vs 20 dark (n=42) labelled 'directional'. The 'entertainment about 90% dark' figure is not on the cited overview page, and no source is given for it. The finance page lists Cash App as #00C853 on #000000, while the spec cites Lazyweb as a source for Cash App #00D64B/#00D632. Lazyweb is a design-system aggregator, so this measures shipped design systems, not user behaviour.",
+   "corrected_claim": "Lazyweb (2026-07-07, n=520): mobile 71% dark-default, web 68% light, finance 52/48 light/dark (n=42, directional). No sourced entertainment figure.",
+   "good_source": "https://www.lazyweb.com/research/what-percent-of-apps-default-to-dark-mode.md"
+  },
+  {
+   "claim": "Violet is the least crowded signature hue; only 1 of 23 apps (Jar) uses it, so there is 'little competition'.",
+   "verdict": "unsupported",
+   "note": "The research's own source contradicts this. BFA Global says most fintech brand colours are purple or blue, and that this crowding makes it hard for new fintechs to stand out. 1 of 23 is an artefact of the sample. India is one of Vaultwise's 8 markets, and PhonePe, India's dominant UPI payments app, uses purple #5F259F (confirmed in phonepe.com logo CSS). Its OKLCH hue is 300.0, the same hue as Vault Violet (H300). ΔE2000 is 9.0 from the light-mode accent #7A36D0, and Jar is 3.1 from it. That matters for a 'Pay with Vaultwise' checkout button. From memory and not verified here, Nubank (#820AD1, ΔE 4.5 to #7A36D0) and Stripe (#635BFF) are also violet.",
+   "corrected_claim": "Violet and purple are crowded in fintech (BFA: most fintech brands are purple or blue). In India, PhonePe (#5F259F, same hue 300) and Jar (#7029CC) both own purple in payments and savings. The light-mode Vault Violet sits ΔE 3–9 from both.",
+   "good_source": "https://bfaglobal.com/?p=247757 ; https://www.phonepe.com/"
+  },
+  {
+   "claim": "All 123 WCAG 2.2 contrast checks pass in both themes.",
+   "verdict": "partly_supported",
+   "note": "I recomputed 22 pairs on my own (0.04045 linearisation), and every ratio matches the report: 7.46, 4.505, 3.96, 3.80, 5.98, 6.43, 4.88, 4.61, 9.71 and others. But check-palette.mjs line 50 lowers the threshold to 1.0 for 'light warningFill vs surface (badge/banner/icon)'. #F5AF20 on white is 1.90:1, and on bg #F7F6FB it is 1.77:1. Per W3C Understanding 1.4.11, a status icon without accompanying text needs 3:1, so an amber warning icon on white fails. The count of 123/123 holds only because one check was waived. Light retirement #C34E97 with a white glyph is 4.32 and dark danger text on danger-soft is 4.505; both pass, but narrowly.",
+   "corrected_claim": "122 of 123 checks pass at WCAG thresholds. Light-mode warningFill #F5AF20 is 1.90:1 on white and fails SC 1.4.11 when used as a standalone icon or graphic. It is fine only as a fill behind dark text, which is 9.71:1.",
+   "good_source": "https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html"
+  },
+  {
+   "claim": "WCAG 2.2: 4.5:1 normal text, 3:1 large text (18pt / 14pt bold), 3:1 non-text; no rounding; 0.04045 in the luminance formula.",
+   "verdict": "supported",
+   "note": "W3C Understanding 1.4.3 confirms all of this, including that 4.499:1 fails and that 0.04045 replaced 0.03928 in May 2021. Understanding 1.4.11 confirms 3:1 for UI components and graphical objects."
+  },
+  {
+   "claim": "About 1 in 12 men have colour-vision deficiency, mostly red-green (NEI). Robinhood has an 'Accessible colors' toggle and theme options of light, dark, market hours and system.",
+   "verdict": "supported",
+   "note": "NEI gives 1 in 12 men and says red-green is the most common type. Robinhood's help article confirms the 'Accessible colors' toggle for red-green colour blindness and the four theme options. I checked colorlib.mjs: the Machado 2009 severity-1.0 matrices for protanopia, deuteranopia and tritanopia match the published values and are applied in linear RGB."
+  },
+  {
+   "claim": "Robinhood 2024 identity is black, white and neutrals with Robin Neon #CCFF00. Opal's kit is pure black, with gradients only at milestones. Spotify allows the green logo only on black or white.",
+   "verdict": "supported",
+   "note": "Robinhood's newsroom post (2024-10-10) says the palette is rooted in black, white and neutrals with Robin Neon accents. The Chain guidelines give #ccff00 and approve black on Robin Neon. Opal's brand kit gives bg #000000 and gradients 'reserved for in-app milestone moments', and it includes #E2C9FF→#8CFFDD and #A9CBFF→#B39AFF. Spotify's design page confirms the green logo is allowed only on black or white. Spotify gives no hex there, so #1ED760 is third-party."
+  },
+  {
+   "claim": "Discord #5865F2, Venmo #008CFF (official brand pages).",
+   "verdict": "supported",
+   "note": "Discord's branding page gives Blurple #5865F2, Light Blurple #E0E3FF and Black #000000. Venmo's brand page gives #008CFF."
+  },
+  {
+   "claim": "Fi Money, a teal-branded neobank, shut down or wound down its banking service in March 2026.",
+   "verdict": "partly_supported",
+   "note": "TechCrunch (2026-03-11) says Fi is discontinuing in-app banking with Federal Bank and new savings accounts can no longer be opened, but the company is not closing. It is pivoting to AI and enterprise tech, accounts stay active through FedMobile, and the article gives no exact shutdown date. 'Shut down its banking service in March 2026' overstates the timing; the announcement came in March.",
+   "corrected_claim": "In March 2026 Fi announced it would discontinue banking services on its app. Accounts moved to Federal Bank's app, and the company pivoted rather than closed.",
+   "good_source": "https://techcrunch.com/2026/03/11/india-neobank-fi-winds-down-banking-services-on-its-platform"
+  },
+  {
+   "claim": "Pew (2024 teen data): YouTube ~90%, TikTok 63%, Instagram 61%, Snapchat 55%. Pew 2023 adults 18–29: Instagram 78%, Snapchat 65%, TikTok 62%. Piper Sandler Fall 2025: TikTok 46%, Instagram 31%, Snapchat 14%.",
+   "verdict": "partly_supported",
+   "note": "The cited Pew teen fact sheet now shows the 2025 survey (n=1,458, Sept–Oct 2025, published 2025-12-09): YouTube 'roughly nine-in-ten', TikTok and Instagram 'about six-in-ten or more', Snapchat 55%. The 63% and 61% figures come from the 2024 report, which this URL no longer shows. The Pew adults figures are confirmed for the May–Sept 2023 survey published 2024-01-31; the Snapchat 65% is for 'under 30'. Piper Sandler Fall 2025 (released 2025-10-09) is confirmed at 46/31/14.",
+   "corrected_claim": "Pew's latest teen survey (2025): Snapchat 55%, TikTok and Instagram about 60%+, YouTube about 90%. Cite the 2024 report separately if quoting 63% and 61%.",
+   "good_source": "https://www.pewresearch.org/internet/fact-sheet/teens-and-social-media-fact-sheet/"
+  },
+  {
+   "claim": "Cash App had 5M monthly active teen accounts (June 2025). 59% of Robinhood customers are Gen Z (17%) or millennial (42%) (YouGov 2026).",
+   "verdict": "supported",
+   "note": "Payments Dive cites Block's Q2 2025 shareholder letter for about 5M. YouGov confirms 42% millennials and 17% Gen Z among US invested adults who use Robinhood, for the 52 weeks to 2026-08-30. That is a YouGov panel profile, not Robinhood's own customer data."
+  },
+  {
+   "claim": "Android Authority 2026 reader poll (about 3,100 votes) found about 75% keep dark mode always on; its 2020 poll found 81.9%. A 2026 study of 215 users (mean age 24.3) found about 68% prefer dark.",
+   "verdict": "source_unreachable",
+   "note": "Both Android Authority URLs and the GadgetHacks URL returned HTTP 403, and the web-search budget was used up, so I could not confirm any of these figures. They are self-selected polls in any case. Treat them as unverified. Only YPulse (2026-06-23) was reachable; it confirms the qualitative claim that brands add dark mode because Gen Z asks for it, and it contains no statistics (it cites Digital Silk)."
+  },
+  {
+   "claim": "NN/g (2020) summarising Piepenbrock 2013: light mode performs better for younger (18–33) and older adults, and the advantage grows as font size shrinks. NN/g recommends offering dark mode rather than defaulting to it.",
+   "verdict": "supported",
+   "note": "Confirmed on the NN/g page. Note the tension with the spec: NN/g explicitly does not recommend dark as the default for a general population. That supports offering dark mode, not a dark-first default for a money app with dense small text."
+  },
+  {
+   "claim": "BFA (2021): banks mostly use red, fintechs purple or blue; blue means trust; avoid red for money. AIF study (n=1,995): dull colours trusted more than bright ones.",
+   "verdict": "partly_supported",
+   "note": "BFA says red is 'the go-to colour for traditional banks', most fintechs are purple or blue, blue means trust, and red should be avoided for financial products. The top-250 table is an image, and the article does not say who ran that analysis. The Asia Insurance Review article confirms n=1,995, with 'dull colours are trusted more than bright colours' on banking and insurance sites (Asian Institute of Finance and Imagineering Institute). The spec's headline pattern ('one bright, highly saturated accent') sits in tension with this trust finding, and the spec handles it only by limiting accent area. The UNL pilot (n=225) returned 403 and is unverified."
+  },
+  {
+   "claim": "Red-up/green-down is a convention in mainland China, Taiwan and Japan; Hong Kong uses the Western mapping; none of Vaultwise's 8 markets is red-up.",
+   "verdict": "partly_supported",
+   "note": "Benzinga returned 403, and the behavioraleconomics.com page loaded only its title. From the repo, src/lib/compliance.ts COUNTRIES lists 8 markets: US, UK, IN, SG, CA, AU, AE and the euro area. None is a known red-up market, so the design conclusion stands. The list of red-up markets also omits South Korea (from general knowledge; not verified here). Singapore's convention is still unverified."
+  },
+  {
+   "claim": "Structural pattern: 17 of 19 colour-led signatures have chroma ≥0.15 (median 0.214); 15 of 19 have higher contrast on black, so they are 'built to stand out on dark'; 17 of 19 theme-verified apps ship dark.",
+   "verdict": "partly_supported",
+   "note": "I recounted dataset-report.txt: chroma 17/19 and higher contrast on black 15/19 are arithmetically correct. But 'built to stand out on dark' is an inference: any colour with OKLCH L above about 0.6 has more contrast on black, and Instagram (4.84 vs 4.34) and Copilot (4.64 vs 4.53) are essentially neutral. The '17 of 19 ship dark' count treats Venmo and Klarna as not shipping dark, though their dark mode is listed as unverified. Cash App and BeReal 'dark' are marked low confidence. Monzo's cited help URL now returns 404, and Revolut's blog returned 403. The Opal forum confirms there is no light theme, with team replies on 2025-02-13 and 2026-01-13. The Spotify 'Not Right Now' status could not be read."
+  }
+ ],
+ "spec_corrections": [
+  "Section 5(b) 'Little competition': delete or rewrite. BFA, the spec's own source, says most fintech brands are purple or blue. In India (one of the 8 markets) PhonePe uses #5F259F at hue 300, identical to Vault Violet's hue, and Jar uses #7029CC. Add these to the Risks list and the dataset. Make checking 'Pay with Vaultwise' against PhonePe, Jar, Stripe and Nubank a blocking open question before the logo is locked.",
+  "Light-mode accent #7A36D0 is ΔE2000 3.1 from Jar and 9.0 from PhonePe. Either shift light-mode violet toward the orchid or red-violet side (about H320, Alternative B) or rely on the dark-first identity. Re-run accent-whitespace.mjs with PhonePe #5F259F, Stripe #635BFF and Nubank #820AD1 added.",
+  "Section 7: change '123/123 pass' to '122/123 pass + 1 documented exception'. check-palette.mjs waives light warningFill vs surface with a threshold of 1.0, and the actual ratio is 1.90:1 on white and 1.77:1 on bg. Add a rule: in light mode, warning icons and graphics use #895706 (6.12:1) or the amber fill always carries #1A1300 text or glyph. Never use a standalone amber icon or ring on white. Fix the section 6 'Light-mode warning rule' sentence 'an amber fill or icon with dark text' accordingly.",
+  "Section 3 'Wider context': remove 'entertainment was about 90% dark' or cite a Lazyweb page that states it. Note Lazyweb measures design-system defaults (n=520), with finance n=42 described as directional. Change the Cash App Lazyweb reference to its stated #00C853, or drop Lazyweb as a hex source.",
+  "Section 4 dark-mode evidence: mark the Android Authority 2026 (~75%) and 2020 (81.9%) polls and the 215-user study as unverified (sources unreachable). Add that NN/g explicitly does not recommend dark as the default for a general audience. This weakens 'Dark (default on first launch)'. Present 'Match system' as an equally defensible default in Open Question 1.",
+  "Summary and Section 1: change 'Fi Money shut down its banking service in March 2026' to 'Fi announced in March 2026 it was discontinuing in-app banking (accounts moved to Federal Bank's app); the company pivoted to enterprise AI'.",
+  "Section 2 table and the audience findings: label the Pew teen figures 63/61/55/~90 as from the 2024 survey. The cited fact sheet now shows the 2025 survey: Snapchat 55%, TikTok and Instagram about 60%+, YouTube about 90%. Note the Pew 65% Snapchat figure is for under-30s.",
+  "Section 3 theme count: report it as '17 of 17 confirmed ship dark; Venmo and Klarna light-first with dark mode unverified; Cash App and BeReal dark-default low confidence'. Replace the dead Monzo help URL (404).",
+  "Section 3: soften 'built to stand out on dark'. Higher contrast on black is a property of any colour with OKLCH L above about 0.6; Instagram, Copilot and Discord are near parity. Present it as an observation, not designer intent.",
+  "Section 4 colour-blindness: add South Korea to the red-up list (general knowledge, unverified here). Keep the note that none of Vaultwise's 8 markets (US, UK, IN, SG, CA, AU, AE, EU per src/lib/compliance.ts) is red-up, with Singapore unverified.",
+  "Section 4 trust: the 'dull colours trusted more' finding (AIF, n=1,995) conflicts with the high-chroma accent. State that explicitly, and consider a slightly lower-chroma accent for money-movement confirmations, or test trust in Open Question 2."
+ ],
+ "overall": "The research is mostly faithful to the sources I could reach. The Lazyweb core figures, the W3C thresholds, the NEI figure, Robinhood's Accessible colors toggle and its official hexes (#CCFF00, Discord #5865F2, Venmo #008CFF, Opal's palette), the WGSN Fresh Purple listing, the YouGov, Piper Sandler and Cash App numbers, and Material's dark-surface guidance all check out. I recomputed the contrast ratios on my own and they match, and the Machado colour-blindness matrices in colorlib.mjs are correct.\n\nTwo problems matter for the decision:\n1. **Violet is not uncrowded.** The 'violet is uncrowded' claim rests on a 23-app sample. The research's own BFA source says fintechs mostly use purple or blue. In India, one of Vaultwise's markets, PhonePe's #5F259F has exactly Vault Violet's hue (300), and the light-mode violet sits ΔE 3 from Jar and ΔE 9 from PhonePe. That directly weakens a 'Pay with Vaultwise' checkout identity.\n2. **The 123/123 WCAG pass is overstated.** One check, the light-mode amber warning fill at 1.90:1, was quietly waived by setting its threshold to 1.0. An amber warning icon shown alone fails WCAG SC 1.4.11.\n\nSmaller issues:\n- The dark-mode preference numbers (Android Authority polls, the 215-user study) could not be verified: those pages returned 403, and the web-search budget for this turn was used up.\n- NN/g argues against making dark the default for a general audience, which weakens the dark-first default.\n- Fi Money did not shut down: it announced the end of in-app banking in March 2026 and pivoted.\n- The Pew teen figures shown at the cited URL are now from the 2025 survey.\n\nThe structural recommendation (a neutral base, one accent, dark available, colour never the only cue) holds up. The specific choice of hue and default theme needs the corrections listed above."
+}

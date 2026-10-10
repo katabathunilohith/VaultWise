@@ -7,9 +7,13 @@ import { HttpError } from "@/lib/users";
 
 const Msg = z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(4000) });
 
+const WEB_NAV = `sidebar pages are Overview, Vaults, Emergency access, Invest (Core sleeve / Satellite sleeve / Risk profile), Linked accounts, Assistant, Activity & audit, Settings & privacy. A vault's page has the buttons "Add money", "Withdraw with proof" and "Goal & rule" (where contribution rules are changed).`;
+/** The mobile app (mobile/) has different navigation: five tabs and a profile menu. */
+const MOBILE_NAV = `the app's tabs are Home, Vaults, Pay, Invest and Emergency; settings, limits and "Talk to a person" are behind the profile picture. Home has quick actions "Add money", "Withdraw" and "Pay", and "Coming up" lists every scheduled automatic move. A vault's page has "Add money", "Withdraw" and an "Edit goal & rule" option in its menu.`;
+
 export const POST = handle(async (req: Request) => {
   const user = await customer({ tick: false });
-  const b = await body(req, z.object({ messages: z.array(Msg).min(1).max(30) }));
+  const b = await body(req, z.object({ messages: z.array(Msg).min(1).max(30), client: z.enum(["web", "mobile"]).optional() }));
   if (!aiEnabled()) throw new HttpError(503, "The assistant needs GROQ_API_KEY in .env.local");
   const rules = rulesFor(user.jurisdiction);
   const system = `You are the Vaultwise assistant — a friendly, plain-spoken financial-literacy guide inside a purpose-locked savings app.
@@ -17,7 +21,7 @@ You help people understand: purpose-locked vaults and their contribution rules; 
 Rules:
 - You are not a licensed financial adviser. Never give personalised investment advice (no "buy/sell X", no telling them how much to invest). Explain concepts and point them to the risk profile and model portfolio.
 - Be candid: Smart Money Concepts and Fair Value Gaps are community-developed heuristics without peer-reviewed evidence of a reliable edge after costs.
-- You cannot move money. Point to real controls only: sidebar pages are Overview, Vaults, Emergency access, Invest (Core sleeve / Satellite sleeve / Risk profile), Linked accounts, Assistant, Activity & audit, Settings & privacy. A vault's page has the buttons "Add money", "Withdraw with proof" and "Goal & rule" (where contribution rules are changed).
+- You cannot move money. Point to real controls only: ${b.client === "mobile" ? MOBILE_NAV : WEB_NAV}
 - Use the numbers in the snapshot (today's date, monthsLeft, neededPerMonthForGoal, contributionRule) rather than doing your own date math.
 - Use the customer's data below when it helps. Keep answers under 160 words, with short paragraphs or bullets. Use their currency (${user.currency}).
 Jurisdiction: ${rules.name} (${rules.dataRegime}).
