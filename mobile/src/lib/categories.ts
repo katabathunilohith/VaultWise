@@ -23,7 +23,21 @@ export interface CategoryMeta {
   object3d: ImageSourcePropType;
   unlocksFor: string[];
   proofHint: string;
+  /** A few words for the purpose picker. */
+  blurb: string;
+  /** A suggested vault name. */
+  nameIdea: string;
+  /** The kind of bill in running text: "a medical bill", "only covers medical costs". */
+  billWord: string;
+  /** Emergency money comes from Tier 1 vaults straight away, then Tier 2 after a PIN and a pause. */
+  emergencyTier: 1 | 2;
 }
+
+/** Every vault category, in the order the purpose picker shows them. */
+export const VAULT_CATEGORIES = ["health", "education", "housing", "emergency", "retirement", "custom"] as const satisfies readonly CategoryKey[];
+
+/** The categories a custom vault can borrow rules from. */
+export const TEMPLATE_CATEGORIES = VAULT_CATEGORIES.filter((k) => k !== "custom");
 
 export const emoji3d = {
   health: require("@/assets/emoji3d/stethoscope.png"),
@@ -63,6 +77,10 @@ export const emoji3d = {
 export const CATEGORIES: Record<CategoryKey, CategoryMeta> = {
   health: {
     key: "health",
+    billWord: "medical",
+    emergencyTier: 1,
+    blurb: "Bills, pharmacy, tests",
+    nameIdea: "Family health fund",
     label: "Health",
     short: "Health",
     Icon: FirstAidKitIcon,
@@ -72,6 +90,10 @@ export const CATEGORIES: Record<CategoryKey, CategoryMeta> = {
   },
   education: {
     key: "education",
+    billWord: "education",
+    emergencyTier: 2,
+    blurb: "Fees, books, exams",
+    nameIdea: "Maya's college fund",
     label: "Education",
     short: "Education",
     Icon: GraduationCapIcon,
@@ -81,6 +103,10 @@ export const CATEGORIES: Record<CategoryKey, CategoryMeta> = {
   },
   housing: {
     key: "housing",
+    billWord: "housing",
+    emergencyTier: 2,
+    blurb: "Rent, deposits, lease",
+    nameIdea: "Apartment deposit",
     label: "Housing",
     short: "Housing",
     Icon: HouseLineIcon,
@@ -90,6 +116,10 @@ export const CATEGORIES: Record<CategoryKey, CategoryMeta> = {
   },
   emergency: {
     key: "emergency",
+    billWord: "emergency",
+    emergencyTier: 2,
+    blurb: "Repairs, urgent travel",
+    nameIdea: "Rainy day fund",
     label: "Emergency",
     short: "Emergency",
     Icon: LifebuoyIcon,
@@ -99,6 +129,10 @@ export const CATEGORIES: Record<CategoryKey, CategoryMeta> = {
   },
   retirement: {
     key: "retirement",
+    billWord: "retirement",
+    emergencyTier: 2,
+    blurb: "Pension, later life",
+    nameIdea: "Retirement top-up",
     label: "Retirement",
     short: "Retirement",
     Icon: PlantIcon,
@@ -108,6 +142,10 @@ export const CATEGORIES: Record<CategoryKey, CategoryMeta> = {
   },
   custom: {
     key: "custom",
+    billWord: "custom",
+    emergencyTier: 2,
+    blurb: "Your goal, your rules",
+    nameIdea: "Wedding fund",
     label: "Custom goal",
     short: "Custom",
     Icon: SparkleIcon,
@@ -119,4 +157,39 @@ export const CATEGORIES: Record<CategoryKey, CategoryMeta> = {
 
 export function categoryOf(key: string | undefined | null): CategoryMeta {
   return CATEGORIES[(key && key in CATEGORIES ? key : "custom") as CategoryKey];
+}
+
+/** A bill category in running text ("medical"); categories outside the list read as they are. */
+export function billWord(category: string) {
+  return category in CATEGORIES ? CATEGORIES[category as CategoryKey].billWord : category;
+}
+
+/** Which emergency tier a vault in this category pays from (the vault's own category, as on the server). */
+export function emergencyTier(category: string): 1 | 2 {
+  return categoryOf(category).emergencyTier;
+}
+
+/** The category whose vaults pay out first in an emergency (Health). */
+export const TIER1_CATEGORY: CategoryKey = VAULT_CATEGORIES.find((k) => CATEGORIES[k].emergencyTier === 1) ?? "health";
+
+interface RulesSource {
+  category: string;
+  template?: string | null;
+  /** custom-rules: a custom vault's own rule. */
+  customRule?: unknown;
+}
+
+/** The category whose rules a vault follows: a custom vault's borrowed template, otherwise its own. */
+export function rulesCategory(v: RulesSource): CategoryKey {
+  const own = categoryOf(v.category).key;
+  return own === "custom" && v.template && v.template !== "custom" ? categoryOf(v.template).key : own;
+}
+
+/**
+ * Whether a vault can pay a bill in `billCategory` without a person checking it against a rule of
+ * its own: a custom vault covers bills only through the template it borrowed.
+ */
+export function covers(v: RulesSource, billCategory: string) {
+  if (v.customRule) return false; // custom-rules: a person checks every bill against the vault's own rule
+  return rulesCategory(v) === billCategory;
 }

@@ -2,7 +2,7 @@ import { customer, handle, json } from "@/lib/api";
 import { projection, requireProfile } from "@/lib/invest/core";
 
 export const GET = handle(async (req: Request) => {
-  const user = await customer({ tick: false });
+  const user = await customer({ tick: false, access: "read" });
   const url = new URL(req.url);
   const band = Number(url.searchParams.get("band") ?? requireProfile(user).band);
   const monthly = Math.max(0, Math.round(Number(url.searchParams.get("monthly") ?? 300) * 100));

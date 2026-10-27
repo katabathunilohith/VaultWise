@@ -1,7 +1,9 @@
+import { getAuthState, normaliseServer, useAuthState } from "@/lib/auth/firebase"; // identity
+import { signOutOfVaultwise } from "@/features/auth"; // identity
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Banner, Button, Segmented, StatusPill, Txt } from "@/components/ui";
-import { applyConnection, defaultBaseUrl, type ConnectionPref } from "@/lib/api/connection";
+import { applyConnection, defaultBaseUrl, type ConnectionPref, type Mode } from "@/lib/api/connection";
 import { useConnection } from "@/lib/api/hooks";
 import { haptic } from "@/lib/haptics";
 import { space } from "@/theme";
@@ -15,7 +17,7 @@ const PREFS: { value: ConnectionPref; label: string; body: string }[] = [
   { value: "demo", label: "Demo data", body: "Sample data on this phone only. Nothing is sent anywhere, and it resets when the app restarts." },
 ];
 
-export const connectionLabel = (mode: "live" | "demo") => (mode === "live" ? "Live server" : "Demo data");
+export const connectionLabel = (mode: Mode) => (mode === "live" ? "Live server" : "Demo data");
 
 function normalise(url: string) {
   return url.trim().replace(/\/+$/, "");
@@ -30,6 +32,8 @@ async function testServer(baseUrl: string): Promise<TestResult> {
   const timer = setTimeout(() => ctrl.abort(), 4000);
   try {
     const res = await fetch(`${baseUrl}/api/v1/me`, { signal: ctrl.signal });
+    // identity: a server with sign-in on answers 401 to this unsigned check. It's there and working.
+    if (res.status === 401 && getAuthState().enabled) return { ok: true, ms: Date.now() - started };
     if (!res.ok) return { ok: false, text: `The server answered with an error (${res.status}).` };
     return { ok: true, ms: Date.now() - started };
   } catch (e) {
@@ -66,12 +70,17 @@ export function ConnectionScreen() {
     if (!r.ok) haptic("error");
   };
 
-  const save = () => {
+  const signedIn = !!useAuthState().user; // identity
+  const addressChanged = pref !== "demo" && normaliseServer(clean) !== normaliseServer(conn.baseUrl); // identity
+
+  const save = async () => {
     if (pref !== "demo" && !validUrl) {
       setUrlError("Start the address with http:// or https://");
       haptic("error");
       return;
     }
+    // identity: a login belongs to the server it was made on, so a new address needs a new sign-in.
+    if (addressChanged && getAuthState().user) await signOutOfVaultwise("You changed the server. Sign in again.");
     // Switching reloads the app on the new source (the root waits for the check to finish).
     void applyConnection(pref, pref === "demo" ? conn.baseUrl : clean);
   };
@@ -151,9 +160,13 @@ export function ConnectionScreen() {
       ) : null}
 
       <View style={{ gap: space.xs }}>
-        <Button label="Save and switch" disabled={!changed} onPress={save} />
+        <Button label="Save and switch" disabled={!changed} onPress={() => void save()} />
         <Txt v="caption" color="textMuted" align="center">
-          {changed ? "Vaultwise reloads on the new source. Live and demo accounts are separate." : "Nothing to save yet."}
+          {changed
+            ? signedIn && addressChanged // identity
+              ? "You'll be signed out, then sign in on the new server. Live and demo accounts are separate."
+              : "Vaultwise reloads on the new source. Live and demo accounts are separate."
+            : "Nothing to save yet."}
         </Txt>
       </View>
     </Page>

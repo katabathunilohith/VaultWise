@@ -312,7 +312,7 @@ function ConfirmStep({ vault, amount, error }: { vault: Vault; amount: number; e
           Once it&apos;s in, it stays locked until a matching bill or emergency access releases it.
         </Txt>
       </View>
-      <ReleaseContract category={vault.category} template={vault.template} showSupportLink={false} />
+      <ReleaseContract category={vault.category} template={vault.template} customRule={vault.customRule} showSupportLink={false} />
     </>
   );
 }

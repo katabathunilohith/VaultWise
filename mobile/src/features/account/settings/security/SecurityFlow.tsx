@@ -2,12 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { CheckCircleIcon } from "@/components/icons";
-import { Button, PinPad, Txt } from "@/components/ui";
+import { Button, PinPad, Txt, useHardwareBack } from "@/components/ui";
 import { haptic } from "@/lib/haptics";
-import { authenticateBiometric, checkDevicePin, setDevicePin, setLockEnabled, useSession } from "@/lib/session";
+import { setLockEnabled } from "@/lib/auth/app-lock";
+import { authenticateBiometric } from "@/lib/auth/biometrics";
+import { checkDevicePin, setDevicePin } from "@/lib/auth/device-pin";
+import { useSession } from "@/lib/auth/session-state";
 import { space, useTheme } from "@/theme";
-import { goBack, StepScreen, useHardwareBack } from "../../layout";
-import { biometricName, GuardedPinPad, isWeakPin, PinLayout, PinStatus, resetPinAttempts, useBiometricKind, usePinGuard } from "../../pin";
+import { goBack, StepScreen } from "../../layout";
+import { biometricName, isWeakPin, resetPinAttempts, useBiometricKind, usePinGuard } from "../../pin-guard";
+import { GuardedPinPad, PinLayout, PinStatus } from "../../PinLayout";
 
 /**
  * change: confirm the current PIN (or Face ID), choose a new one, type it again.

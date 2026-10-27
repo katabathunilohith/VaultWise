@@ -4,7 +4,9 @@ import { router } from "expo-router";
 import { EmptyState, ErrorState, Screen, ScreenSkeleton, useNow } from "@/components/ui";
 import { emoji3d } from "@/lib/categories";
 import { useDashboard } from "@/lib/api/hooks";
+import { invalidate, type QueryName } from "@/lib/api/keys";
 import type { Dashboard } from "@/lib/api/types";
+import { WalletCard } from "@/features/wallet"; // wallet
 import { ComingUpCard } from "./ComingUpCard";
 import { FreshStartCard } from "./FreshStartCard";
 import { Hero } from "./Hero";
@@ -17,7 +19,7 @@ import { TodoCards } from "./TodoCards";
 import { VaultCarousel } from "./VaultCarousel";
 
 /** Everything Home shows; pull to refresh re-reads all of it. */
-const HOME_QUERIES = new Set(["dashboard", "insight", "activity", "invest-core", "emergency"]);
+const HOME_QUERIES: QueryName[] = ["dashboard", "insight", "activity", "invest-core", "emergency", "wallet" /* wallet */];
 
 /**
  * Home (expressive shell). Top to bottom, per the thumb-reach plan (heatmap §5.1): header,
@@ -27,7 +29,7 @@ const HOME_QUERIES = new Set(["dashboard", "insight", "activity", "invest-core",
 export function HomeScreen() {
   const dash = useDashboard();
   const qc = useQueryClient();
-  const refresh = () => qc.invalidateQueries({ predicate: (q) => HOME_QUERIES.has(String(q.queryKey[1])) });
+  const refresh = () => invalidate(qc, ...HOME_QUERIES);
   return (
     <Screen onRefresh={refresh}>
       <HomeHeader />
@@ -50,6 +52,8 @@ function HomeBody({ data }: { data: Dashboard }) {
   return (
     <>
       <Hero saved={data.totals.saved} currency={data.currency} now={now} large={large} />
+      {/* wallet */}
+      <WalletCard />
       <QuickActions large={large} />
       <TodoCards receiptsDue={data.emergency.receiptsDue} reviewPending={data.reviewPending} now={now} />
       <ComingUpCard dashboard={data} now={now} />

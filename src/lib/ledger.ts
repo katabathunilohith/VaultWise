@@ -17,9 +17,10 @@ export type AccountKind =
   | "core_securities"
   | "satellite_cash"
   | "world" // external counterparty: employers, merchants, payees
-  | "fees";
+  | "fees"
+  | "wallet"; // wallet: the customer's spending balance (src/lib/wallet)
 
-const NON_NEGATIVE: AccountKind[] = ["bank", "vault", "core_cash", "core_securities", "satellite_cash"];
+const NON_NEGATIVE: AccountKind[] = ["bank", "vault", "core_cash", "core_securities", "satellite_cash", "wallet"]; // wallet
 
 export interface Account {
   id: string;
@@ -77,6 +78,7 @@ export const userAccount = (userId: string, kind: Exclude<AccountKind, "vault" |
       core_securities: "Core sleeve securities (at cost)",
       satellite_cash: "Satellite sleeve allocation",
       fees: "Platform fees",
+      wallet: "Wallet", // wallet
     }[kind],
   });
 

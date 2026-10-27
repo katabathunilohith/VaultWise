@@ -6,6 +6,7 @@ import { Bot, CircleCheck, CircleX, Clock, Database, Flag, Gauge, Link2, ScanSea
 import { api, refreshAll, useApi, useNow } from "@/lib/client";
 import { CATEGORIES, fmtDate, fmtMoney, LIMIT_LABELS, timeAgo, type LimitKey, type VaultCategory } from "@/lib/shared";
 import { AssessmentScores } from "@/components/limits-panel";
+import { IdentityAdminLinks } from "@/components/identity/admin"; // identity
 import { LegendRow, TipBox } from "@/components/charts";
 import { Badge, Button, Card, CardTitle, Empty, Notice, PageHeader, Skeleton, Table, Tabs, Td, Th, cx, useToast, type Tone } from "@/components/ui";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -257,7 +258,7 @@ function DecisionsChart({ daily }: { daily: Overview["metrics"]["daily"] }) {
 }
 
 export default function AdminPage() {
-  const { data } = useApi<Overview>("/api/v1/admin/overview", { interval: 20_000 });
+  const { data, error } = useApi<Overview>("/api/v1/admin/overview", { interval: 20_000 });
   const { data: audit } = useApi<{
     rows: { id: number; ts: number; actor: string; actor_type: string; action: string; entity_id: string | null; hash: string; prev_hash: string }[];
   }>("/api/v1/audit/all?limit=60");
@@ -265,6 +266,13 @@ export default function AdminPage() {
   const now = useNow(30_000);
   const toast = useToast();
 
+  // identity: a signed-in person who isn't on the reviewer list gets a clear answer, not an endless skeleton.
+  if (!data && error)
+    return (
+      <div className="max-w-xl">
+        <PageHeader eyebrow="Operations console" title="This console is for reviewers" subtitle={error} />
+      </div>
+    );
   if (!data)
     return (
       <div>
@@ -282,6 +290,7 @@ export default function AdminPage() {
         eyebrow="Internal · reviewers, risk & compliance"
         title="Operations console"
         subtitle="Human-in-the-loop review, risk flags, model monitoring and the integrity checks auditors ask for."
+        actions={<IdentityAdminLinks />} // identity: ID checks and account recovery queues
       />
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Tile label="Awaiting review" value={String(data.queue.length)} sub="SLA 4 business hours" icon={<Clock className="size-4" />} />

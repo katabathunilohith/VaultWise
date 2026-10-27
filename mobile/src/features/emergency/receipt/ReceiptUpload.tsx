@@ -14,6 +14,7 @@ import { receiptDueText, receiptInText, receiptOwed } from "../copy";
 import { fmt, shortDate } from "../format";
 import { go, leave } from "../routes";
 import { choosePhoto, pickSample, takePhoto, type Picked, type PickResult } from "./pickers";
+import { ensureAiAnswer } from "@/features/ai-consent"; // ai-consent
 
 /**
  * Add the receipt for an emergency request, after the money has gone: camera, photo library or a
@@ -57,12 +58,14 @@ function Upload({ emergencyId, item, currency }: { emergencyId: string; item: Em
   const pick = async (how: () => Promise<PickResult>) => {
     setProblem(null);
     const r = await how();
-    if (r.ok) setPicked(r.picked);
+    if (r.ok) setPicked(r.image);
     else setProblem(PICK_ERRORS[r.reason]);
   };
 
   const send = async () => {
     if (!picked || sending) return;
+    // ai-consent: ask once whether an AI may read it; closing the question sends nothing.
+    if (!(await ensureAiAnswer())) return;
     setSending(true);
     setProblem(null);
     try {

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Bot, Send, Sparkles, User } from "lucide-react";
 import { useMe } from "@/components/shell";
+import { withIdentity } from "@/components/identity"; // identity
 import { Button, Card, Notice, PageHeader, cx } from "@/components/ui";
 
 interface Msg {
@@ -105,11 +106,15 @@ export default function AssistantPage() {
     setInput("");
     setBusy(true);
     try {
-      const res = await fetch("/api/v1/assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next.slice(-12) }),
-      });
+      // identity: streaming goes straight to fetch, so it adds the sign-in token itself.
+      const res = await fetch(
+        "/api/v1/assistant",
+        await withIdentity({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: next.slice(-12) }),
+        }),
+      );
       if (!res.ok || !res.body) {
         const err = await res.json().catch(() => ({ error: "The assistant is unavailable." }));
         throw new Error(err.error);

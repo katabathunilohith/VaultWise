@@ -4,6 +4,7 @@ import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import type { Vault } from "@/lib/api/types";
 import { haptic } from "@/lib/haptics";
+import { onDeviceReset } from "@/lib/storage";
 import { detectMoneyAction, guessTopic, urgentTopic, type MoneyAction } from "./intents";
 import type { SupportTopic } from "./support/topics";
 import { effectiveTone, stripEmoji, withStyle, type Tone } from "./tone";
@@ -38,8 +39,11 @@ const CONTENT_MAX = 4000;
 const STALL_MS = 30_000;
 
 // The conversation survives closing and reopening the assistant (in memory only, never on disk)
-// until "New chat" or an app restart.
+// until "New chat", an app restart or Delete account.
 let saved: ChatMessage[] = [];
+onDeviceReset(() => {
+  saved = [];
+});
 
 function restore(): ChatMessage[] {
   return saved.map((m) =>

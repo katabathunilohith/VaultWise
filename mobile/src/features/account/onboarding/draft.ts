@@ -1,3 +1,5 @@
+import { onDeviceReset } from "@/lib/storage";
+
 /**
  * What the customer typed during onboarding, kept in memory between steps. Personal details stay
  * out of route params (they'd show in the address bar on web), and the PIN is never stored here.
@@ -23,6 +25,9 @@ export function saveDraft(next: OnboardingDraft) {
 export function clearDraft() {
   draft = { ...EMPTY };
 }
+
+// Delete account: nothing typed for the old account carries over.
+onDeviceReset(clearDraft);
 
 /** True once step 1 is complete (the PIN step can't run without it). */
 export function draftReady(d: OnboardingDraft = draft) {

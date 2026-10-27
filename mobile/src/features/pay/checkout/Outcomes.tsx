@@ -1,24 +1,31 @@
 import { StyleSheet, View } from "react-native";
 import { CheckCircleIcon, HourglassIcon, LockIcon, ReceiptIcon, XCircleIcon } from "@/components/icons";
-import { Banner, Button, Card, ModalScreen, MoneyText, PracticeBadge, Row, Stack, StatusPill, Timeline, Txt } from "@/components/ui";
+import { Banner, Button, Card, ModalScreen, MoneyText, PracticeBadge, Row, Stack, StatusPill, Timeline, Txt, type TimelineStep } from "@/components/ui";
 import { errorMessage } from "@/lib/api/errors";
 import type { PaymentIntent } from "@/lib/api/pay-types";
 import { space, useTheme } from "@/theme";
 import { payAmount } from "../format";
 import { Paper, PaperLine, PaperRow } from "./paper";
-import { checkoutSteps } from "./stages";
 import type { CheckoutFlow } from "./useCheckoutFlow";
-import { payingVault, remainingAfter } from "./vaults";
+import { remainingAfter, type PayVault } from "./vaults";
 
 /**
  * Checkout outcomes. Calm core: payment success is plain (no celebration, no confetti — never
  * celebrate money going out); every negative outcome has a reason, a next step and a person.
  */
 
+/** A checked outcome: the payment, the vault paying it, the release tracker and the way out. */
+interface CheckedProps {
+  intent: PaymentIntent;
+  vault: PayVault | null;
+  steps: TimelineStep[];
+  flow: Pick<CheckoutFlow, "done" | "talkToPerson">;
+}
+
 /** Succeeded: outcome first, then a receipt with the vault and what's left in it. */
-export function Paid({ intent, flow }: { intent: PaymentIntent; flow: CheckoutFlow }) {
+export function Paid({ intent, vault: paying, flow }: { intent: PaymentIntent; vault: PayVault | null; flow: Pick<CheckoutFlow, "paidFrom" | "done"> }) {
   const { c } = useTheme();
-  const vault = flow.paidFrom ?? payingVault(intent, flow.vault);
+  const vault = flow.paidFrom ?? paying;
   const left = remainingAfter(intent, flow.paidFrom);
   if (intent.dryRun) return <DryRunPassed intent={intent} flow={flow} vaultName={vault?.name ?? null} />;
   return (
@@ -60,7 +67,7 @@ export function Paid({ intent, flow }: { intent: PaymentIntent; flow: CheckoutFl
  * A dry run in a live session (merchant checkout isn't live yet): the checks passed, but nothing
  * was paid, so no balance, receipt or refund is claimed.
  */
-function DryRunPassed({ intent, flow, vaultName }: { intent: PaymentIntent; flow: CheckoutFlow; vaultName: string | null }) {
+function DryRunPassed({ intent, flow, vaultName }: { intent: PaymentIntent; flow: Pick<CheckoutFlow, "done">; vaultName: string | null }) {
   const { c } = useTheme();
   return (
     <ModalScreen title="Checkout" onClose={flow.done} footer={<Button label="Done" armOnMount onPress={flow.done} />}>
@@ -91,8 +98,7 @@ function dryRunNote(vaultName: string | null) {
 }
 
 /** Sent to a person: why, that the money is set aside, and a person to talk to. */
-export function InReview({ intent, flow }: { intent: PaymentIntent; flow: CheckoutFlow }) {
-  const vault = payingVault(intent, flow.vault);
+export function InReview({ intent, vault, steps, flow }: CheckedProps) {
   const amount = payAmount(intent.amount, intent.currency);
   if (intent.dryRun)
     return (
@@ -115,7 +121,7 @@ export function InReview({ intent, flow }: { intent: PaymentIntent; flow: Checko
         </Stack>
         <Banner tone="info" title="Nothing is set aside" body={dryRunNote(vault?.name ?? null)} />
         <PracticeBadge />
-        <Tracker intent={intent} vaultName={vault?.name ?? null} />
+        <Tracker steps={steps} />
       </ModalScreen>
     );
   return (
@@ -143,14 +149,13 @@ export function InReview({ intent, flow }: { intent: PaymentIntent; flow: Checko
         body={`It's held in ${vault?.name ?? "your vault"} and nothing is paid until the check is done.`}
       />
       <PracticeBadge />
-      <Tracker intent={intent} vaultName={vault?.name ?? null} />
+      <Tracker steps={steps} />
     </ModalScreen>
   );
 }
 
 /** Declined by the checks: the plain reason, where the money is, and a person. */
-export function Declined({ intent, flow }: { intent: PaymentIntent; flow: CheckoutFlow }) {
-  const vault = payingVault(intent, flow.vault);
+export function Declined({ intent, vault, steps, flow }: CheckedProps) {
   return (
     <ModalScreen
       title="Checkout"
@@ -173,13 +178,13 @@ export function Declined({ intent, flow }: { intent: PaymentIntent; flow: Checko
         </Txt>
         <PracticeBadge />
       </Stack>
-      <Tracker intent={intent} vaultName={vault?.name ?? null} />
+      <Tracker steps={steps} />
     </ModalScreen>
   );
 }
 
 /** Confirming failed (network, server, not enough available). Nothing moved; try again or ask. */
-export function PaymentFailed({ error, flow }: { error: unknown; flow: CheckoutFlow }) {
+export function PaymentFailed({ error, flow }: { error: unknown; flow: Pick<CheckoutFlow, "close" | "talkToPerson" | "backToReview"> }) {
   return (
     <ModalScreen
       title="Checkout"
@@ -206,8 +211,7 @@ export function PaymentFailed({ error, flow }: { error: unknown; flow: CheckoutF
   );
 }
 
-function Tracker({ intent, vaultName }: { intent: PaymentIntent; vaultName: string | null }) {
-  const steps = checkoutSteps(intent, vaultName);
+function Tracker({ steps }: { steps: TimelineStep[] }) {
   if (!steps.length) return null;
   return (
     <Card>

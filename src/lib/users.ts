@@ -19,12 +19,16 @@ export interface User {
   satellite_opt_in: number;
   satellite_opted_at: number | null;
   created_at: number;
+  /** identity: set when the account was closed (data kept for audit). Absent on databases that never used sign-in. */
+  closed_at?: number | null;
 }
 
 export class HttpError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** identity: a stable machine-readable reason, sent as `code` in the error JSON. */
+    public code?: string,
   ) {
     super(message);
   }
@@ -65,21 +69,29 @@ export function createUser(opts: {
   jurisdiction?: string;
   pin: string;
   createdAt?: number;
+  /**
+   * identity: "verified" (default) keeps the simulated partner check used by seed data and tests;
+   * "pending" opens the wallet with money-out blocked until the KYC module verifies an ID.
+   */
+  kycStatus?: "verified" | "pending";
 }) {
   const country = countryInfo(opts.country ?? defaultCountryFor(opts.jurisdiction ?? "US"));
   if (!country) throw new HttpError(400, "That country isn't supported yet");
   const rules = rulesFor(country.market);
   const id = opts.id ?? `usr_${crypto.randomBytes(6).toString("hex")}`;
   const createdAt = opts.createdAt ?? Date.now();
+  const verified = (opts.kycStatus ?? "verified") === "verified";
   run(
     `INSERT INTO users (id, name, email, jurisdiction, country, currency, kyc_status, kyc_level, pin_hash, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'verified', 2, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     opts.name,
     opts.email ?? null,
     rules.code,
     country.code,
     rules.currency,
+    verified ? "verified" : "pending",
+    verified ? 2 : 0,
     hashPin(opts.pin),
     createdAt,
   );
@@ -91,18 +103,24 @@ export function createUser(opts: {
     action: "user.onboarded",
     entityType: "user",
     entityId: id,
-    details: { country: country.code, market: rules.code, currency: rules.currency, kyc: "verified (simulated partner check)" },
+    details: {
+      country: country.code,
+      market: rules.code,
+      currency: rules.currency,
+      kyc: verified ? "verified (simulated partner check)" : "pending (ID check required)",
+    },
     ts: createdAt,
   });
-  audit({
-    userId: id,
-    actor: "kyc-partner",
-    actorType: "system",
-    action: "kyc.verified",
-    entityType: "user",
-    entityId: id,
-    details: { level: 2, checks: ["document", "liveness", "sanctions", "PEP"], provider: "simulated" },
-    ts: createdAt + 1000,
-  });
+  if (verified)
+    audit({
+      userId: id,
+      actor: "kyc-partner",
+      actorType: "system",
+      action: "kyc.verified",
+      entityType: "user",
+      entityId: id,
+      details: { level: 2, checks: ["document", "liveness", "sanctions", "PEP"], provider: "simulated" },
+      ts: createdAt + 1000,
+    });
   return get<User>("SELECT * FROM users WHERE id = ?", id)!;
 }

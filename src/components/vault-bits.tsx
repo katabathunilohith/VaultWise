@@ -19,6 +19,8 @@ export interface VaultView {
   name: string;
   category: VaultCategory;
   template: VaultCategory;
+  /** custom-rules: the owner's own rule, on custom vaults that have one. */
+  customRule?: { uses: string[]; proof: string } | null;
   target: number;
   targetDate: string | null;
   balance: number;

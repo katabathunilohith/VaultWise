@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { caseMessageKey, getItem, KEYS, removeItem, setItem } from "@/lib/storage";
+import { caseMessageKey, getItem, KEYS, onDeviceReset, removeItem, setItem } from "@/lib/storage";
 import type { SupportTopic } from "./topics";
 
 /**
@@ -109,14 +109,14 @@ export async function closeCase(id: string) {
 }
 
 /**
- * Drops the cases held in memory, after Delete account has cleared them from storage. Without
- * this, Support keeps showing them and the next new case would write them back.
+ * Delete account cleared the cases from storage, so drop the ones held in memory. Without this,
+ * Support keeps showing them and the next new case would write them back.
  */
-export function forgetCases() {
+onDeviceReset(() => {
   cache = [];
   loading = null;
   emit();
-}
+});
 
 /** Open cases, newest first. `null` while they're being read from storage. */
 export function useCases(): SupportCase[] | null {

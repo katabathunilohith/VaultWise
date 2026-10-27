@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { getItem, removeItem, setItem } from "@/lib/storage";
+import { getItem, onDeviceReset, setItem } from "@/lib/storage";
 
 /**
  * Notification choices, kept on this phone. Money moves and security alerts are always on and
@@ -74,12 +74,11 @@ export function setNotificationPrefs(patch: Partial<NotificationPrefs>) {
   void setItem(KEY, JSON.stringify(prefs));
 }
 
-/** Back to defaults (account deleted). */
-export async function resetNotificationPrefs() {
+// Delete account: the saved choices are wiped with the rest, so back to the defaults.
+onDeviceReset(() => {
   prefs = DEFAULTS;
   emit();
-  await removeItem(KEY);
-}
+});
 
 export function notificationSummary(p: NotificationPrefs) {
   const parts = [p.reminders ? "Reminders on" : "Reminders off"];

@@ -1,23 +1,16 @@
 import { StyleSheet, View } from "react-native";
 import { TabList, TabSlot, TabTrigger, Tabs, type TabTriggerSlotProps } from "expo-router/ui";
-import { ChartLineUpIcon, HouseIcon, LifebuoyIcon, QrCodeIcon, VaultIcon, type Icon } from "@/components/icons";
+import type { Icon } from "@/components/icons";
 import { Press } from "@/components/ui/Press";
 import { Txt } from "@/components/ui/Txt";
 import { haptic } from "@/lib/haptics";
 import { useTheme } from "@/theme";
+import { TABS } from "./tabs";
 
 /**
  * Web preview only: a phone-style bottom tab bar that mirrors the native one (same order, Pay in
  * the centre). Native builds use the system tab bar in app-tabs.tsx.
  */
-const TABS: { name: string; href: "/" | "/vaults" | "/pay" | "/invest" | "/emergency"; label: string; icon: Icon }[] = [
-  { name: "index", href: "/", label: "Home", icon: HouseIcon },
-  { name: "vaults", href: "/vaults", label: "Vaults", icon: VaultIcon },
-  { name: "pay", href: "/pay", label: "Pay", icon: QrCodeIcon },
-  { name: "invest", href: "/invest", label: "Invest", icon: ChartLineUpIcon },
-  { name: "emergency", href: "/emergency", label: "Emergency", icon: LifebuoyIcon },
-];
-
 export default function AppTabs() {
   const { c } = useTheme();
   return (

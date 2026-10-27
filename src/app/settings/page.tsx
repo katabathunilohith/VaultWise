@@ -7,10 +7,20 @@ import { api, clearApiCache, refreshAll } from "@/lib/client";
 import { fmtMoney } from "@/lib/shared";
 import { useMe } from "@/components/shell";
 import { LimitsCard } from "@/components/limits-panel";
+import { IdentitySettingsCard } from "@/components/identity/settings"; // identity
+import { AuthedDownloadLink } from "@/components/identity/media"; // identity
+import { signOutNow } from "@/components/identity/session"; // identity
+import { kycStatusOf } from "@/components/identity/types"; // identity
 import { Badge, Button, Card, CardTitle, ErrorNote, Field, Input, KV, PageHeader, Select, useToast } from "@/components/ui";
 
 export default function SettingsPage() {
-  const { user, rules, aiEnabled, reload } = useMe();
+  const { user, rules, aiEnabled, reload, auth, kyc } = useMe();
+  // identity: with sign-in on, Reset closes this account instead of wiping the demo database.
+  const closes = auth?.mode === "firebase";
+  // identity: with sign-in on, changing the PIN needs the current one, and a verified ID locks the name.
+  const needsCurrentPin = auth?.mode === "firebase";
+  const nameLocked = auth?.mode === "firebase" && kycStatusOf({ kyc, user }) === "verified";
+  const [currentPin, setCurrentPin] = useState(""); // identity
   const toast = useToast();
   const router = useRouter();
   const [name, setName] = useState(user.name);
@@ -28,8 +38,10 @@ export default function SettingsPage() {
       toast({ tone: "good", text: msg });
       reload();
       refreshAll();
+      return true;
     } catch (e) {
       setErr((e as Error).message);
+      return false;
     } finally {
       setBusy(null);
     }
@@ -51,8 +63,8 @@ export default function SettingsPage() {
             </span>
           </CardTitle>
           <div className="space-y-4">
-            <Field label="Full name">
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+            <Field label="Full name" hint={nameLocked ? "This matches your verified ID, so it can't be changed here." : undefined}>
+              <Input value={name} onChange={(e) => setName(e.target.value)} readOnly={nameLocked} className={nameLocked ? "bg-sunken" : undefined} />
             </Field>
             <Field label="Email">
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -61,7 +73,8 @@ export default function SettingsPage() {
               <Badge tone="good">
                 KYC level {user.kycLevel} · {user.kycStatus}
               </Badge>
-              <Button loading={busy === "profile"} onClick={() => save("profile", { name, email }, "Profile saved.")}>
+              {/* identity: a locked name isn't sent, so saving the email still works */}
+              <Button loading={busy === "profile"} onClick={() => save("profile", nameLocked ? { email } : { name, email }, "Profile saved.")}>
                 Save
               </Button>
             </div>
@@ -74,7 +87,20 @@ export default function SettingsPage() {
               <KeyRound className="size-4" /> Security PIN
             </span>
           </CardTitle>
-          <div className="flex items-end gap-3">
+          <div className="flex flex-wrap items-end gap-3">
+            {/* identity: with sign-in on, the server asks for the current PIN too */}
+            {needsCurrentPin && (
+              <Field label="Current PIN">
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  value={currentPin}
+                  onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
+                  maxLength={6}
+                  autoComplete="current-password"
+                />
+              </Field>
+            )}
             <Field label="New PIN (4–6 digits)">
               <Input
                 type="password"
@@ -86,11 +112,12 @@ export default function SettingsPage() {
               />
             </Field>
             <Button
-              disabled={pin.length < 4}
+              disabled={pin.length < 4 || (needsCurrentPin && currentPin.length < 4)}
               loading={busy === "pin"}
               onClick={async () => {
-                await save("pin", { pin }, "PIN updated.");
-                setPin("");
+                const ok = await save("pin", needsCurrentPin ? { pin, currentPin } : { pin }, "PIN updated."); // identity
+                if (ok || !needsCurrentPin) setPin("");
+                if (ok) setCurrentPin(""); // identity
               }}
             >
               Update
@@ -100,6 +127,9 @@ export default function SettingsPage() {
             PINs are stored as salted scrypt hashes. Biometric step-up and device attestation would replace this on mobile.
           </p>
         </Card>
+
+        {/* identity: sign out and the ID check */}
+        <IdentitySettingsCard className="lg:col-span-2" />
 
         <div className="lg:col-span-2">
           <LimitsCard />
@@ -164,13 +194,14 @@ export default function SettingsPage() {
         <Card>
           <CardTitle sub={`Your rights under ${rules.dataRegime}`}>Your data</CardTitle>
           <div className="space-y-3">
-            <a href="/api/v1/me/export" className="flex items-center gap-3 rounded-xl border border-line p-3 transition-colors hover:border-accent">
+            {/* identity: AuthedDownloadLink sends the sign-in token; a plain <a> when sign-in is off */}
+            <AuthedDownloadLink href="/api/v1/me/export" className="flex items-center gap-3 rounded-xl border border-line p-3 transition-colors hover:border-accent">
               <Download className="size-5 text-accent" />
               <div className="flex-1">
                 <div className="text-sm font-medium">Download all my data</div>
                 <div className="text-xs text-muted">Profile, ledger, proofs metadata and audit log as JSON</div>
               </div>
-            </a>
+            </AuthedDownloadLink>
             <div className="flex items-center gap-3 rounded-xl border border-line p-3">
               <FileSpreadsheet className="size-5 text-accent" />
               <div className="flex-1">
@@ -184,9 +215,9 @@ export default function SettingsPage() {
                   </option>
                 ))}
               </Select>
-              <a href={`/api/v1/reports/tax?year=${year}`} className="text-[13px] font-medium text-accent-ink hover:underline">
+              <AuthedDownloadLink href={`/api/v1/reports/tax?year=${year}`} className="text-[13px] font-medium text-accent-ink hover:underline">
                 Export
-              </a>
+              </AuthedDownloadLink>
             </div>
           </div>
         </Card>
@@ -200,8 +231,12 @@ export default function SettingsPage() {
             <KV k="Market data" v="Yahoo Finance (cached)" />
           </div>
           <div className="mt-4 rounded-xl border border-bad/30 p-4">
-            <div className="text-sm font-medium">Reset demo</div>
-            <p className="mt-1 text-xs text-muted">Deletes the local database and uploaded proofs, then returns to onboarding.</p>
+            <div className="text-sm font-medium">{closes ? "Close account" : "Reset demo"}</div>
+            <p className="mt-1 text-xs text-muted">
+              {closes
+                ? "Closes your account and signs this login out of it. Records are kept as the law requires."
+                : "Deletes the local database and uploaded proofs, then returns to onboarding."}
+            </p>
             <Button
               variant="danger"
               size="sm"
@@ -209,15 +244,16 @@ export default function SettingsPage() {
               icon={<RotateCcw className="size-3.5" />}
               loading={busy === "reset"}
               onClick={async () => {
-                if (!confirm("Delete all local data and start over?")) return;
+                if (!confirm(closes ? "Close your account? This can't be undone." : "Delete all local data and start over?")) return;
                 setBusy("reset");
                 await api.post("/api/v1/reset");
+                if (closes) await signOutNow(); // identity: a closed account's login is signed out here too
                 clearApiCache();
                 router.push("/");
                 reload();
               }}
             >
-              Reset everything
+              {closes ? "Close account" : "Reset everything"}
             </Button>
           </div>
         </Card>

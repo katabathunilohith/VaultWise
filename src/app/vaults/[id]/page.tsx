@@ -9,6 +9,7 @@ import { CATEGORIES, fmtDate, fmtMoney, timeAgo } from "@/lib/shared";
 import { BalanceChart } from "@/components/charts";
 import { CategoryIcon, RuleIcon, ruleLabel, WITHDRAWAL_STATUS, type VaultView } from "@/components/vault-bits";
 import { WithdrawFlow } from "@/components/verification";
+import { CustomRuleCard } from "@/components/custom-rule";
 import {
   Badge,
   Button,
@@ -225,7 +226,7 @@ export default function VaultDetailPage() {
               {v.name}
               <span className="mt-0.5 block text-sm font-normal text-muted">
                 {CATEGORIES[v.category].label}
-                {v.category === "custom" && ` · verifies as ${v.template === "custom" ? "strictest tier" : CATEGORIES[v.template].label}`}
+                {v.category === "custom" && ` · verifies as ${v.customRule ? "your own rule" : v.template === "custom" ? "strictest tier" : CATEGORIES[v.template].label}`}
               </span>
             </span>
           </span>
@@ -293,12 +294,13 @@ export default function VaultDetailPage() {
                 <FileCheck2 className="size-4 text-accent" /> Proof that releases funds
               </span>
             </CardTitle>
-            <p className="text-[13px] text-ink-2">{CATEGORIES[v.template].proofHint}.</p>
+            <p className="text-[13px] text-ink-2">{v.customRule ? v.customRule.proof : CATEGORIES[v.template].proofHint}.</p>
             <p className="mt-2 text-xs text-muted">
               Checked by a 6-stage AI pipeline: forensics, document understanding, purpose classification and tamper detection. Uncertain cases go to
               a person.
             </p>
           </Card>
+          {v.customRule && <CustomRuleCard rule={v.customRule} title="Your own rule" />}
           {v.isJoint && (
             <Card>
               <CardTitle>

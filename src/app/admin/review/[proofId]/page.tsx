@@ -7,12 +7,15 @@ import { ArrowLeft, CircleCheck, CircleX } from "lucide-react";
 import { api, refreshAll, useApi } from "@/lib/client";
 import { CATEGORIES, fmtDate, fmtMoney, timeAgo } from "@/lib/shared";
 import { DecisionBanner, PipelineStages, ProofImages, type ProofView } from "@/components/verification";
+import { CustomRuleCard, type CustomRule } from "@/components/custom-rule";
 import { Badge, Button, Card, CardTitle, ErrorNote, Field, KV, PageHeader, Skeleton, Textarea, useToast } from "@/components/ui";
 
 interface ReviewData extends ProofView {
   user: { id: string; name: string; jurisdiction: string; currency: string; created_at: number; kyc_status: string };
   history: { decision: string; final_decision: string | null; n: number }[];
   flags: { id: string; severity: string; description: string; status: string; created_at: number }[];
+  /** custom-rules */
+  customRule?: CustomRule | null;
 }
 
 export default function ReviewPage() {
@@ -102,6 +105,7 @@ export default function ReviewPage() {
         </div>
         <div className="space-y-5">
           <DecisionBanner v={data} currency={data.user.currency} />
+          {data.customRule && <CustomRuleCard rule={data.customRule} />}
           {v.appealNote && (
             <Card>
               <div className="text-[13px] text-muted">Customer&apos;s appeal</div>

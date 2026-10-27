@@ -21,6 +21,13 @@ import {
   type ExifSummary,
 } from "./forensics";
 import { acceptedCategories, keywordScores } from "./classify";
+import { customRuleFor, customRulePrompt } from "../custom-rules";
+
+/** custom-rules: the vault's own rule as a prompt line, if it has one. */
+const customRuleLine = (vaultId: string) => {
+  const rule = customRuleFor(vaultId);
+  return rule ? customRulePrompt(rule) : null;
+};
 
 export const PIPELINE_VERSION = "vw-proof@1.4";
 
@@ -88,6 +95,8 @@ export interface ProofRow {
   ela_path: string | null;
   exif: string | null;
   extracted: string | null;
+  /** 0 when the person said no to the AI reading it: a person reads it instead. */
+  ai_allowed: number;
   created_at: number;
 }
 
@@ -137,6 +146,8 @@ export function createProof(
     vaultId?: string | null;
     withdrawalId?: string | null;
     emergencyId?: string | null;
+    /** False when the person said no to the AI reading it (lib/ai-consent.ts). Defaults to true. */
+    aiAllowed?: boolean;
   },
 ) {
   if (!ALLOWED_MIME.includes(input.mime)) throw new HttpError(415, "Upload a photo or scan (JPEG, PNG or WebP)");
@@ -150,8 +161,8 @@ export function createProof(
   const stages: Stage[] = STAGE_DEFS.map(([key, name]) => ({ key, name, status: "pending", checks: [] }));
   tx(() => {
     run(
-      `INSERT INTO proofs (id, user_id, vault_id, withdrawal_id, emergency_id, purpose, category, file_name, mime, size, sha256, stored_path, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO proofs (id, user_id, vault_id, withdrawal_id, emergency_id, purpose, category, file_name, mime, size, sha256, stored_path, ai_allowed, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       user.id,
       input.vaultId ?? null,
@@ -164,6 +175,7 @@ export function createProof(
       input.buffer.length,
       sha256(input.buffer),
       stored,
+      input.aiAllowed === false ? 0 : 1,
       now,
     );
     run(
@@ -199,13 +211,16 @@ const clamp = (n: number, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, n));
 function extractionPrompt(ctx: {
   category: VaultCategory;
   vaultName: string;
+  /** custom-rules: the owner's own rule, as a prompt line. */
+  customRule?: string | null;
   amount: number | null;
   currency: string;
   userName: string;
   today: string;
 }) {
   return `You are the document-understanding stage of a savings app's proof-of-purpose verifier.
-The user is withdrawing ${ctx.amount != null ? fmtMoney(ctx.amount, ctx.currency) : "funds"} from a vault named "${ctx.vaultName}" (category: ${CATEGORIES[ctx.category].label}). Today is ${ctx.today}.
+The user is withdrawing ${ctx.amount != null ? fmtMoney(ctx.amount, ctx.currency) : "funds"} from a vault named "${ctx.vaultName}" (category: ${CATEGORIES[ctx.category].label}). Today is ${ctx.today}.${ctx.customRule ? `
+${ctx.customRule}` : ""}
 Read the image and return JSON with exactly these keys:
 - is_document: boolean — true only if this is a real bill/receipt/invoice/agreement/statement (not a selfie, meme, blank page or unrelated photo)
 - document_type: short snake_case type, e.g. medical_invoice, pharmacy_receipt, tuition_invoice, rent_receipt, lease_agreement, utility_bill, repair_invoice, travel_booking, pension_statement, retail_receipt, other
@@ -250,7 +265,7 @@ export async function runPipeline(proofId: string) {
   const user = get<User>("SELECT * FROM users WHERE id = ?", proof.user_id)!;
   const rules = rulesFor(user.jurisdiction);
   const vault = proof.vault_id
-    ? get<{ name: string; template: VaultCategory }>("SELECT name, template FROM vaults WHERE id = ?", proof.vault_id)
+    ? get<{ id: string; name: string; template: VaultCategory }>("SELECT id, name, template FROM vaults WHERE id = ?", proof.vault_id)
     : undefined;
   const withdrawal = proof.withdrawal_id
     ? get<{ amount: number; payee: string }>("SELECT amount, payee FROM withdrawals WHERE id = ?", proof.withdrawal_id)
@@ -348,7 +363,11 @@ export async function runPipeline(proofId: string) {
     // 3 — Document understanding (vision model).
     const ext = begin("extract");
     let x: Extraction | null = null;
-    if (!aiEnabled()) {
+    if (!proof.ai_allowed) {
+      ext.status = "skipped";
+      ext.summary = "The customer asked for a person to read it — routing to a human reviewer";
+      ext.checks.push({ label: "Vision model", status: "info", detail: "Not used: the customer said no to the AI reading their documents" });
+    } else if (!aiEnabled()) {
       ext.status = "skipped";
       ext.summary = "Vision model unavailable — routing to a human reviewer";
       ext.checks.push({ label: "Vision model", status: "warn", detail: "GROQ_API_KEY not configured" });
@@ -368,6 +387,8 @@ export async function runPipeline(proofId: string) {
                   text: extractionPrompt({
                     category: template,
                     vaultName,
+                    // custom-rules
+                    customRule: vault && template === "custom" ? customRuleLine(vault.id) : null,
                     amount: requested,
                     currency: user.currency,
                     userName: user.name,
@@ -658,6 +679,9 @@ export async function runPipeline(proofId: string) {
     if (hardFails.length) {
       decision = "auto_denied";
       reasons.push(...hardFails);
+    } else if (!x && !proof.ai_allowed) {
+      decision = "human_review";
+      reasons.push("You asked for a person to read this instead of the AI, so a person will check it", ...reviewReasons);
     } else if (!x) {
       decision = "human_review";
       const why = S("extract").checks.find((c) => c.label === "Vision model")?.detail;
@@ -859,6 +883,8 @@ export function proofView(proofId: string) {
   return {
     id: proof.id,
     purpose: proof.purpose,
+    // custom-rules: shown to the reviewer next to the bill.
+    customRule: vault ? customRuleFor(vault.id) : null,
     category: proof.category,
     fileName: proof.file_name,
     createdAt: proof.created_at,

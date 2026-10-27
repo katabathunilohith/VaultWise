@@ -4,36 +4,52 @@ import { run } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { COUNTRIES, countryInfo, defaultCountryFor, JURISDICTIONS, MARKET_CODES, rulesFor } from "@/lib/compliance";
 import { aiEnabled } from "@/lib/groq";
-import { currentUser, hashPin, HttpError } from "@/lib/users";
+import { checkPin, hashPin, HttpError } from "@/lib/users";
 import { parseJson } from "@/lib/db";
+import { session } from "@/lib/auth/session"; // identity
+import { kycSummary } from "@/lib/kyc/service"; // identity
+import { pendingClaimFor } from "@/lib/recovery/claims"; // identity
+import { authMode } from "@/lib/auth/config"; // identity
+import { maskEmail } from "@/lib/kyc/ids"; // identity
+import { latestVerifiedRecord } from "@/lib/kyc/store"; // identity
 
 const markets = () => Object.values(JURISDICTIONS).map((j) => ({ code: j.code, name: j.name, currency: j.currency, flag: j.flag }));
 const countries = () => COUNTRIES.map((c) => countryInfo(c.code)!);
 
 export const GET = handle(async () => {
-  const user = currentUser();
+  // identity: prototype → the first user; firebase → the signed-in person's wallet (401 when signed out).
+  const s = await session();
+  const user = s.user;
+  const auth = { mode: s.mode, access: s.access, email: s.mode === "firebase" ? (s.token?.email ?? null) : (user?.email ?? null) };
   if (!user)
     return json({
       onboarded: false,
       aiEnabled: aiEnabled(),
       jurisdictions: markets(),
       countries: countries(),
+      auth,
     });
   const rules = rulesFor(user.jurisdiction);
+  const claim = s.access === "recovery" && s.token ? pendingClaimFor(s.token.uid) : undefined;
+  // identity: while a recovery claim waits, show only a summary: first name, masked email, no risk answers.
+  const limited = s.access === "recovery";
   return json({
     onboarded: true,
+    auth,
+    kyc: kycSummary(user),
+    ...(claim ? { recovery: { claimId: claim.id, status: claim.status, createdAt: claim.created_at } } : {}),
     aiEnabled: aiEnabled(),
     user: {
       id: user.id,
-      name: user.name,
-      email: user.email,
+      name: limited ? user.name.trim().split(/\s+/)[0] : user.name,
+      email: limited ? maskEmail(user.email) : user.email,
       jurisdiction: user.jurisdiction,
       country: countryInfo(user.country ?? defaultCountryFor(user.jurisdiction)),
       currency: user.currency,
       kycStatus: user.kyc_status,
       kycLevel: user.kyc_level,
       plan: user.plan,
-      riskProfile: parseJson(user.risk_profile, null),
+      riskProfile: limited ? null : parseJson(user.risk_profile, null),
       satelliteOptIn: !!user.satellite_opt_in,
       createdAt: user.created_at,
     },
@@ -51,6 +67,8 @@ const Patch = z.object({
     .string()
     .regex(/^\d{4,6}$/, "PIN must be 4–6 digits")
     .optional(),
+  /** identity: required with `pin` in firebase mode. */
+  currentPin: z.string().max(12).optional(),
 });
 
 export const PATCH = handle(async (req: Request) => {
@@ -64,6 +82,14 @@ export const PATCH = handle(async (req: Request) => {
       409,
       `Your wallet is in ${user.currency}. Moving to ${rulesFor(b.jurisdiction).name} needs re-verification and a ${rulesFor(b.jurisdiction).currency} wallet — reset the demo to try another market.`,
     );
+  }
+  // identity: a verified ID was matched against this name, so it can't drift away from the ID afterwards.
+  if (b.name && b.name !== user.name && user.kyc_status === "verified" && latestVerifiedRecord(user.id))
+    throw new HttpError(403, "Your name matches your verified ID, so it can't be changed here. Contact support to change it.", "name_locked");
+  // identity: with sign-in on, a new PIN needs the current one (a stolen session alone can't reset it).
+  if (b.pin && authMode() === "firebase" && user.pin_hash) {
+    if (!b.currentPin) throw new HttpError(400, "Enter your current PIN.", "current_pin_required");
+    if (!checkPin(user, b.currentPin)) throw new HttpError(403, "That PIN isn't right.", "pin_mismatch");
   }
   if (b.name) run("UPDATE users SET name = ? WHERE id = ?", b.name, user.id);
   if (b.email !== undefined) run("UPDATE users SET email = ? WHERE id = ?", b.email || null, user.id);

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PauseIcon } from "@/components/icons";
 import { Banner, Card, Divider, EmptyState, ErrorState, PracticeBadge, ScreenSkeleton, StatusPill, Txt, useNow } from "@/components/ui";
 import { useDashboard } from "@/lib/api/hooks";
+import { invalidate, type QueryName } from "@/lib/api/keys";
 import { haptic } from "@/lib/haptics";
 import { layout, space, useTheme } from "@/theme";
 import { DAY_MS } from "./format";
@@ -17,7 +18,7 @@ import { SwitchRow } from "./SwitchRow";
 import type { UpcomingMove } from "./schedule";
 import { useUpcoming } from "./useUpcoming";
 
-const REFRESH = new Set(["dashboard", "invest-core", "activity"]);
+const REFRESH: QueryName[] = ["dashboard", "invest-core", "activity"];
 
 /**
  * Coming up (pushed): every automatic move in the next 30 days, each with "Skip this one", and a
@@ -38,7 +39,7 @@ export function UpcomingScreen() {
     haptic("pull.threshold");
     setRefreshing(true);
     try {
-      await qc.invalidateQueries({ predicate: (q) => REFRESH.has(String(q.queryKey[1])) });
+      await invalidate(qc, ...REFRESH);
     } finally {
       setRefreshing(false);
     }

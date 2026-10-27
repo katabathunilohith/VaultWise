@@ -2,12 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { router, useFocusEffect } from "expo-router";
 import { useNow } from "@/components/ui";
+import { useBiometricKind } from "@/features/account/pin";
 import { api, ApiError } from "@/lib/api/client";
-import { DEMO_PIN } from "@/lib/api/demo";
-import { useCheckout, useConnection, useInvalidateMoney, useVaults } from "@/lib/api/hooks";
+import { useCheckout, useInvalidateMoney, useVaults } from "@/lib/api/hooks";
+import { byKey, qk } from "@/lib/api/keys";
 import type { PaymentIntent } from "@/lib/api/pay-types";
+import { PRACTICE_PIN, usePracticeMode } from "@/lib/api/practice";
 import { haptic } from "@/lib/haptics";
-import { authenticateBiometric, biometricKind } from "@/lib/session";
+import { authenticateBiometric } from "@/lib/auth/biometrics";
+import { useCheckoutOutcomeHaptics } from "./useCheckoutOutcomeHaptics";
 import { selectedVault, vaultOptions, type PayVault } from "./vaults";
 
 export type Phase =
@@ -24,7 +27,7 @@ export type Phase =
  * Pay with Vaultwise checkout: load the intent, pick the vault, hold to pay, authenticate
  * (biometrics, PIN as fallback), confirm, then follow the intent while it's processed.
  *
- * Simulated checkouts (demo mode, or live while the server's /pay routes don't exist) are
+ * Simulated checkouts (Practice, or live while the server's /pay routes don't exist) are
  * confirmed by the on-device simulator, which accepts the practice PIN — so a passed biometric
  * check stands in for it there. A real checkout needs the customer's server PIN, so it always
  * asks for it.
@@ -34,7 +37,7 @@ export function useCheckoutFlow(intentId: string | undefined) {
   const { refetch } = q;
   const qc = useQueryClient();
   const vaults = useVaults();
-  const { mode } = useConnection();
+  const practiceMode = usePracticeMode();
   const invalidate = useInvalidateMoney();
   const [phase, setPhase] = useState<Phase>({ kind: "review" });
   const [confirmed, setConfirmed] = useState<PaymentIntent | null>(null);
@@ -45,17 +48,8 @@ export function useCheckoutFlow(intentId: string | undefined) {
   const [pinError, setPinError] = useState(0);
   /** Used as the PIN pad's key: a bump gives a fresh pad when a typed PIN was never sent. */
   const [pinResets, setPinResets] = useState(0);
-  const [bio, setBio] = useState<"face" | "finger" | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    void biometricKind().then((k) => {
-      if (alive) setBio(k);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
+  // null until the device has answered, like when it has none.
+  const bio = useBiometricKind() ?? null;
 
   // A copy cached from an earlier visit can be out of date (paid since, or a Practice checkout
   // that was reset), so only data fetched since this screen opened is shown.
@@ -70,7 +64,7 @@ export function useCheckoutFlow(intentId: string | undefined) {
   const vault = intent ? selectedVault(intent, vaultChoice) : null;
   const options = intent ? vaultOptions(intent, vaults.data?.vaults) : [];
   const blocked = status === "requires_customer" && !!intent && (!vault || vault.available < intent.amount);
-  const practice = mode === "demo" || !!intent?.simulated;
+  const practice = practiceMode || !!intent?.simulated;
   const intentKey = intent?.id ?? null;
 
   // Opening over a cached copy, or coming back from Add money (or anywhere else) — the
@@ -93,17 +87,8 @@ export function useCheckoutFlow(intentId: string | undefined) {
     }
   }, [blocked, expired, intentKey]);
 
-  // Outcome haptics, only for a payment confirmed on this screen (not when reopening an old one).
-  const signalled = useRef<string | null>(null);
-  useEffect(() => {
-    if (!paidHere || !status || signalled.current === status) return;
-    if (status === "succeeded") haptic("pay.success");
-    else if (status === "in_review") haptic("proof.review");
-    else if (status === "declined") haptic("error");
-    else return;
-    signalled.current = status;
-    void invalidate();
-  }, [paidHere, status, invalidate]);
+  // The outcome haptic for a payment confirmed here. Its balances have moved, so refresh them too.
+  useCheckoutOutcomeHaptics(status, paidHere, () => void invalidate());
 
   // Set while a confirm, or the Face ID check before one, is running. `phase` is state, so a
   // handler from an older render (a second PIN, a late hold) could still see it as idle.
@@ -129,7 +114,7 @@ export function useCheckoutFlow(intentId: string | undefined) {
       // A decline moved nothing, and its own outcome haptic follows.
       if (next.status !== "declined") haptic("irreversible.commit");
       // Seed the checkout query with the confirmed intent so its polling starts right away.
-      qc.setQueriesData<PaymentIntent>({ predicate: (query) => query.queryKey[1] === "checkout" && query.queryKey[2] === next.id }, next);
+      qc.setQueriesData<PaymentIntent>({ predicate: byKey(qk.checkout(next.id)) }, next);
       setConfirmed(next);
       setPaidFrom(vault);
       setPaidHere(true);
@@ -173,7 +158,7 @@ export function useCheckoutFlow(intentId: string | undefined) {
     if (practice && bio) {
       setPhase({ kind: "authenticating" });
       if (await checkBiometric()) {
-        await submit(DEMO_PIN, "biometric");
+        await submit(PRACTICE_PIN, "biometric");
         return;
       }
     }
@@ -183,7 +168,7 @@ export function useCheckoutFlow(intentId: string | undefined) {
   /** The biometric key on the PIN pad: the PIN step stays up while it confirms. */
   const retryBiometric = async () => {
     if (!practice || !bio || phase.kind === "submitting" || inFlight.current) return;
-    if (await checkBiometric()) await submit(DEMO_PIN, "biometric", "pin");
+    if (await checkBiometric()) await submit(PRACTICE_PIN, "biometric", "pin");
   };
 
   const leave = () => (router.canGoBack() ? router.back() : router.replace("/pay"));

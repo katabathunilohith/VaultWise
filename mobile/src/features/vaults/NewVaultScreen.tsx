@@ -7,7 +7,8 @@ import { api } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import { useInvalidateMoney } from "@/lib/api/hooks";
 import type { VaultCategory } from "@/lib/api/types";
-import { emoji3d } from "@/lib/categories";
+import { emoji3d, TEMPLATE_CATEGORIES } from "@/lib/categories";
+import { OwnRuleChooser, useOwnRule } from "@/features/custom-rules"; // custom-rules
 import { haptic } from "@/lib/haptics";
 import { parseAmount } from "@/lib/money";
 import { space } from "@/theme";
@@ -15,16 +16,15 @@ import { KeyboardSafe, KeypadFooter } from "./fields";
 import { dateFromChoice, GoalFields, RuleFields, type DateChoice } from "./forms";
 import { ruleDraftFrom, ruleDraftValid, ruleInput, type RuleDraft } from "./format";
 import { useCurrency, writeSeenMilestone } from "./hooks";
-import { NameStep, PurposeStep, ReviewSummary, StepTitle } from "./NewVaultSteps";
+import { NameStep, PurposeStep, ReviewSummary, StepTitle, TemplatePicker } from "./NewVaultSteps";
 import { ReleaseContract } from "./ReleaseContract";
 
 const STEPS = 5;
 
-/** Purposes a link can preselect (a custom vault also needs its template, so it's picked here). */
-const PRESETS: VaultCategory[] = ["health", "education", "housing", "emergency", "retirement"];
+/** Purposes a link can preselect (a custom vault also needs its rules, so it's picked here). */
 const presetFrom = (raw: string | string[] | undefined): VaultCategory | null => {
   const v = Array.isArray(raw) ? raw[0] : raw;
-  return PRESETS.find((k) => k === v) ?? null;
+  return TEMPLATE_CATEGORIES.find((k) => k === v) ?? null;
 };
 
 /**
@@ -42,6 +42,7 @@ export function NewVaultScreen() {
   const [step, setStep] = useState(0);
   const [category, setCategory] = useState<VaultCategory | null>(() => presetFrom(params.category));
   const [template, setTemplate] = useState<VaultCategory | null>(null);
+  const ownRule = useOwnRule(); // custom-rules
   const [name, setName] = useState("");
   const [joint, setJoint] = useState(false);
   const [member, setMember] = useState("");
@@ -56,7 +57,7 @@ export function NewVaultScreen() {
   const targetDate = dateFromChoice(months, null);
   const monthsCount = typeof months === "number" ? months : 12;
   const valid = [
-    !!category && (category !== "custom" || !!template),
+    !!category && (category !== "custom" || (ownRule.active ? ownRule.valid : !!template)),
     name.trim().length >= 2 && (!joint || member.trim().length >= 2),
     targetMinor > 0,
     ruleDraftValid(rule),
@@ -79,7 +80,8 @@ export function NewVaultScreen() {
       const { id } = await api.createVault({
         name: name.trim(),
         category,
-        template: category === "custom" && template ? template : undefined,
+        template: category === "custom" && !ownRule.active && template ? template : undefined,
+        customRule: category === "custom" ? (ownRule.rule ?? undefined) : undefined, // custom-rules
         target: targetMinor / 100,
         targetDate,
         ...ruleInput(rule),
@@ -134,12 +136,17 @@ export function NewVaultScreen() {
           {step === 0 ? (
             <PurposeStep
               category={category}
-              template={template}
               onCategory={(k) => {
                 setCategory(k);
                 if (k !== "custom") setTemplate(null);
               }}
-              onTemplate={setTemplate}
+              customSection={
+                ownRule.enabled ? (
+                  <OwnRuleChooser state={ownRule} templatePicker={<TemplatePicker template={template} onTemplate={setTemplate} />} />
+                ) : (
+                  <TemplatePicker template={template} onTemplate={setTemplate} withTitle />
+                )
+              }
             />
           ) : null}
 
@@ -176,7 +183,8 @@ export function NewVaultScreen() {
               {error ? <Banner tone="danger" title="The vault wasn't made" body={`${error} Nothing was saved. Try again.`} /> : null}
               <ReviewSummary
                 category={category}
-                template={template}
+                template={ownRule.active ? null : template}
+                ownRule={category === "custom" && ownRule.active}
                 name={name.trim()}
                 member={joint ? member.trim() : null}
                 target={targetMinor}
@@ -184,7 +192,12 @@ export function NewVaultScreen() {
                 rule={rule}
                 currency={currency}
               />
-              <ReleaseContract category={category} template={template} showSupportLink={false} />
+              <ReleaseContract
+                category={category}
+                template={ownRule.active ? null : template}
+                customRule={category === "custom" ? ownRule.rule : null}
+                showSupportLink={false}
+              />
               <Txt v="bodyM" color="textMuted">
                 You can change the goal and auto-save later. What unlocks it stays the same.
               </Txt>

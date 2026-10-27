@@ -2,12 +2,11 @@ import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { AmountKeypad, Button, Chip, ModalScreen, PracticeBadge, Press, Stack, Txt } from "@/components/ui";
 import { api } from "@/lib/api/client";
-import { useConnection } from "@/lib/api/hooks";
 import type { Minor } from "@/lib/api/types";
+import { nextRunFrom } from "@/lib/invest";
 import { parseAmount } from "@/lib/money";
 import { layout, space } from "@/theme";
-import { recordDemoPlan } from "../demo-overlay";
-import { everyWord, fmtDay, fmtMoney, nextRunFrom, type Frequency } from "../format";
+import { everyWord, fmtDay, fmtMoney, type Frequency } from "../format";
 import { useInvalidateInvest } from "../use-invest";
 import { AmountDisplay } from "./AmountDisplay";
 import { FlowModal } from "./FlowModal";
@@ -41,10 +40,9 @@ export function PlanModal({
   bandName: string;
   plan: CurrentPlan | null;
 }) {
-  const { mode } = useConnection();
   const invalidate = useInvalidateInvest();
-  // The plan as it was when the flow opened. The prop updates as soon as a save lands (refetch,
-  // or the demo overlay), which would otherwise flip "Plan started." to "Plan updated." mid-screen.
+  // The plan as it was when the flow opened. The prop updates as soon as a save lands (the
+  // refetch), which would otherwise flip "Plan started." to "Plan updated." mid-screen.
   const [plan] = useState(planAtOpen);
   const [step, setStep] = useState<Step>("edit");
   const [frequency, setFrequency] = useState<Frequency>(plan?.frequency ?? "monthly");
@@ -62,9 +60,7 @@ export function PlanModal({
     setError(null);
     try {
       await api.setSip(amount / 100, frequency);
-      const next = nextRunFrom(frequency);
-      if (mode === "demo") recordDemoPlan({ amount, frequency, nextRunAt: next, active: true });
-      setSavedNext(next);
+      setSavedNext(nextRunFrom(frequency));
       setStep("saved");
       void invalidate();
     } catch (e) {
@@ -80,7 +76,6 @@ export function PlanModal({
     setError(null);
     try {
       await api.cancelSip();
-      if (mode === "demo") recordDemoPlan({ ...plan, nextRunAt: 0, active: false });
       setStep("stopped");
       void invalidate();
     } catch (e) {

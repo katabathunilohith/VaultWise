@@ -3,7 +3,7 @@ import { Keyboard, StyleSheet, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { WarningCircleIcon } from "@/components/icons";
 import { Button, Row, Txt } from "@/components/ui";
-import { useDemoIntents } from "@/lib/api/hooks";
+import { usePayIntents } from "@/lib/api/hooks";
 import { haptic } from "@/lib/haptics";
 import { fonts, layout, radius, type, useTheme } from "@/theme";
 import { PRACTICE_MERCHANT_CODES, resolveMerchantCode } from "./intent-link";
@@ -14,7 +14,7 @@ export function MerchantCodeEntry() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   // Codes open the merchant's newest checkout, so a code still works after its first bill is paid.
-  const intents = useDemoIntents();
+  const intents = usePayIntents();
 
   const go = () => {
     const typed = code.trim();

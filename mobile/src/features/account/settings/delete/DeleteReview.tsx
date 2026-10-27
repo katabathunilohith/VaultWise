@@ -7,9 +7,14 @@ import { money } from "@/lib/money";
 import { radius, space, useTheme } from "@/theme";
 import { CalmError, CheckRow } from "../../controls";
 
-/** What deleting does: each vault balance and where it goes, what's removed, and the acknowledgement. */
-export function DeleteReview({ ack, onAck, demo }: { ack: boolean; onAck: (v: boolean) => void; demo: boolean }) {
+/**
+ * What deleting does: each vault balance and where it goes, what's removed, and the acknowledgement.
+ * identity: with sign-in on (`closing`), the server closes the account and keeps its records, so
+ * there's no "back to your bank" list and nothing is said to be deleted.
+ */
+export function DeleteReview({ ack, onAck, demo, closing = false }: { ack: boolean; onAck: (v: boolean) => void; demo: boolean; closing?: boolean }) {
   const dash = useDashboard();
+  if (closing) return <CloseReview ack={ack} onAck={onAck} />;
   return (
     <>
       <View style={{ gap: space.xs }}>
@@ -52,6 +57,34 @@ export function DeleteReview({ ack, onAck, demo }: { ack: boolean; onAck: (v: bo
         Want a copy first? Go back and choose Export my data. You can also delete your account from the web app.
       </Txt>
 
+      <CheckRow label="I understand this can't be undone" checked={ack} onChange={onAck} />
+    </>
+  );
+}
+
+/** identity: closing an account with sign-in on. */
+function CloseReview({ ack, onAck }: { ack: boolean; onAck: (v: boolean) => void }) {
+  return (
+    <>
+      <View style={{ gap: space.xs }}>
+        <PracticeBadge />
+        <Txt v="headline" accessibilityRole="header">
+          Before you close
+        </Txt>
+        <Txt v="bodyL">Closes your account and signs this login out. Records are kept as the law requires. This can&apos;t be undone.</Txt>
+      </View>
+      <View style={{ gap: space.sm }}>
+        <Txt v="titleM" accessibilityRole="header">
+          What happens
+        </Txt>
+        <Bullet text="Your vaults and saving rules stop. Nothing moves automatically after this." />
+        <Bullet text="This login can't open the account again." />
+        <Bullet text="Your history and documents are kept as the law requires." />
+        <Bullet text="From this phone: your PIN, app lock and choices like notifications." />
+      </View>
+      <Txt v="bodyM" color="textMuted">
+        Money still in a vault? Talk to a person before you close, so it goes where you want. Want a copy of your data first? Go back and choose Export my data.
+      </Txt>
       <CheckRow label="I understand this can't be undone" checked={ack} onChange={onAck} />
     </>
   );

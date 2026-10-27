@@ -1,8 +1,6 @@
-import { useEffect } from "react";
-import { AppState, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { CameraIcon, GearIcon, ImagesIcon } from "@/components/icons";
 import { Button, ModalScreen, Txt } from "@/components/ui";
-import { openAppSettings } from "@/lib/session";
 import { space, useTheme } from "@/theme";
 import { TextLink } from "../components/Links";
 import type { CameraOffReason, StepNav } from "./types";
@@ -22,14 +20,17 @@ const COPY: Record<CameraOffReason, { title: string; body: string }> = {
   },
 };
 
-/** Camera unavailable, denied or on web: a plain explanation and the other two ways in. */
+/**
+ * Camera unavailable, denied or on web: a plain explanation and the other two ways in. While it's
+ * denied, the flow re-reads the permission when the app comes back (useCameraAccess).
+ */
 export function CameraOffStep({
   nav,
   reason,
   canAskAgain,
   busy,
   onAskAgain,
-  onRecheck,
+  onSettings,
   onChoose,
   onSamples,
 }: {
@@ -38,20 +39,13 @@ export function CameraOffStep({
   canAskAgain: boolean;
   busy: boolean;
   onAskAgain: () => void;
-  /** Called when the app returns to the foreground (the person may have changed Settings). */
-  onRecheck: () => void;
+  /** Opens Vaultwise in the phone's Settings. */
+  onSettings: () => void;
   onChoose: () => void;
   onSamples: () => void;
 }) {
   const { c } = useTheme();
   const copy = COPY[reason];
-  useEffect(() => {
-    if (reason !== "denied") return;
-    const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active") onRecheck();
-    });
-    return () => sub.remove();
-  }, [reason, onRecheck]);
   return (
     <ModalScreen
       title="Scan the bill"
@@ -79,7 +73,7 @@ export function CameraOffStep({
         canAskAgain ? (
           <TextLink label="Allow the camera" icon={CameraIcon} onPress={onAskAgain} />
         ) : (
-          <TextLink label="Open settings" icon={GearIcon} onPress={() => void openAppSettings()} hint="Opens Vaultwise in your phone's settings" />
+          <TextLink label="Open settings" icon={GearIcon} onPress={onSettings} hint="Opens Vaultwise in your phone's settings" />
         )
       ) : null}
     </ModalScreen>

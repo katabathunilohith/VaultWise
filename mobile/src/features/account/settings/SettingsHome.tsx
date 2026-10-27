@@ -22,18 +22,25 @@ import {
 import { Banner, ListRow, StatusPill, ToggleRow } from "@/components/ui";
 import { api } from "@/lib/api/client";
 import { useConnection, useLimits, useMe } from "@/lib/api/hooks";
+import { PRACTICE_ONLY } from "@/lib/build";
 import { useHapticLevel } from "@/lib/haptics";
 import { moneyWhole } from "@/lib/money";
-import { setLockEnabled, useSession } from "@/lib/session";
+import { setLockEnabled } from "@/lib/auth/app-lock";
+import { useSession } from "@/lib/auth/session-state";
 import { appearanceSettingAvailable, useTheme } from "@/theme";
 import { Group } from "../controls";
 import { Page } from "../layout";
-import { biometricName, useBiometricKind, type Biometric } from "../pin";
+import { biometricName, useBiometricKind, type Biometric } from "../pin-guard";
 import { appearanceLabel } from "./AppearanceScreen";
 import { connectionLabel } from "./ConnectionScreen";
 import { hapticLevelLabel } from "./hapticCatalog";
 import { notificationSummary, useNotificationPrefs } from "./notificationPrefs";
 import { ProfileHeader } from "./ProfileHeader";
+import { SignInPreviewRow, SignOutRow, useAuthSettings } from "@/features/auth"; // identity
+import { downloadSignedInExport } from "@/features/auth/exportData"; // identity
+import { errorMessage } from "@/lib/api/errors"; // identity
+import { IdentityRow, KYC_ENABLED } from "@/features/kyc"; // identity
+import { RecoveryRow, useRecoveryPending } from "@/features/recovery"; // identity
 
 /** Profile & settings (pushed from the avatar). Groups in order of how often people need them. */
 export function SettingsHome() {
@@ -43,15 +50,29 @@ export function SettingsHome() {
   const limits = useLimits();
   const level = useHapticLevel();
   const notif = useNotificationPrefs();
-  const [exportNote, setExportNote] = useState<"demo" | "failed" | null>(null);
+  const identity = useAuthSettings(); // identity
+  const recoveryPending = useRecoveryPending(); // identity
+  // A failed export keeps the address it tried, so the note stays right if the data source changes.
+  const [exportNote, setExportNote] = useState<"demo" | "signedIn" | { signedInError: unknown } | { failedUrl: string } | null>(null);
 
   const exportData = async () => {
-    if (conn.mode !== "live") return setExportNote("demo");
+    // Practice has nothing to export (exportUrl is null there).
+    const url = api.exportUrl();
+    if (!url) return setExportNote("demo");
+    // identity: signed in, the export needs the sign-in token, which an opened browser can't send.
+    if (identity.signedIn) {
+      try {
+        setExportNote((await downloadSignedInExport(url)) === "saved" ? null : "signedIn");
+      } catch (e) {
+        setExportNote({ signedInError: e });
+      }
+      return;
+    }
     try {
-      await Linking.openURL(api.exportUrl());
+      await Linking.openURL(url);
       setExportNote(null);
     } catch {
-      setExportNote("failed");
+      setExportNote({ failedUrl: url });
     }
   };
 
@@ -87,12 +108,17 @@ export function SettingsHome() {
       </Group>
 
       <Group title="App">
-        <ListRow
-          icon={GlobeIcon}
-          title="Data source"
-          subtitle={conn.lastError ? `${connectionLabel(conn.mode)} · server not answering` : connectionLabel(conn.mode)}
-          onPress={() => router.push("/settings/connection")}
-        />
+        {/* The store build is Practice only, with no server address to choose (lib/build.ts). */}
+        {PRACTICE_ONLY ? (
+          <ListRow icon={GlobeIcon} title="Practice" subtitle="Everything is simulated on this phone. No real money moves." />
+        ) : (
+          <ListRow
+            icon={GlobeIcon}
+            title="Data source"
+            subtitle={conn.lastError ? `${connectionLabel(conn.mode)} · server not answering` : connectionLabel(conn.mode)}
+            onPress={() => router.push("/settings/connection")}
+          />
+        )}
         <ListRow icon={ShieldCheckIcon} title="Trust centre" subtitle="Who holds your money, fees and your data" onPress={() => router.push("/settings/trust")} />
       </Group>
 
@@ -104,13 +130,23 @@ export function SettingsHome() {
       </Group>
 
       <Group title="Account">
+        {/* identity: ID check, a waiting recovery request, the Practice sign-in preview */}
+        {KYC_ENABLED ? <IdentityRow /> : null}
+        {recoveryPending ? <RecoveryRow /> : null}
+        {identity.preview ? <SignInPreviewRow /> : null}
         <ListRow icon={ExportIcon} title="Export my data" subtitle="A copy of everything, as a file" onPress={() => void exportData()} />
+        {/* identity */}
+        {identity.signedIn ? <SignOutRow email={identity.email} /> : null}
         <ListRow icon={TrashIcon} title="Delete account" destructive onPress={() => router.push("/settings/delete-account")} />
       </Group>
       {exportNote === "demo" ? (
         <Banner tone="info" title="Nothing to export in demo mode" body="Demo data lives only on this phone and resets when the app restarts. Connect to the Vaultwise server to export your account." />
-      ) : exportNote === "failed" ? (
-        <Banner tone="warning" title="The export didn't open" body={`Open ${api.exportUrl()} in a browser on this network.`} />
+      ) : exportNote === "signedIn" ? (
+        <Banner tone="info" title="Export isn't in the app yet" body="While you're signed in, get your copy from Vaultwise on the web. Sign in there with the same email." />
+      ) : exportNote && "signedInError" in exportNote ? (
+        <Banner tone="warning" title="The export didn't download" body={errorMessage(exportNote.signedInError)} />
+      ) : exportNote ? (
+        <Banner tone="warning" title="The export didn't open" body={`Open ${exportNote.failedUrl} in a browser on this network.`} />
       ) : null}
     </Page>
   );

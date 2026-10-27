@@ -3,6 +3,7 @@ import { settleEmergencies } from "./emergency";
 import { revertExpiredLimitIncreases } from "./limits";
 import { runDueSips } from "./invest/core";
 import type { User } from "./users";
+import { autoSaveSource, runDueWalletContributions } from "./wallet"; // wallet
 
 /**
  * Lazy scheduler: due recurring contributions, held emergency releases and
@@ -11,7 +12,9 @@ import type { User } from "./users";
  */
 export async function tick(user: User) {
   const now = Date.now();
-  runDueContributions(user, now);
+  // wallet: auto-saves come from the wallet when the customer chose it, otherwise from the bank as before.
+  if (autoSaveSource(user) === "wallet") runDueWalletContributions(user, now);
+  else runDueContributions(user, now);
   expireStaleWithdrawals(user, now);
   revertExpiredLimitIncreases(user, now);
   settleEmergencies(user, now);

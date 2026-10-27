@@ -30,8 +30,30 @@ export class AiError extends Error {
   }
 }
 
+/**
+ * Makes a provider error body safe to log. A json_validate_failed body carries the model's failed output
+ * (`failed_generation`), which can hold what it read from a document, ID numbers included. That field is
+ * dropped, and any long run of digits or ID-shaped token left over is masked.
+ */
+export function redactProviderText(text: string) {
+  let out = text;
+  try {
+    const parsed = JSON.parse(text) as { error?: Record<string, unknown> };
+    if (parsed?.error && "failed_generation" in parsed.error) {
+      parsed.error.failed_generation = "[redacted]";
+      out = JSON.stringify(parsed);
+    }
+  } catch {
+    // Not JSON: cut a raw failed_generation tail if there is one.
+    out = out.replace(/("?failed_generation"?\s*[:=]\s*)[\s\S]*/i, "$1[redacted]");
+  }
+  return out
+    .replace(/\d(?:[\s-]?\d){5,}/g, "[digits]")
+    .replace(/\b[A-Z]{3,5}\d{4,7}[A-Z]?\b/g, "[id]");
+}
+
 function providerError(status: number, text: string) {
-  console.warn(`[groq] ${status}: ${text.slice(0, 500)}`);
+  console.warn(`[groq] ${status}: ${redactProviderText(text).slice(0, 500)}`);
   if (status === 429 && /per day|\((?:TPD|RPD)\)/i.test(text))
     return new AiError("the AI provider's daily usage limit has been reached", "daily_limit");
   if (status === 429) return new AiError("the AI provider is at capacity right now", "rate_limit");

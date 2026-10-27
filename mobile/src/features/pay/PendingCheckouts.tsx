@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { CaretRightIcon } from "@/components/icons";
 import { Card, MoneyText, Row, Skeleton, Stack, Txt, useNow } from "@/components/ui";
 import type { PaymentIntent } from "@/lib/api/pay-types";
-import { useDemoIntents } from "@/lib/api/hooks";
+import { usePayIntents } from "@/lib/api/hooks";
 import { categoryOf } from "@/lib/categories";
 import { money } from "@/lib/money";
 import { radius, space, useTheme } from "@/theme";
@@ -12,7 +12,7 @@ import { MerchantAvatar } from "./MerchantAvatar";
 
 /** "Waiting for you": checkouts a merchant has sent that still need the customer. */
 export function PendingCheckouts() {
-  const q = useDemoIntents();
+  const q = usePayIntents();
   const now = useNow(30_000);
   if (q.isPending)
     return (

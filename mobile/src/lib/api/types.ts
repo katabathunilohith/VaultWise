@@ -4,6 +4,8 @@
  * major units; `client.ts` converts so screens only ever deal with minor units.
  */
 
+import type { MeAuth, MeKyc, MeRecovery } from "./identity-types"; // identity
+
 export type Minor = number;
 export type Millis = number;
 
@@ -72,6 +74,10 @@ export interface MeOnboarded {
   rules: Rules;
   jurisdictions: { code: string; name: string; currency: string; flag: string }[];
   countries: Country[];
+  /** identity: sign-in, ID check and recovery (optional: older servers and fixtures leave them out). */
+  auth?: MeAuth;
+  kyc?: MeKyc;
+  recovery?: MeRecovery | null;
 }
 
 export interface MeNew {
@@ -79,6 +85,10 @@ export interface MeNew {
   aiEnabled: boolean;
   jurisdictions: { code: string; name: string; currency: string; flag: string }[];
   countries: Country[];
+  /** identity: who is signed in, before a wallet exists. */
+  auth?: MeAuth;
+  kyc?: MeKyc;
+  recovery?: MeRecovery | null;
 }
 
 export type Me = MeOnboarded | MeNew;
@@ -98,11 +108,21 @@ export interface VaultMember {
   contributed: Minor;
 }
 
+/** custom-rules: a custom vault's own rule, in its owner's words. */
+export interface CustomRule {
+  /** What the money may pay for (1 to 5 items). */
+  uses: string[];
+  /** The proof promised for each withdrawal. */
+  proof: string;
+}
+
 export interface Vault {
   id: string;
   name: string;
   category: VaultCategory;
   template: VaultCategory;
+  /** custom-rules: set on custom vaults that have their own rule. */
+  customRule?: CustomRule | null;
   target: Minor;
   targetDate: string | null;
   balance: Minor;
@@ -134,7 +154,8 @@ export interface Streak {
 
 export interface Dashboard {
   currency: string;
-  totals: { saved: Minor; bank: Minor; invested: Minor; netWorth: Minor; corePnl: Minor };
+  /** `wallet` (wallet module) is the spending balance; netWorth includes it. */
+  totals: { saved: Minor; bank: Minor; invested: Minor; netWorth: Minor; corePnl: Minor; wallet?: Minor };
   vaults: Vault[];
   series: ({ t: Millis } & Partial<Record<VaultCategory, Minor>>)[];
   emergency: { tier1Available: Minor; tier2Available: Minor; remainingCap: Minor; cap: Minor; receiptsDue: number };
@@ -257,7 +278,8 @@ export interface EmergencyPreview {
 export interface EmergencyResult {
   id: string;
   status: "released" | "processing" | "cooling_off" | "blocked";
-  plan: EmergencyPlanItem[] | EmergencyPreview;
+  /** The plan as re-made at submit time: what actually moved, or why nothing did. */
+  plan: EmergencyPreview;
   releaseAt?: Millis;
   receiptRequired?: boolean;
 }
@@ -309,6 +331,8 @@ export interface ProofView {
     decidedAt: Millis | null;
     durationMs: number | null;
   };
+  /** Practice only: a record from the sample snapshot, shown as it was rather than re-run. */
+  practiceSnapshot?: true;
 }
 
 export type LimitKey = "singleWithdrawal" | "dailyWithdrawal" | "monthlyEmergency";
@@ -418,6 +442,8 @@ export interface CreateVaultInput {
   name: string;
   category: VaultCategory;
   template?: VaultCategory;
+  /** custom-rules: a custom vault's own rule, sent instead of a template. */
+  customRule?: CustomRule;
   target: number;
   targetDate?: string | null;
   ruleType?: ContributionRule["type"];

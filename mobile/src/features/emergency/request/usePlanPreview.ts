@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
-import { useConnection } from "@/lib/api/hooks";
+import { useApiQuery } from "@/lib/api/hooks";
+import { qk } from "@/lib/api/keys";
 import type { Minor } from "@/lib/api/types";
 
 function useDebounced<T>(value: T, ms: number) {
@@ -18,12 +19,9 @@ function useDebounced<T>(value: T, ms: number) {
  * before they continue. `current` is only set once the preview matches the amount on screen.
  */
 export function usePlanPreview(amount: Minor | null) {
-  const { mode, checked } = useConnection();
   const debounced = useDebounced(amount, 350);
-  const q = useQuery({
-    queryKey: [mode, "emergency-preview", debounced],
-    queryFn: () => api.emergencyPreview((debounced ?? 0) / 100),
-    enabled: checked && debounced !== null && debounced > 0,
+  const q = useApiQuery(qk.emergencyPreview(debounced), () => api.emergencyPreview((debounced ?? 0) / 100), {
+    enabled: debounced !== null && debounced > 0,
     placeholderData: keepPreviousData,
     staleTime: 0,
     gcTime: 60_000,

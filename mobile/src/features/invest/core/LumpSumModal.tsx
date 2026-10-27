@@ -2,12 +2,12 @@ import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Amount, AmountKeypad, Banner, Button, Card, Divider, ModalScreen, MoneyText, PracticeBadge, Stack, Txt } from "@/components/ui";
 import { api } from "@/lib/api/client";
-import { useConnection, useDashboard } from "@/lib/api/hooks";
+import { useDashboard } from "@/lib/api/hooks";
 import type { InvestCore } from "@/lib/api/types";
+import { splitByWeight } from "@/lib/invest";
 import { parseAmount } from "@/lib/money";
 import { layout, space } from "@/theme";
-import { recordDemoBuy } from "../demo-overlay";
-import { fmtMoney, fmtWeight, splitByWeight } from "../format";
+import { fmtMoney, fmtWeight } from "../format";
 import { useInvalidateInvest } from "../use-invest";
 import { AmountDisplay } from "./AmountDisplay";
 import { FlowModal } from "./FlowModal";
@@ -36,7 +36,6 @@ export function LumpSumModal({
   bandName: string;
   allocations: InvestCore["allocations"];
 }) {
-  const { mode } = useConnection();
   const dashboard = useDashboard();
   const invalidate = useInvalidateInvest();
   const [step, setStep] = useState<Step>("amount");
@@ -55,7 +54,6 @@ export function LumpSumModal({
     setError(null);
     try {
       await api.buyCore(amount / 100);
-      if (mode === "demo") recordDemoBuy(amount);
       setStep("done");
       void invalidate();
     } catch (e) {

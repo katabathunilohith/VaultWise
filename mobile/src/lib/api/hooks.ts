@@ -1,9 +1,19 @@
-import { focusManager, QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  focusManager,
+  QueryClient,
+  useQuery,
+  useQueryClient,
+  type DefaultError,
+  type QueryFunction,
+  type QueryKey,
+  type UseQueryOptions,
+} from "@tanstack/react-query";
 import { useCallback, useRef, useSyncExternalStore } from "react";
 import { AppState, Platform } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { api } from "./client";
 import { getConnection, subscribeConnection } from "./connection";
+import { invalidate, MONEY_QUERIES, qk, withMode, type ApiKey } from "./keys";
 
 /**
  * Only data older than staleTime is fetched again on focus: coming back to the app, or to a tab.
@@ -50,121 +60,116 @@ export function useConnection() {
   return useSyncExternalStore(subscribeConnection, getConnection, getConnection);
 }
 
-/** Query keys carry the mode, so switching live/demo never shows the other source's cache. */
-function useKey(...parts: unknown[]) {
+type ApiQueryOptions<T> = Omit<UseQueryOptions<T, DefaultError, T, QueryKey>, "queryKey" | "queryFn" | "enabled"> & {
+  /** Also waits for the first connection check, like every API query. */
+  enabled?: boolean;
+};
+
+/**
+ * A query against the API. Its key (from `qk`) gets the connection mode, so switching live/demo
+ * never shows the other source's cache, and nothing is fetched until the first connection check
+ * has picked a source.
+ */
+export function useApiQuery<T>(key: ApiKey, queryFn: QueryFunction<T, QueryKey>, { enabled = true, ...options }: ApiQueryOptions<T> = {}) {
   const { mode, checked } = useConnection();
-  return { key: [mode, ...parts], enabled: checked };
+  return useQuery<T, DefaultError, T, QueryKey>({ ...options, queryKey: withMode(mode, key), queryFn, enabled: checked && enabled });
 }
 
 export function useMe() {
-  const { key, enabled } = useKey("me");
-  return useQuery({ queryKey: key, queryFn: api.me, enabled });
+  return useApiQuery(qk.me(), api.me);
+}
+
+/** The currency to show when nothing more specific is known (the Practice wallet's). */
+export const DEFAULT_CURRENCY = "INR";
+
+/** What the server's rulebook ships with, quoted until /me answers for an onboarded account. */
+const RULE_DEFAULTS = { reviewSlaHours: 4, maxDocAgeDays: 120, tier2HoldSeconds: 90, receiptWindowDays: 14 };
+
+/**
+ * The customer's rulebook as screens quote it, with the published defaults filled in. Currency,
+ * locale and name stay null until /me answers for an onboarded account, so a screen can try
+ * something more specific (a receipt's own currency, say) before DEFAULT_CURRENCY.
+ */
+export function useRules() {
+  const me = useMe();
+  const d = me.data?.onboarded ? me.data : null;
+  return {
+    currency: d?.user.currency ?? null,
+    locale: d?.rules.locale ?? null,
+    userName: d?.user.name ?? null,
+    reviewSlaHours: d?.rules.verification.reviewSlaHours ?? RULE_DEFAULTS.reviewSlaHours,
+    maxDocAgeDays: d?.rules.verification.maxDocAgeDays ?? RULE_DEFAULTS.maxDocAgeDays,
+    tier2HoldSeconds: d?.rules.emergency.tier2HoldSeconds ?? RULE_DEFAULTS.tier2HoldSeconds,
+    receiptWindowDays: d?.rules.emergency.receiptWindowDays ?? RULE_DEFAULTS.receiptWindowDays,
+  };
 }
 
 export function useDashboard() {
-  const { key, enabled } = useKey("dashboard");
-  return useQuery({ queryKey: key, queryFn: api.dashboard, enabled });
+  return useApiQuery(qk.dashboard(), api.dashboard);
 }
 
 export function useVaults() {
-  const { key, enabled } = useKey("vaults");
-  return useQuery({ queryKey: key, queryFn: api.vaults, enabled });
+  return useApiQuery(qk.vaults(), api.vaults);
 }
 
 export function useVault(id: string | undefined) {
-  const { key, enabled } = useKey("vault", id);
-  return useQuery({ queryKey: key, queryFn: () => api.vault(id!), enabled: enabled && !!id });
+  return useApiQuery(qk.vault(id), () => api.vault(id!), { enabled: !!id });
 }
 
 export function useEmergency() {
-  const { key, enabled } = useKey("emergency");
-  return useQuery({ queryKey: key, queryFn: api.emergency, enabled });
+  return useApiQuery(qk.emergency(), api.emergency);
 }
 
 export function useLimits() {
-  const { key, enabled } = useKey("limits");
-  return useQuery({ queryKey: key, queryFn: api.limits, enabled });
+  return useApiQuery(qk.limits(), api.limits);
 }
 
 export function usePortfolio() {
-  const { key, enabled } = useKey("portfolio");
-  return useQuery({ queryKey: key, queryFn: api.portfolio, enabled });
+  return useApiQuery(qk.portfolio(), api.portfolio);
 }
 
 export function useInvestCore() {
-  const { key, enabled } = useKey("invest-core");
-  return useQuery({ queryKey: key, queryFn: api.investCore, enabled });
+  return useApiQuery(qk.investCore(), api.investCore);
 }
 
 export function useInvestSatellite() {
-  const { key, enabled } = useKey("invest-satellite");
-  return useQuery({ queryKey: key, queryFn: api.investSatellite, enabled });
+  return useApiQuery(qk.investSatellite(), api.investSatellite);
 }
 
 export function useInsight() {
-  const { key, enabled } = useKey("insight");
-  return useQuery({ queryKey: key, queryFn: api.insight, enabled, staleTime: 5 * 60_000 });
+  return useApiQuery(qk.insight(), api.insight, { staleTime: 5 * 60_000 });
 }
 
 export function useActivity() {
-  const { key, enabled } = useKey("activity");
-  return useQuery({ queryKey: key, queryFn: api.activity, enabled });
+  return useApiQuery(qk.activity(), api.activity);
 }
 
 export function useAccounts() {
-  const { key, enabled } = useKey("accounts");
-  return useQuery({ queryKey: key, queryFn: api.accounts, enabled });
+  return useApiQuery(qk.accounts(), api.accounts);
 }
 
 export function useBadges() {
-  const { key, enabled } = useKey("badges");
-  return useQuery({ queryKey: key, queryFn: api.badges, enabled });
+  return useApiQuery(qk.badges(), api.badges);
 }
 
 export function useSamples() {
-  const { key, enabled } = useKey("samples");
-  return useQuery({ queryKey: key, queryFn: api.samples, enabled, staleTime: Infinity });
-}
-
-/** Polls a proof every 400 ms until its verification completes. */
-export function useProof(id: string | undefined) {
-  const { key, enabled } = useKey("proof", id);
-  return useQuery({
-    queryKey: key,
-    queryFn: () => api.proof(id!),
-    enabled: enabled && !!id,
-    // Stop when the check finishes, fails on the server ("error" means it went to a person), or the request errors.
-    refetchInterval: (q) => {
-      if (q.state.status === "error") return false;
-      const s = q.state.data?.verification.status;
-      return s === "complete" || s === "error" ? false : 400;
-    },
-  });
+  return useApiQuery(qk.samples(), api.samples, { staleTime: Infinity });
 }
 
 /** Polls a Pay with Vaultwise checkout while it's being processed. */
 export function useCheckout(id: string | undefined) {
-  const { key, enabled } = useKey("checkout", id);
-  return useQuery({
-    queryKey: key,
-    queryFn: () => api.checkout(id!),
-    enabled: enabled && !!id,
+  return useApiQuery(qk.checkout(id), () => api.checkout(id!), {
+    enabled: !!id,
     refetchInterval: (q) => (q.state.status !== "error" && q.state.data?.status === "processing" ? 300 : false),
   });
 }
 
-export function useDemoIntents() {
-  const { key, enabled } = useKey("pay-intents");
-  return useQuery({ queryKey: key, queryFn: api.demoIntents, enabled });
+export function usePayIntents() {
+  return useApiQuery(qk.payIntents(), api.payIntents);
 }
 
-/** Refreshes everything that shows balances, after money moves. */
+/** Refreshes everything that shows balances (MONEY_QUERIES), after money moves. */
 export function useInvalidateMoney() {
   const qc = useQueryClient();
-  return () =>
-    Promise.all(
-      ["dashboard", "vaults", "vault", "emergency", "limits", "activity", "badges", "portfolio", "pay-intents", "invest-core", "invest-satellite", "checkout", "accounts"].map((k) =>
-        qc.invalidateQueries({ predicate: (q) => q.queryKey[1] === k }),
-      ),
-    );
+  return () => invalidate(qc, ...MONEY_QUERIES);
 }

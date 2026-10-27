@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { body, handle, json, REVIEWER } from "@/lib/api";
+import { admin, body, handle, json } from "@/lib/api";
 import { all, get } from "@/lib/db";
 import { HttpError } from "@/lib/users";
 import { proofView, reviewDecision } from "@/lib/verification/pipeline";
@@ -7,6 +7,7 @@ import { proofView, reviewDecision } from "@/lib/verification/pipeline";
 type Ctx = { params: Promise<{ proofId: string }> };
 
 export const GET = handle(async (_req: Request, ctx: Ctx) => {
+  await admin(); // identity: ops team only when sign-in is on
   const { proofId } = await ctx.params;
   const view = proofView(proofId);
   const owner = get<{ user_id: string }>("SELECT user_id FROM proofs WHERE id = ?", proofId);
@@ -25,8 +26,9 @@ export const GET = handle(async (_req: Request, ctx: Ctx) => {
 });
 
 export const POST = handle(async (req: Request, ctx: Ctx) => {
+  const reviewer = await admin(); // identity: ops team only when sign-in is on
   const { proofId } = await ctx.params;
   const b = await body(req, z.object({ decision: z.enum(["approved", "denied"]), note: z.string().trim().min(3).max(500) }));
-  reviewDecision(proofId, b.decision, REVIEWER, b.note);
+  reviewDecision(proofId, b.decision, reviewer, b.note);
   return json({ ok: true });
 });

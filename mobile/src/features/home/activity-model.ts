@@ -5,6 +5,7 @@
  */
 import {
   ArrowDownLeftIcon,
+  BankIcon, // wallet
   ChartLineUpIcon,
   CheckCircleIcon,
   CoinsIcon,
@@ -13,11 +14,13 @@ import {
   HourglassIcon,
   LifebuoyIcon,
   LockKeyIcon,
+  PaperPlaneRightIcon, // wallet
   ReceiptIcon,
   RepeatIcon,
   SealCheckIcon,
   StorefrontIcon,
   UsersIcon,
+  WalletIcon, // wallet
   WarningCircleIcon,
   XCircleIcon,
   type Icon,
@@ -81,8 +84,11 @@ export function humaniseJournal(j: { id: string; kind: string; memo: string; cre
   const parts = split(j.memo);
   const base = { id: j.id, at: j.created_at, amount };
   switch (j.kind) {
-    case "deposit":
-      return { ...base, title: vault ? `Added to ${vault}` : "Added to a vault", detail: plain(parts.join(" · ")), icon: ArrowDownLeftIcon, dir: "in", filters: ["in"] };
+    case "deposit": {
+      // wallet: a move from the wallet arrives as "Contribution to <vault> · From your wallet".
+      const detail = /from your wallet/i.test(j.memo) ? "From your wallet" : plain(parts.join(" · "));
+      return { ...base, title: vault ? `Added to ${vault}` : "Added to a vault", detail, icon: ArrowDownLeftIcon, dir: "in", filters: ["in"] };
+    }
     case "contribution_rule":
       return { ...base, title: vault ? `Auto-save to ${vault}` : "Automatic save", detail: ruleDetail(j.memo), icon: RepeatIcon, dir: "in", filters: ["in"] };
     case "roundup": {
@@ -119,6 +125,16 @@ export function humaniseJournal(j: { id: string; kind: string; memo: string; cre
       const merchant = parts[0]?.replace(/^paid\s+/i, "") ?? "a shop";
       return { ...base, title: `Paid ${merchant}`, detail: vault ? `Pay with Vaultwise · from ${vault}` : "Pay with Vaultwise", icon: StorefrontIcon, dir: "out", filters: ["out"] };
     }
+    // wallet: bank and wallet are both your own pots, so money between them is a move; a payment
+    // from the wallet is money out.
+    case "wallet_top_up":
+      return { ...base, title: "Added to your wallet", detail: "From your bank", icon: WalletIcon, dir: "move", filters: [] };
+    case "wallet_spend": {
+      const payee = parts[0]?.replace(/^paid\s+/i, "") || "someone";
+      return { ...base, title: `Paid ${payee}`, detail: "From your wallet", icon: PaperPlaneRightIcon, dir: "out", filters: ["out"] };
+    }
+    case "wallet_cash_out":
+      return { ...base, title: "Moved to your bank", detail: "From your wallet", icon: BankIcon, dir: "move", filters: [] };
     case "refund":
       return { ...base, title: vault ? `Refund to ${vault}` : "Refund", detail: plain(parts.join(" · ")), icon: ArrowDownLeftIcon, dir: "in", filters: ["in"] };
     case "emergency": {

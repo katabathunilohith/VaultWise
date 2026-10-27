@@ -1,6 +1,8 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { getAuthState } from "../auth/firebase"; // identity
 import { getItem, KEYS, setItem } from "../storage";
+import { PRACTICE_ONLY } from "../build";
 
 /**
  * Where the app gets its data.
@@ -8,6 +10,7 @@ import { getItem, KEYS, setItem } from "../storage";
  * - demo: bundled sample data with simulated verification, so the app works on a phone
  *   that can't reach the dev machine, and in store review.
  * "auto" pings the API at launch and falls back to demo if it can't be reached.
+ * The Practice-only store build (lib/build.ts) is always demo.
  */
 export type ConnectionPref = "auto" | "live" | "demo";
 export type Mode = "live" | "demo";
@@ -34,7 +37,7 @@ export function defaultBaseUrl(): string {
 }
 
 let state: ConnectionState = {
-  pref: "auto",
+  pref: PRACTICE_ONLY ? "demo" : "auto",
   mode: "demo",
   baseUrl: defaultBaseUrl(),
   checked: false,
@@ -63,6 +66,9 @@ async function ping(baseUrl: string, timeoutMs = 3500): Promise<string | null> {
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(`${baseUrl}/api/v1/me`, { signal: ctrl.signal });
+    // identity: a server that wants sign-in answers 401 to this unsigned ping. That counts as
+    // reachable only when this app can sign in; otherwise Auto falls back to Practice as before.
+    if (res.status === 401 && getAuthState().enabled) return null;
     if (!res.ok) return `The API answered ${res.status}`;
     return null;
   } catch (e) {
@@ -93,10 +99,12 @@ export async function initConnection() {
 let applySeq = 0;
 
 export async function applyConnection(pref: ConnectionPref, baseUrl = state.baseUrl) {
+  if (PRACTICE_ONLY) pref = "demo";
   const seq = ++applySeq;
   // Keep the app mounted while re-checking; only the very first check gates the UI.
   update({ pref, baseUrl });
-  await setItem(KEYS.connection, JSON.stringify({ pref, baseUrl }));
+  // Saved in the background: the first check gates the UI, so it shouldn't wait on the Keychain.
+  void setItem(KEYS.connection, JSON.stringify({ pref, baseUrl }));
   if (seq !== applySeq) return;
   if (pref === "demo") {
     update({ mode: "demo", checked: true, lastError: null });

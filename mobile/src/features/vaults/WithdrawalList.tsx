@@ -12,7 +12,8 @@ import { money } from "@/lib/money";
 import { layout, space, useTheme } from "@/theme";
 import { Dialog } from "./Dialog";
 import { useReleaseRules } from "./hooks";
-import { formatDeadline, formatWhen, PROOF_WINDOW_MS, withdrawalStatus } from "./format";
+import { formatWhen } from "./format";
+import { isPending, withdrawalRule } from "./withdrawal-status";
 
 const PAGE = 5;
 
@@ -29,8 +30,8 @@ export function WithdrawalList({ rows, currency }: { rows: WithdrawalRow[]; curr
   const invalidate = useInvalidateMoney();
 
   const sorted = [...rows].sort((a, b) => {
-    const pa = withdrawalStatus(a.status).pending ? 0 : 1;
-    const pb = withdrawalStatus(b.status).pending ? 0 : 1;
+    const pa = isPending(a.status) ? 0 : 1;
+    const pb = isPending(b.status) ? 0 : 1;
     return pa - pb || b.created_at - a.created_at;
   });
   const shown = all ? sorted : sorted.slice(0, PAGE);
@@ -88,38 +89,13 @@ export function WithdrawalList({ rows, currency }: { rows: WithdrawalRow[]; curr
   );
 }
 
-function rowNote(row: WithdrawalRow, reviewSlaHours: number): string | null {
-  switch (row.status) {
-    case "awaiting_proof": {
-      const due = row.created_at + PROOF_WINDOW_MS;
-      return due > Date.now()
-        ? `Add the bill by ${formatDeadline(due)}.`
-        : `The time to add the bill ended at ${formatDeadline(due)}. Cancel it to free the money, or ask a person.`;
-    }
-    case "verifying":
-    case "processing":
-      return "Checking the bill now. This usually takes a few seconds.";
-    case "in_review":
-      return `A person is checking the bill, usually within ${reviewSlaHours} hours.`;
-    case "appealed":
-      return `You asked a person to check it again. You'll usually hear back within ${reviewSlaHours} hours. The money stays held until then.`;
-    case "denied":
-      return `${row.decision_reason ? `${row.decision_reason} ` : ""}${row.proof_id ? "Open it to add another bill or ask a person to check." : "Ask a person to check."}`;
-    case "expired":
-      return "No bill arrived within 24 hours, so the money stayed in this vault.";
-    default:
-      return null;
-  }
-}
-
 function WithdrawalItem({ row, currency, onCancel }: { row: WithdrawalRow; currency: string; onCancel: () => void }) {
   const { c } = useTheme();
   const { reviewSlaHours } = useReleaseRules();
-  const status = withdrawalStatus(row.status);
+  const status = withdrawalRule(row.status);
   const proofId = row.proof_id;
-  const awaiting = row.status === "awaiting_proof";
-  const deniedWithoutProof = row.status === "denied" && !proofId;
-  const note = rowNote(row, reviewSlaHours);
+  const actions = status.actions(row);
+  const note = status.note(row, { reviewSlaHours });
   const label = `${row.payee || "Withdrawal"}, ${money(row.amount, currency)}, ${status.label}`;
   const addBill = () => router.push({ pathname: "/withdraw/[vaultId]", params: { vaultId: row.vault_id, withdrawalId: row.id } });
   const body = (
@@ -161,16 +137,17 @@ function WithdrawalItem({ row, currency, onCancel }: { row: WithdrawalRow; curre
           {body}
         </View>
       )}
-      {awaiting ? (
+      {actions.length ? (
         <View style={styles.actions}>
-          {proofId ? null : (
+          {actions.includes("addBill") ? (
             <Button label="Add the bill" variant="tonal" size="sm" onPress={addBill} accessibilityHint="Opens the camera or your files for this request" />
-          )}
-          <Button label="Cancel request" variant="ghost" size="sm" haptic={null} onPress={onCancel} accessibilityHint="Asks you to confirm first" />
-        </View>
-      ) : deniedWithoutProof ? (
-        <View style={styles.actions}>
-          <Button label="Ask a person" variant="ghost" size="sm" haptic={null} onPress={() => router.push("/support")} />
+          ) : null}
+          {actions.includes("cancel") ? (
+            <Button label="Cancel request" variant="ghost" size="sm" haptic={null} onPress={onCancel} accessibilityHint="Asks you to confirm first" />
+          ) : null}
+          {actions.includes("askPerson") ? (
+            <Button label="Ask a person" variant="ghost" size="sm" haptic={null} onPress={() => router.push("/support")} />
+          ) : null}
         </View>
       ) : null}
     </View>

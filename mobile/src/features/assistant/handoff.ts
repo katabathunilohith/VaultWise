@@ -1,3 +1,4 @@
+import { onDeviceReset } from "@/lib/storage";
 import type { SupportTopic } from "./support/topics";
 
 /**
@@ -24,3 +25,6 @@ export function peekHandoff(): Handoff | null {
 export function clearHandoff() {
   pending = null;
 }
+
+// Delete account: forget the last question too.
+onDeviceReset(clearHandoff);

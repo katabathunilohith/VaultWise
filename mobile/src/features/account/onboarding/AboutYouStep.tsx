@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { TextInput, View } from "react-native";
-import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Button, PracticeBadge, ScreenSkeleton, Stack, ToggleRow, Txt } from "@/components/ui";
 import { api } from "@/lib/api/client";
-import { useConnection, useMe } from "@/lib/api/hooks";
+import { useApiQuery, useMe } from "@/lib/api/hooks";
+import { qk } from "@/lib/api/keys";
 import { haptic } from "@/lib/haptics";
-import { confirmAge, useSession } from "@/lib/session";
+import { confirmAge } from "@/lib/consents";
+import { useSession } from "@/lib/auth/session-state";
+import { getAuthState, useAuthState } from "@/lib/auth/firebase"; // identity
+import { SETUP_HREF } from "@/features/auth/routes"; // identity
 import { space } from "@/theme";
 import { CalmError, CheckRow } from "../controls";
 import { StepScreen } from "../layout";
@@ -14,7 +17,8 @@ import { CountryField } from "./CountryPicker";
 import { getDraft, saveDraft } from "./draft";
 import { TextField } from "./TextField";
 
-const backToWelcome = () => (router.canGoBack() ? router.back() : router.replace("/welcome"));
+// identity: signed in, the screen before this one is set-up (Welcome is closed to a signed-in login).
+const backToWelcome = () => (router.canGoBack() ? router.back() : router.replace(getAuthState().user ? SETUP_HREF : "/welcome"));
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -28,8 +32,9 @@ interface Errors {
 /** Onboarding step 1: name, optional email, country, 18+ and whether to start with demo history. */
 export function AboutYouStep() {
   const me = useMe();
-  const { mode } = useConnection();
   const session = useSession();
+  // identity: signed in, the account uses the sign-in's email (the server takes it from the token).
+  const signedInEmail = useAuthState().user?.email ?? null;
   const initial = getDraft();
   const [name, setName] = useState(initial.name);
   const [email, setEmail] = useState(initial.email);
@@ -40,7 +45,7 @@ export function AboutYouStep() {
   const emailRef = useRef<TextInput>(null);
 
   const countries = me.data?.countries ?? [];
-  const region = useQuery({ queryKey: [mode, "region"], queryFn: api.region, staleTime: Infinity, retry: 0 });
+  const region = useApiQuery(qk.region(), api.region, { staleTime: Infinity, retry: 0 });
   const guess = region.data?.guess;
   const guessOk = !!guess?.country && guess.supported && countries.some((x) => x.code === guess.country);
 
@@ -57,7 +62,7 @@ export function AboutYouStep() {
     const n = name.trim();
     if (n.length < 2) e.name = "Add your name (at least 2 letters).";
     else if (n.length > 60) e.name = "Use 60 characters or fewer.";
-    if (email.trim() && !EMAIL.test(email.trim())) e.email = "This doesn't look like an email address.";
+    if (!signedInEmail && email.trim() && !EMAIL.test(email.trim())) e.email = "This doesn't look like an email address.";
     if (!country) e.country = "Choose the country you live in.";
     if (!adult) e.age = "Vaultwise is only for people aged 18 and over.";
     return e;
@@ -71,7 +76,7 @@ export function AboutYouStep() {
       return;
     }
     await confirmAge();
-    saveDraft({ name: name.trim(), email: email.trim(), country, demo });
+    saveDraft({ name: name.trim(), email: signedInEmail ?? email.trim(), country, demo });
     router.push("/onboarding/pin");
   };
 
@@ -114,6 +119,11 @@ export function AboutYouStep() {
             onSubmitEditing={() => emailRef.current?.focus()}
             error={errors.name}
           />
+          {signedInEmail ? (
+            <Txt v="bodyM" color="textMuted">
+              Signed in as {signedInEmail}. Account notices go to this address.
+            </Txt>
+          ) : (
           <TextField
             ref={emailRef}
             label="Email (optional)"
@@ -132,6 +142,7 @@ export function AboutYouStep() {
             hint="Only for account notices. No marketing unless you turn it on."
             error={errors.email}
           />
+          )}
           <CountryField
             countries={countries}
             value={country}

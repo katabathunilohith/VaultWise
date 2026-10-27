@@ -3,6 +3,7 @@ import { audit } from "./audit";
 import { rulesFor, type JurisdictionRules } from "./compliance";
 import { raiseFlag } from "./fraud";
 import { aiEnabled, chatJson, describeAiError, TEXT_MODEL, VISION_MODEL, type ChatMessage } from "./groq";
+import { aiConsented } from "./ai-consent";
 import { HttpError, type User } from "./users";
 import { EMERGENCY_REASONS, fmtDate, fmtMoney, LIMIT_LABELS, type LimitKey } from "./shared";
 import { preprocess } from "./verification/forensics";
@@ -457,7 +458,8 @@ export async function requestEmergencyLimitChange(
   let ai: LimitAssessment | null = null;
   let aiError: string | undefined;
   let model: string | null = null;
-  if (aiEnabled()) {
+  // Without the person's yes (lib/ai-consent.ts) the rules and a person decide, as with no AI key.
+  if (aiEnabled() && (await aiConsented())) {
     const prompt = assessmentPrompt({
       market: rules.name,
       currency: cur,

@@ -4,7 +4,7 @@ import { optIn } from "@/lib/invest/satellite";
 
 /** Opt in to the Satellite systematic trading sleeve (risk-capped, disclosed). */
 export const POST = handle(async (req: Request) => {
-  const user = await customer({ tick: false });
+  const user = await customer({ tick: false, kyc: true });
   const b = await body(req, z.object({ amount: z.number().positive(), acknowledged: z.number().int().min(0) }));
   await optIn(user, minor(b.amount), b.acknowledged);
   return json({ ok: true }, { status: 201 });

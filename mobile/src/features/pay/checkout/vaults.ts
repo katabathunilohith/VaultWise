@@ -1,6 +1,6 @@
 import type { PaymentIntent } from "@/lib/api/pay-types";
 import type { Minor, Vault, VaultCategory } from "@/lib/api/types";
-import { categoryOf } from "@/lib/categories";
+import { categoryOf, covers } from "@/lib/categories";
 
 export type PayVault = PaymentIntent["eligibleVaults"][number];
 
@@ -33,12 +33,8 @@ export function remainingAfter(intent: PaymentIntent, paidFrom: PayVault | null)
   return intent.eligibleVaults.find((v) => v.id === intent.vaultId)?.available ?? null;
 }
 
-function covers(v: Vault, category: VaultCategory) {
-  return v.category === category || (v.category === "custom" && v.template === category);
-}
-
 /** The vault bill category in running text: "health bills". */
-export function billWord(category: VaultCategory) {
+export function payBillWord(category: VaultCategory) {
   return category === "custom" ? "these" : categoryOf(category).label.toLowerCase();
 }
 
@@ -59,7 +55,7 @@ export function vaultOptions(intent: PaymentIntent, all: Vault[] | undefined): V
       name: v.name,
       category: v.category,
       available: v.available,
-      disabledReason: `Doesn't cover ${billWord(intent.category)} bills`,
+      disabledReason: `Doesn't cover ${payBillWord(intent.category)} bills`,
     }));
   return [...eligible, ...others];
 }

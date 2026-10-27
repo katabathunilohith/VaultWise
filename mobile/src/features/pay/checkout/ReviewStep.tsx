@@ -15,7 +15,13 @@ import { VaultPicker } from "./VaultPicker";
  * The checkout before paying: merchant, amount, invoice, paying vault and the full breakdown,
  * then press-and-hold to pay in the main-button slot (deliberate friction for money going out).
  */
-export function ReviewStep({ intent, flow }: { intent: PaymentIntent; flow: CheckoutFlow }) {
+export function ReviewStep({
+  intent,
+  flow,
+}: {
+  intent: PaymentIntent;
+  flow: Pick<CheckoutFlow, "phase" | "vault" | "options" | "blocked" | "selectVault" | "start" | "close">;
+}) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const busy = flow.phase.kind === "authenticating" || flow.phase.kind === "submitting";
   const amount = payAmount(intent.amount, intent.currency);

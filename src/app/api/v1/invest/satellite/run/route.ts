@@ -4,6 +4,6 @@ import { runPaperEngine } from "@/lib/invest/satellite";
 export const maxDuration = 90;
 
 export const POST = handle(async () => {
-  const user = await customer({ tick: false });
+  const user = await customer({ tick: false, kyc: true });
   return json(await runPaperEngine(user));
 });

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Banner, Button, MoneyText, PracticeBadge, ProgressBar, ScreenSkeleton, StatusPill, Txt } from "@/components/ui";
+import { WalletLimitCard } from "@/features/wallet"; // wallet
 import { useLimits } from "@/lib/api/hooks";
 import type { LimitKey, LimitsOverview } from "@/lib/api/types";
 import { moneyWhole } from "@/lib/money";
@@ -49,6 +50,8 @@ function Limits({ overview, onEdit }: { overview: LimitsOverview; onEdit: (key: 
       {LIMITS.map((l) => (
         <LimitCard key={l.key} overview={overview} limitKey={l.key} title={l.title} body={l.body} onEdit={onEdit} />
       ))}
+      {/* wallet */}
+      <WalletLimitCard />
       {active > 0 ? (
         <Banner
           tone="info"

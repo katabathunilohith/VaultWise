@@ -2,7 +2,7 @@ import { StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { CalendarBlankIcon, LockIcon, PlusIcon } from "@/components/icons";
 import { Banner, Card, EmptyState, ErrorState, ListRow, PracticeBadge, Press, ProfileAvatar, Screen, ScreenSkeleton, SectionHeader, Stack, Txt } from "@/components/ui";
-import { useVaults } from "@/lib/api/hooks";
+import { DEFAULT_CURRENCY, useVaults } from "@/lib/api/hooks";
 import type { Vault } from "@/lib/api/types";
 import { emoji3d } from "@/lib/categories";
 import { moneyWhole } from "@/lib/money";
@@ -14,7 +14,7 @@ import { NewVaultCard, VaultCard } from "./VaultCard";
 export function VaultsListScreen() {
   const q = useVaults();
   const vaults = q.data?.vaults ?? [];
-  const currency = q.data?.currency ?? vaults[0]?.currency ?? "INR";
+  const currency = q.data?.currency ?? vaults[0]?.currency ?? DEFAULT_CURRENCY;
   const total = vaults.reduce((s, v) => s + v.balance, 0);
   const mine = vaults.filter((v) => !v.isJoint);
   const joint = vaults.filter((v) => v.isJoint);

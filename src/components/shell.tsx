@@ -25,8 +25,9 @@ import { BRAND } from "@/lib/shared";
 import type { JurisdictionRules } from "@/lib/compliance";
 import { cx, Skeleton, ToastProvider } from "./ui";
 import { Onboarding, type CountryOption } from "./onboarding";
+import { IdentityMain, SignedInChip, kycStatusOf, useIdentityGate, type IdentityMe } from "./identity"; // identity
 
-export interface Me {
+export interface Me extends IdentityMe /* identity: auth, kyc, recovery */ {
   onboarded: boolean;
   aiEnabled?: boolean;
   user?: {
@@ -190,7 +191,9 @@ function SideNav({ me, onNavigate }: { me: Me; onNavigate?: () => void }) {
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-white">{me.user.name}</div>
                 <div className="flex items-center gap-1 text-[11px] text-brand-muted">
-                  <ShieldCheck className="size-3" aria-hidden /> KYC verified · {me.user.country?.flag ?? me.rules?.flag} {me.user.currency}
+                  <ShieldCheck className="size-3" aria-hidden /> {kycStatusOf(me) === "verified" ? "KYC verified" : "ID not verified"} ·{" "}
+                  {/* identity */}
+                  {me.user.country?.flag ?? me.rules?.flag} {me.user.currency}
                 </div>
               </div>
             </div>
@@ -205,8 +208,12 @@ function SideNav({ me, onNavigate }: { me: Me; onNavigate?: () => void }) {
 }
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { data: me, reload, error } = useApi<Me>("/api/v1/me");
+  const gate = useIdentityGate(); // identity
+  const { data: me, reload, error } = useApi<Me>(gate.meUrl); // identity: no /me call until sign-in state is known
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const gated = gate.screen({ me, error, page: children }); // identity: sign-in, recovery and ops screens
+  if (gated) return gated; // identity
 
   if (error && !me)
     return <div className="flex min-h-screen items-center justify-center p-6 text-sm text-ink-2">Couldn&apos;t reach the server: {error}</div>;
@@ -223,13 +230,17 @@ export function Shell({ children }: { children: ReactNode }) {
     );
   if (!me.onboarded)
     return (
-      <Onboarding
-        countries={me.countries}
-        onDone={() => {
-          clearApiCache();
-          reload();
-        }}
-      />
+      <>
+        <Onboarding
+          countries={me.countries}
+          onDone={() => {
+            clearApiCache();
+            reload();
+          }}
+        />
+        {/* identity */}
+        <SignedInChip />
+      </>
     );
 
   return (
@@ -256,7 +267,10 @@ export function Shell({ children }: { children: ReactNode }) {
               </div>
             </div>
           )}
-          <main className="mx-auto w-full max-w-[1240px] px-4 py-6 sm:px-6 lg:px-10 lg:py-9">{children}</main>
+          <main className="mx-auto w-full max-w-[1240px] px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
+            {/* identity: banners, and calm placeholders for pages closed during a recovery check */}
+            <IdentityMain me={me}>{children}</IdentityMain>
+          </main>
         </div>
       </MeCtx.Provider>
     </ToastProvider>

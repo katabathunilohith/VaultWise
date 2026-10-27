@@ -18,7 +18,10 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_PRACTICE_ONLY": "1"
+      }
     }
   },
   "submit": {

@@ -4,6 +4,7 @@ import { get } from "@/lib/db";
 import { HttpError } from "@/lib/users";
 import { getVaultRow } from "@/lib/vaults";
 import { createProof, runPipeline, validateUpload } from "@/lib/verification/pipeline";
+import { aiConsented } from "@/lib/ai-consent";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -12,7 +13,7 @@ export const maxDuration = 90;
 /** Upload proof-of-purpose for a pending withdrawal; verification runs in the background. */
 export const POST = handle(async (req: Request, ctx: Ctx) => {
   const { id } = await ctx.params;
-  const user = await customer({ tick: false });
+  const user = await customer({ tick: false, kyc: true });
   const vault = getVaultRow(user, id);
   const form = await req.formData();
   const file = form.get("file");
@@ -36,6 +37,7 @@ export const POST = handle(async (req: Request, ctx: Ctx) => {
     category: vault.template,
     vaultId: id,
     withdrawalId,
+    aiAllowed: await aiConsented(),
   });
   after(() => runPipeline(proofId));
   return json({ id: proofId, status: "processing" }, { status: 202 });

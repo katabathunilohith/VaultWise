@@ -14,6 +14,7 @@ import {
 } from "@/components/icons";
 import type { Tone } from "@/components/ui";
 import type { EmergencyHistoryItem, EmergencyOverview, EmergencyPreview, Guardrail } from "@/lib/api/types";
+import { CATEGORIES, TIER1_CATEGORY } from "@/lib/categories";
 import { dayWord, fmt, shortDate } from "./format";
 
 /* Reason icons not in the shared icon set (declared exactly like src/components/icons.ts). */
@@ -33,6 +34,9 @@ export const REASON_ICONS: Record<string, Icon> = {
   bereavement: FlowerLotusIcon,
   other: DotsThreeCircleIcon,
 };
+
+/** Where Tier 1 money comes from, in running text ("Health"). */
+const TIER1 = CATEGORIES[TIER1_CATEGORY].short;
 
 /** The server's notes must be at least this long when a note is required. */
 export const NOTE_MIN = 10;
@@ -91,7 +95,7 @@ export function plainCheck(g: Guardrail, o: EmergencyOverview, p: EmergencyPrevi
       key: g.key,
       state,
       label: "Money available",
-      detail: ok ? (p.tier2 > 0 ? "Health and your other vaults cover it" : "Your Health vault covers it") : `Your vaults are ${fmt(p.shortfall, cur)} short`,
+      detail: ok ? (p.tier2 > 0 ? `${TIER1} and your other vaults cover it` : `Your ${TIER1} vault covers it`) : `Your vaults are ${fmt(p.shortfall, cur)} short`,
     };
   if (g.key === "cooloff")
     return {
@@ -227,5 +231,5 @@ export function receiptInText(h: EmergencyHistoryItem) {
 }
 
 export function tierText(tier: number) {
-  return tier >= 2 ? "Tier 2 · other vaults" : "Tier 1 · Health";
+  return tier >= 2 ? "Tier 2 · other vaults" : `Tier 1 · ${TIER1}`;
 }

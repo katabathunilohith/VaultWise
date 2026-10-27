@@ -1,3 +1,4 @@
+import { topUp, walletEnabled } from "./wallet"; // wallet
 import fs from "node:fs";
 import path from "node:path";
 import { get, newId, run, tx, UPLOAD_DIR } from "./db";
@@ -367,7 +368,17 @@ async function seedProof(
  * hash-chained audit log stays in time order and every balance is the
  * product of real ledger postings.
  */
-export async function seedDemo(opts: { name: string; country?: string; jurisdiction?: string; pin: string; email?: string }) {
+/** `id` defaults to the prototype's fixed demo id; with sign-in on, each account passes its own. */
+export async function seedDemo(opts: {
+  id?: string;
+  name: string;
+  country?: string;
+  jurisdiction?: string;
+  pin: string;
+  email?: string;
+  /** identity: "pending" when sign-up must verify an ID first (firebase mode). Default: verified, as before. */
+  kycStatus?: "verified" | "pending";
+}) {
   const country = countryInfo(opts.country ?? defaultCountryFor(opts.jurisdiction ?? "US"))?.code ?? "US";
   const rules = rulesFor(countryInfo(country)!.market);
   const cur = rules.currency;
@@ -398,12 +409,13 @@ export async function seedDemo(opts: { name: string; country?: string; jurisdict
     );
 
   const user = createUser({
-    id: "usr_demo",
+    id: opts.id ?? "usr_demo",
     name: opts.name,
     email: opts.email,
     country,
     pin: opts.pin,
     createdAt: T0,
+    kycStatus: opts.kycStatus, // identity
   });
   const fresh = () => get<User>("SELECT * FROM users WHERE id = ?", user.id)!;
 
@@ -835,6 +847,14 @@ export async function seedDemo(opts: { name: string; country?: string; jurisdict
     await runPaperEngine(final);
   } catch {
     // Market data unavailable — the engine catches up on the next run.
+  }
+  // wallet: a little everyday money in the wallet, topped up from the bank two days ago.
+  if (walletEnabled()) {
+    try {
+      topUp(fresh(), amt(150), { ts: now - 2 * DAY });
+    } catch {
+      // The seeded bank balance couldn't cover it; the wallet just starts empty.
+    }
   }
   audit({
     userId: user.id,

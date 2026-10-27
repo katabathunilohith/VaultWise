@@ -3,7 +3,8 @@ import { StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { CaretDownIcon, LifebuoyIcon } from "@/components/icons";
 import { Amount, Button, Card, PracticeBadge, Press, Row, Screen, ScreenSkeleton, StatusPill, Timeline, Txt, VaultGlyph, useNow } from "@/components/ui";
-import { useConnection } from "@/lib/api/hooks";
+import { DEFAULT_CURRENCY, useRules } from "@/lib/api/hooks";
+import { usePracticeMode } from "@/lib/api/practice";
 import type { ProofView } from "@/lib/api/types";
 import { layout, space, useTheme } from "@/theme";
 import { AppealBox } from "../components/AppealBox";
@@ -12,7 +13,7 @@ import { DocumentCard } from "../components/DocumentCard";
 import { BackHeader, TalkToPerson } from "../components/Links";
 import { describeProof } from "../describe";
 import { whenText } from "../format";
-import { useProofRecord, useProofRules } from "../hooks";
+import { useProofRecord } from "../hooks";
 import { CaretUpIcon } from "../icons";
 import { stageSteps } from "../stages";
 
@@ -39,8 +40,8 @@ export function ProofDetailScreen({ id }: { id: string }) {
 
 function ProofDetail({ proof, fromPracticeHistory }: { proof: ProofView; fromPracticeHistory: boolean }) {
   const { cat } = useTheme();
-  const rules = useProofRules();
-  const { mode } = useConnection();
+  const rules = useRules();
+  const practice = usePracticeMode();
   const now = useNow(30_000, true);
   const [expanded, setExpanded] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -48,7 +49,7 @@ function ProofDetail({ proof, fromPracticeHistory }: { proof: ProofView; fromPra
   const receipt = proof.purpose === "emergency_receipt";
   const category = proof.vault?.category ?? (receipt ? "emergency" : proof.category);
   const vaultName = proof.vault?.name ?? (receipt ? "your emergency payout" : "this vault");
-  const currency = rules.currency ?? proof.extracted?.currency ?? "INR";
+  const currency = rules.currency ?? proof.extracted?.currency ?? DEFAULT_CURRENCY;
   const amount = proof.withdrawal?.amount ?? null;
   const d = describeProof(proof, {
     vaultName,
@@ -58,7 +59,7 @@ function ProofDetail({ proof, fromPracticeHistory }: { proof: ProofView; fromPra
     maxDocAgeDays: rules.maxDocAgeDays,
     reviewSlaHours: rules.reviewSlaHours,
     now,
-    demo: mode === "demo",
+    demo: practice,
   });
   const steps = stageSteps(proof, { vaultName, maxDocAgeDays: rules.maxDocAgeDays, outcome: d.outcome, expanded, now });
   // Same rule as the server: only a decline can go to a person, and only once. A check already with

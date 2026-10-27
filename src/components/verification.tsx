@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CircleCheck, CircleX, Eye, FileImage, Gavel, Hourglass, ImageUp, LoaderCircle, ScanSearch, Upload } from "lucide-react";
 import { api, refreshAll, useApi } from "@/lib/client";
 import { CATEGORIES, fmtMoney, type VaultCategory } from "@/lib/shared";
+import { AuthedImage } from "./identity/media"; // identity
 import { Badge, Button, ErrorNote, Field, MoneyInput, Notice, Progress, Segmented, StatusIcon, Textarea, Input, cx, useToast } from "./ui";
 
 export interface StageView {
@@ -323,8 +324,8 @@ export function ProofImages({ proofId, hasEla }: { proofId: string; hasEla: bool
           />
         )}
       </div>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      {/* identity: the file route needs the sign-in token when sign-in is on. */}
+      <AuthedImage
         src={`/api/v1/proofs/${proofId}/file${mode === "ela" ? "?kind=ela" : ""}`}
         alt={mode === "ela" ? "ELA heatmap: brighter regions changed more when re-compressed" : "Proof document"}
         className="w-full rounded-lg border border-line bg-sunken"

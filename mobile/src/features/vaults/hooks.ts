@@ -1,25 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
-import { useMe } from "@/lib/api/hooks";
+import { DEFAULT_CURRENCY, useRules } from "@/lib/api/hooks";
 import type { Vault } from "@/lib/api/types";
 import { getItem, setItem } from "@/lib/storage";
 import { milestoneLevel } from "./format";
 
-/** The customer's wallet currency (falls back to the demo wallet's). */
+/** The customer's wallet currency (else `fallback`, else the Practice wallet's). */
 export function useCurrency(fallback?: string) {
-  const me = useMe();
-  if (me.data?.onboarded) return me.data.user.currency;
-  return fallback ?? "INR";
+  return useRules().currency ?? fallback ?? DEFAULT_CURRENCY;
 }
 
 /** Numbers the release contract quotes, from the customer's rulebook (with the published defaults). */
 export function useReleaseRules() {
-  const me = useMe();
-  const rules = me.data?.onboarded ? me.data.rules : null;
-  return {
-    tier2HoldSeconds: rules?.emergency.tier2HoldSeconds ?? 90,
-    receiptWindowDays: rules?.emergency.receiptWindowDays ?? 14,
-    reviewSlaHours: rules?.verification.reviewSlaHours ?? 4,
-  };
+  const { tier2HoldSeconds, receiptWindowDays, reviewSlaHours } = useRules();
+  return { tier2HoldSeconds, receiptWindowDays, reviewSlaHours };
 }
 
 /* ---------- milestones (last seen quarter per vault, kept on the device) ---------- */

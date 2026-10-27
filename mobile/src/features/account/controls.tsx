@@ -1,8 +1,7 @@
 import { Children, Fragment, isValidElement, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import { CheckIcon, WarningCircleIcon, type Icon } from "@/components/icons";
-import { Button, Divider, Press, Txt } from "@/components/ui";
-import { errorMessage } from "@/lib/api/errors";
+import { Divider, ErrorState, Press, Txt } from "@/components/ui";
 import { layout, radius, space, useTheme } from "@/theme";
 
 /** A titled group of rows on one surface, separated by hairlines (settings lists). */
@@ -129,26 +128,9 @@ export function FieldError({ text }: { text: string }) {
   );
 }
 
-/**
- * Error state for calm-core screens: the same words as the kit's ErrorState, with a plain icon
- * instead of a 3D object (no 3D in settings, limits or PIN screens).
- */
-export function CalmError({ error, onRetry, title = "This didn't load" }: { error: unknown; onRetry?: () => void; title?: string }) {
-  const { c } = useTheme();
-  return (
-    <View style={styles.center} accessibilityRole="alert">
-      <View style={[styles.errorIcon, { backgroundColor: c.surfaceRaised }]}>
-        <WarningCircleIcon size={28} color={c.textMuted} />
-      </View>
-      <Txt v="titleL" align="center">
-        {title}
-      </Txt>
-      <Txt v="bodyM" color="textMuted" align="center">
-        {errorMessage(error)}
-      </Txt>
-      {onRetry ? <Button label="Try again" variant="tonal" size="md" onPress={onRetry} /> : null}
-    </View>
-  );
+/** Error state for settings, limits and PIN screens: the kit's calm error, with a smaller icon. */
+export function CalmError({ error, onRetry, title }: { error: unknown; onRetry?: () => void; title?: string }) {
+  return <ErrorState variant="calm" iconSize={28} error={error} onRetry={onRetry} title={title} />;
 }
 
 /** Small round icon button (Play, Info). 44 pt target, always labelled. */
@@ -181,7 +163,5 @@ const styles = StyleSheet.create({
   radioDot: { width: 12, height: 12, borderRadius: 6 },
   box: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   fieldError: { flexDirection: "row", alignItems: "center", gap: 6 },
-  center: { alignItems: "center", justifyContent: "center", gap: space.sm, paddingVertical: space.xxl, paddingHorizontal: space.lg },
-  errorIcon: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: space.xs },
   iconBtn: { width: layout.hit, height: layout.hit, borderRadius: layout.hit / 2, alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth },
 });

@@ -1,34 +1,21 @@
-import { StyleSheet, View } from "react-native";
 import { router } from "expo-router";
-import { WarningCircleIcon } from "@/components/icons";
-import { Button, Txt } from "@/components/ui";
-import { errorMessage } from "@/lib/api/errors";
-import { space, useTheme } from "@/theme";
+import { ErrorState } from "@/components/ui";
 
 /**
- * Load failure for the Invest tab. The kit's ErrorState shows a 3D object, which calm-core
- * screens never use, so this keeps to an icon, a plain reason, a retry and a person to ask.
+ * Load failure for the Invest tab: the kit's calm error (no 3D object), saying the investments
+ * haven't changed, with a retry and a person to ask.
  */
 export function CalmError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const { c } = useTheme();
   return (
-    <View style={styles.center} accessibilityRole="alert">
-      <WarningCircleIcon size={40} color={c.textMuted} />
-      <Txt v="titleL" align="center" accessibilityRole="header">
-        This didn&apos;t load
-      </Txt>
-      <Txt v="bodyM" color="textMuted" align="center">
-        {`${errorMessage(error)} Your investments haven't changed.`}
-      </Txt>
-      <View style={styles.actions}>
-        <Button label="Try again" variant="tonal" size="md" onPress={onRetry} />
-        <Button label="Ask a person" variant="ghost" size="sm" onPress={() => router.push("/support")} />
-      </View>
-    </View>
+    <ErrorState
+      variant="calm"
+      iconSize={40}
+      bareIcon
+      heading
+      error={error}
+      onRetry={onRetry}
+      footnote="Your investments haven't changed."
+      secondaryAction={{ label: "Ask a person", onPress: () => router.push("/support") }}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  center: { alignItems: "center", justifyContent: "center", gap: space.sm, paddingVertical: space.xxl, paddingHorizontal: space.lg },
-  actions: { alignItems: "center", gap: space.xs, marginTop: space.xs },
-});

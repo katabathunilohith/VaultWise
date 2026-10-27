@@ -4,9 +4,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LockKeyIcon } from "@/components/icons";
 import { Txt } from "@/components/ui";
 import { haptic } from "@/lib/haptics";
-import { authenticateBiometric, checkDevicePin, markUnlocked } from "@/lib/session";
+import { markUnlocked } from "@/lib/auth/app-lock";
+import { authenticateBiometric } from "@/lib/auth/biometrics";
+import { checkDevicePin } from "@/lib/auth/device-pin";
 import { layout, space, useTheme } from "@/theme";
-import { biometricName, GuardedPinPad, PinLayout, PinStatus, useBiometricKind, usePinGuard } from "./pin";
+import { biometricName, useBiometricKind, usePinGuard } from "./pin-guard";
+import { GuardedPinPad, PinLayout, PinStatus } from "./PinLayout";
 
 /**
  * App lock (calm core). Face ID / fingerprint is tried once each time the app comes to the

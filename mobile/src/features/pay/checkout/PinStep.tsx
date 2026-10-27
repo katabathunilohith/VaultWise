@@ -1,8 +1,8 @@
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { WarningCircleIcon } from "@/components/icons";
 import { ModalScreen, PinPad, PracticeBadge, Row, Stack, Txt } from "@/components/ui";
-import { DEMO_PIN } from "@/lib/api/demo";
 import type { PaymentIntent } from "@/lib/api/pay-types";
+import { PRACTICE_PIN } from "@/lib/api/practice";
 import { space, useTheme } from "@/theme";
 import { payAmount } from "../format";
 import type { CheckoutFlow } from "./useCheckoutFlow";
@@ -11,7 +11,13 @@ import type { CheckoutFlow } from "./useCheckoutFlow";
 const PAD_LIFT = 24;
 
 /** PIN step: the fallback when biometrics aren't available or were declined. Auto-submits. */
-export function PinStep({ intent, flow }: { intent: PaymentIntent; flow: CheckoutFlow }) {
+export function PinStep({
+  intent,
+  flow,
+}: {
+  intent: PaymentIntent;
+  flow: Pick<CheckoutFlow, "phase" | "vault" | "practice" | "bio" | "pinError" | "pinResets" | "submit" | "retryBiometric" | "backToReview">;
+}) {
   const { c } = useTheme();
   const submitting = flow.phase.kind === "submitting";
   const message = flow.phase.kind === "pin" ? flow.phase.message : null;
@@ -30,7 +36,7 @@ export function PinStep({ intent, flow }: { intent: PaymentIntent; flow: Checkou
             <PracticeBadge />
             {flow.practice ? (
               <Txt v="caption" color="textMuted">
-                Practice PIN: {DEMO_PIN}
+                Practice PIN: {PRACTICE_PIN}
               </Txt>
             ) : null}
           </Row>

@@ -4,7 +4,7 @@
  * phone (Keychain/Keystore, localStorage on web) and the screens say so.
  */
 import { useEffect, useSyncExternalStore } from "react";
-import { getItem, setItem } from "@/lib/storage";
+import { getItem, onDeviceReset, setItem } from "@/lib/storage";
 
 const KEY_MOVES = "vw.home.moves";
 const KEY_FRESH = "vw.home.freshStart";
@@ -26,6 +26,9 @@ function emit(next: Partial<HomePrefs>) {
   state = { ...state, ...next };
   listeners.forEach((fn) => fn());
 }
+
+// Delete account: the saved choices are wiped with the rest, so forget them here too.
+onDeviceReset(() => emit({ paused: false, skipped: {}, freshStartDone: null }));
 
 function prune(skipped: Record<string, number>, now: number) {
   return Object.fromEntries(Object.entries(skipped).filter(([, until]) => typeof until === "number" && until > now));

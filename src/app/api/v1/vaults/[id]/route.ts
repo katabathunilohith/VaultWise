@@ -9,7 +9,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export const GET = handle(async (_req: Request, ctx: Ctx) => {
   const { id } = await ctx.params;
-  const user = await customer();
+  const user = await customer({ access: "read" });
   const v = getVaultRow(user, id);
   const withdrawals = all(
     `SELECT w.*, v.decision, v.final_decision, v.confidence FROM withdrawals w

@@ -4,6 +4,7 @@
  * up here first" (DESIGN.md §7.4) — this is the one place that list is computed.
  */
 import type { ContributionRule, InvestCore, Minor, Vault, VaultCategory } from "@/lib/api/types";
+import { emergencyTier } from "@/lib/categories";
 import { DAY_MS, weekIndex } from "./format";
 
 export type MoveKind = "fixed" | "percent" | "roundup" | "sip";
@@ -68,11 +69,13 @@ export interface ScheduleInput {
   pendingRoundups?: { s: Minor; n: number };
   /** The last payday we know about, to estimate percent-of-payday rules. */
   lastPayday?: { at: number; amount: Minor } | null;
+  /** wallet: where fixed auto-saves are paid from (the bank unless the wallet was chosen). */
+  fixedFrom?: "bank" | "wallet";
   now: number;
   days?: number;
 }
 
-export function upcomingMoves({ vaults, sips = [], pendingRoundups, lastPayday, now, days = 30 }: ScheduleInput): UpcomingMove[] {
+export function upcomingMoves({ vaults, sips = [], pendingRoundups, lastPayday, fixedFrom = "bank", now, days = 30 }: ScheduleInput): UpcomingMove[] {
   const until = now + days * DAY_MS;
   const dated: UpcomingMove[] = [];
   const undated: UpcomingMove[] = [];
@@ -84,7 +87,7 @@ export function upcomingMoves({ vaults, sips = [], pendingRoundups, lastPayday, 
     if (r.type === "fixed" && r.amount) {
       const first = r.nextRunAt ?? nextRun(v.createdAt, r.frequency);
       for (const at of occurrences(first, r.frequency, now, until)) {
-        dated.push({ ...common, key: `fx:${v.id}:${at}`, kind: "fixed", at, title: FREQ_TITLE[r.frequency ?? "monthly"], amount: r.amount, skipUntil: at + DAY_MS });
+        dated.push({ ...common, from: fixedFrom === "wallet" ? "Your wallet" : "Your bank", key: `fx:${v.id}:${at}`, kind: "fixed", at, title: FREQ_TITLE[r.frequency ?? "monthly"], amount: r.amount, skipUntil: at + DAY_MS });
       }
     } else if (r.type === "percent_income" && r.percent) {
       const est = lastPayday ? Math.round((lastPayday.amount * r.percent) / 100) : null;
@@ -166,8 +169,8 @@ export interface FreshStart {
 
 /**
  * One suggestion for the first three days of a month (a "fresh start" landmark, Dai et al. 2014):
- * raise one vault's automatic saving to what its goal date needs. Health first, then whichever
- * vault is furthest behind. Null when there's nothing honest to suggest.
+ * raise one vault's automatic saving to what its goal date needs. Tier 1 emergency vaults (Health)
+ * first, then whichever vault is furthest behind. Null when there's nothing honest to suggest.
  */
 export function freshStartSuggestion(vaults: Vault[], now: number): FreshStart | null {
   if (new Date(now).getDate() > 3) return null;
@@ -181,7 +184,7 @@ export function freshStartSuggestion(vaults: Vault[], now: number): FreshStart |
       return { vault: v, current, perDay, gap: need - current };
     })
     .filter((x) => x.perDay > perDayOf(x.current))
-    .sort((a, b) => Number(b.vault.category === "health") - Number(a.vault.category === "health") || b.gap - a.gap);
+    .sort((a, b) => Number(emergencyTier(b.vault.category) === 1) - Number(emergencyTier(a.vault.category) === 1) || b.gap - a.gap);
   const pick = candidates[0];
   if (!pick) return null;
   return { vault: pick.vault, perDay: pick.perDay, monthly: monthlyFromDaily(pick.perDay), currentMonthly: pick.current };

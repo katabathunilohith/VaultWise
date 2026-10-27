@@ -1,8 +1,7 @@
-import type { Tone } from "@/components/ui";
-import type { ContributionRule, Minor, UpdateVaultInput, Vault, VaultCategory, WithdrawalStatus } from "@/lib/api/types";
+import type { ContributionRule, Minor, UpdateVaultInput, Vault } from "@/lib/api/types";
 import { moneyWhole, parseAmount } from "@/lib/money";
 
-/** Pure helpers for the vaults area: rule lines, daily framing, dates, statuses. */
+/** Pure helpers for the vaults area: rule lines, daily framing, dates. Withdrawal statuses: ./withdrawal-status. */
 
 const DAY = 86_400_000;
 
@@ -16,9 +15,6 @@ export const FREQUENCIES: { value: Frequency; label: string }[] = [
 
 const FREQ_PHRASE: Record<Frequency, string> = { weekly: "a week", biweekly: "every 2 weeks", monthly: "a month" };
 const PERIODS_PER_YEAR: Record<Frequency, number> = { weekly: 52, biweekly: 26, monthly: 12 };
-
-/** The categories a custom vault can borrow its unlock rules from. */
-export const TEMPLATES: Exclude<VaultCategory, "custom">[] = ["health", "education", "housing", "emergency", "retirement"];
 
 /** "₹1,000 a week" · "5% of payday" · "Round-ups" · "No auto-save". */
 export function ruleLine(rule: Pick<ContributionRule, "type" | "amount" | "percent" | "frequency">, currency: string): string {
@@ -120,28 +116,6 @@ export function formatDeadline(ms: number, now = Date.now()) {
   if (ms < startOfToday + 2 * DAY) return `${time} tomorrow`;
   return `${time}, ${dayShortFmt.format(d)}`;
 }
-
-/* ---------- withdrawals ---------- */
-
-/** The server's statuses (verifying, appealed); "processing" is kept as an older name for verifying. */
-const STATUS: Record<string, { tone: Tone; label: string; pending: boolean }> = {
-  awaiting_proof: { tone: "warning", label: "Awaiting proof", pending: true },
-  verifying: { tone: "info", label: "Checking", pending: true },
-  processing: { tone: "info", label: "Checking", pending: true },
-  in_review: { tone: "info", label: "With a person", pending: true },
-  appealed: { tone: "info", label: "With a person", pending: true },
-  paid: { tone: "success", label: "Paid", pending: false },
-  denied: { tone: "danger", label: "Not approved", pending: false },
-  cancelled: { tone: "neutral", label: "Cancelled", pending: false },
-  expired: { tone: "neutral", label: "Expired", pending: false },
-};
-
-export function withdrawalStatus(status: WithdrawalStatus) {
-  return STATUS[status] ?? { tone: "neutral" as const, label: status.replace(/_/g, " "), pending: false };
-}
-
-/** Proof is due within 24 hours of a withdrawal request. */
-export const PROOF_WINDOW_MS = 24 * 3_600_000;
 
 /* ---------- contribution rule drafts (shared by New vault and Edit) ---------- */
 

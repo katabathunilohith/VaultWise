@@ -1,7 +1,7 @@
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { WarningCircleIcon } from "@/components/icons";
 import { Button, ModalScreen, PinPad, PracticeBadge, Row, Stack, Txt } from "@/components/ui";
-import { DEMO_PIN } from "@/lib/api/demo";
+import { PRACTICE_PIN, usePracticeMode } from "@/lib/api/practice";
 import type { EmergencyOverview, EmergencyPreview } from "@/lib/api/types";
 import { space, useTheme } from "@/theme";
 import { fmt } from "../format";
@@ -14,7 +14,6 @@ import { leave } from "../routes";
 export function PinStep({
   o,
   plan,
-  demo,
   length,
   onLength,
   errors,
@@ -26,7 +25,6 @@ export function PinStep({
 }: {
   o: EmergencyOverview;
   plan: EmergencyPreview;
-  demo: boolean;
   length: number;
   onLength: (n: number) => void;
   errors: number;
@@ -38,6 +36,7 @@ export function PinStep({
   onPin: (pin: string) => void;
 }) {
   const { c } = useTheme();
+  const practice = usePracticeMode();
   const cur = o.currency;
   return (
     <ModalScreen title="Emergency money" back={onBack} headerRight={<PracticeBadge compact />} scroll={false}>
@@ -51,9 +50,9 @@ export function PinStep({
               ? `Your PIN opens your other vaults for ${fmt(plan.tier2, cur)}. It moves ${o.rules.tier2HoldSeconds} seconds later.`
               : "Your PIN confirms it's you for this request."}
           </Txt>
-          {demo ? (
+          {practice ? (
             <Txt v="caption" color="textMuted">
-              Demo PIN: {DEMO_PIN}
+              Demo PIN: {PRACTICE_PIN}
             </Txt>
           ) : null}
         </Stack>
@@ -80,7 +79,7 @@ export function PinStep({
 
         <Row style={styles.links}>
           <Button label="Forgot your PIN?" variant="ghost" size="sm" onPress={leave.support} accessibilityHint="Talk to a person" />
-          {demo ? null : (
+          {practice ? null : (
             <Button
               label={length === 4 ? "Use 6 digits" : "Use 4 digits"}
               variant="ghost"

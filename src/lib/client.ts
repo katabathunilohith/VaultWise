@@ -1,18 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { reportApiError, withIdentity } from "@/components/identity/session"; // identity
 
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?: string, // identity: signed_out | no_wallet | recovery_restricted | kyc_required
   ) {
     super(message);
   }
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { cache: "no-store", ...init });
+  const res = await fetch(url, await withIdentity({ cache: "no-store", ...init })); // identity: adds the sign-in token when signed in
   const text = await res.text();
   let data: unknown = null;
   try {
@@ -22,7 +24,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const msg = (data as { error?: string })?.error ?? `Request failed (${res.status})`;
-    throw new ApiError(res.status, msg);
+    const code = (data as { code?: string })?.code; // identity
+    reportApiError(url, res.status, code, init?.method); // identity
+    throw new ApiError(res.status, msg, code);
   }
   return data as T;
 }

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BackHandler, KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { useState, type ReactNode } from "react";
+import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,26 +14,7 @@ export function goBack() {
   else router.replace("/");
 }
 
-/**
- * Android hardware Back inside a multi-step screen. Pass a function to handle it (go back a step),
- * "block" to swallow it (work in progress that can't be left), or null to let navigation handle it.
- */
-export function useHardwareBack(handler: (() => void) | "block" | null) {
-  const ref = useRef(handler);
-  useEffect(() => {
-    ref.current = handler;
-  });
-  const active = handler !== null;
-  useEffect(() => {
-    if (!active) return;
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      const h = ref.current;
-      if (typeof h === "function") h();
-      return h !== null;
-    });
-    return () => sub.remove();
-  }, [active]);
-}
+/** Android hardware Back for flow steps; lives in the UI kit, re-exported for the account screens. */
 
 /** 44 pt round header control: Back (arrow) or Close (X). */
 export function HeaderButton({ kind = "back", onPress, disabled }: { kind?: "back" | "close"; onPress: () => void; disabled?: boolean }) {

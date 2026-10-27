@@ -1,12 +1,15 @@
 import { ClockIcon, MagnifyingGlassIcon, XCircleIcon } from "@/components/icons";
 import { Button, ModalScreen, PracticeBadge, Stack, Txt } from "@/components/ui";
+import type { PaymentIntent } from "@/lib/api/pay-types";
 import { space, useTheme } from "@/theme";
 import type { CheckoutFlow } from "./useCheckoutFlow";
 
 export type GoneReason = "notfound" | "expired" | "cancelled";
 
+type GoneFlow = Pick<CheckoutFlow, "close" | "talkToPerson">;
+
 /** Expired, cancelled or unknown checkouts: what happened, that nothing was paid, what to do next. */
-export function Unavailable({ reason, merchant, flow }: { reason: GoneReason; merchant?: string; flow: CheckoutFlow }) {
+export function Unavailable({ reason, merchant, flow }: { reason: GoneReason; merchant?: string; flow: GoneFlow }) {
   const { c } = useTheme();
   const copy = {
     notfound: {
@@ -48,4 +51,13 @@ export function Unavailable({ reason, merchant, flow }: { reason: GoneReason; me
       </Stack>
     </ModalScreen>
   );
+}
+
+/** The outcome table's screens for a checkout that ended unpaid. */
+export function Expired({ intent, flow }: { intent: PaymentIntent; flow: GoneFlow }) {
+  return <Unavailable reason="expired" merchant={intent.merchant.name} flow={flow} />;
+}
+
+export function Cancelled({ intent, flow }: { intent: PaymentIntent; flow: GoneFlow }) {
+  return <Unavailable reason="cancelled" merchant={intent.merchant.name} flow={flow} />;
 }

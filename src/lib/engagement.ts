@@ -1,5 +1,6 @@
 import { all, get, run } from "./db";
 import { aiEnabled, chatJson } from "./groq";
+import { aiConsented } from "./ai-consent";
 import { rulesFor } from "./compliance";
 import { balanceOf, userAccount } from "./ledger";
 import { listVaults, pendingRoundups } from "./vaults";
@@ -77,11 +78,20 @@ export interface Nudge {
 }
 
 /** Contextual, rule-based nudges — shown at the moment they're useful. */
+/** wallet: whether a missed auto-save was due from the wallet (its audit details say source "wallet"). */
+function missedFromWallet(details: string | null) {
+  try {
+    return (JSON.parse(details ?? "{}") as { source?: string }).source === "wallet";
+  } catch {
+    return false;
+  }
+}
+
 export function nudges(user: User): Nudge[] {
   const out: Nudge[] = [];
   const vaults = listVaults(user);
-  const missed = all<{ entity_id: string; ts: number }>(
-    "SELECT entity_id, ts FROM audit_log WHERE user_id = ? AND action = 'contribution.missed' AND ts > ? ORDER BY ts DESC LIMIT 3",
+  const missed = all<{ entity_id: string; ts: number; details: string | null }>(
+    "SELECT entity_id, ts, details FROM audit_log WHERE user_id = ? AND action = 'contribution.missed' AND ts > ? ORDER BY ts DESC LIMIT 3",
     user.id,
     Date.now() - 14 * 86_400_000,
   );
@@ -92,7 +102,8 @@ export function nudges(user: User): Nudge[] {
         key: `missed-${v.id}`,
         tone: "warning",
         title: `A contribution to ${v.name} was missed`,
-        body: "Your linked account was short when the scheduled transfer ran. A smaller amount now keeps the habit alive.",
+        // wallet: a wallet-funded auto-save says the wallet was short, not the bank.
+        body: `${missedFromWallet(m.details) ? "Your wallet" : "Your linked account"} was short when the scheduled transfer ran. A smaller amount now keeps the habit alive.`,
         href: `/vaults/${v.id}`,
         action: "Top up",
       });
@@ -213,9 +224,11 @@ export async function weeklyInsight(user: User) {
   const cached = get<{ payload: string }>("SELECT payload FROM ai_cache WHERE key = ?", key);
   if (cached) return JSON.parse(cached.payload) as { headline: string; body: string; tip: string; source: string };
   const snap = snapshot(user);
+  // Without the person's yes (lib/ai-consent.ts) the rule-based line is used and not cached, so a later yes gets the AI one.
+  const consented = await aiConsented();
   let out: { headline: string; body: string; tip: string; source: string };
   try {
-    if (!aiEnabled()) throw new Error("ai off");
+    if (!aiEnabled() || !consented) throw new Error("ai off");
     const r = await chatJson<{ headline: string; body: string; tip: string }>(
       [
         {
@@ -237,6 +250,6 @@ export async function weeklyInsight(user: User) {
       source: "rules",
     };
   }
-  run("INSERT OR REPLACE INTO ai_cache (key, created_at, payload) VALUES (?, ?, ?)", key, Date.now(), JSON.stringify(out));
+  if (consented) run("INSERT OR REPLACE INTO ai_cache (key, created_at, payload) VALUES (?, ?, ?)", key, Date.now(), JSON.stringify(out));
   return out;
 }

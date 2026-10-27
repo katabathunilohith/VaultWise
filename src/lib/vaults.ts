@@ -4,6 +4,7 @@ import { balanceOf, ensureAccount, transfer, userAccount, worldAccount, LedgerEr
 import { HttpError, type User } from "./users";
 import { assertWithinWithdrawalLimits } from "./limits";
 import { CATEGORIES, type VaultCategory } from "./shared";
+import { customRuleFor, type CustomRule } from "./custom-rules";
 
 export interface VaultRow {
   id: string;
@@ -29,6 +30,8 @@ export interface VaultView {
   name: string;
   category: VaultCategory;
   template: VaultCategory;
+  /** custom-rules: the owner's own rule, on custom vaults that have one. */
+  customRule: CustomRule | null;
   target: number;
   targetDate: string | null;
   balance: number;
@@ -80,6 +83,7 @@ export function toView(v: VaultRow, currency: string): VaultView {
     name: v.name,
     category: v.category,
     template: v.template,
+    customRule: v.category === "custom" ? customRuleFor(v.id) : null, // custom-rules
     target: v.target_amount,
     targetDate: v.target_date,
     balance,

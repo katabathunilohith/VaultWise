@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, Text, TextInput, View, StyleSheet, type TextInputProps } from "react-native";
-import { AmountKeypad, Button, Chip, Txt } from "@/components/ui";
+import { KeyboardAvoidingView, Platform, Text, View, StyleSheet } from "react-native";
+import { AmountKeypad, Button, Chip } from "@/components/ui";
 import { money, moneyParts, parseAmount } from "@/lib/money";
-import { fonts, radius, space, type, useTheme } from "@/theme";
+import { space, type, useTheme } from "@/theme";
 
 /**
  * The bottom slot for keypad steps (R8): the amount keypad sits in the lower middle, directly
@@ -71,30 +71,8 @@ export function TypedAmount({ value, currency, caption }: { value: string; curre
 }
 
 /** Single-line text field in the Vaultwise style (56 pt, labelled). */
-export function TextField({ label, hint, ...rest }: TextInputProps & { label: string; hint?: string }) {
-  const { c } = useTheme();
-  return (
-    <View style={{ gap: 6 }}>
-      <Txt v="labelM" color="textMuted">
-        {label}
-      </Txt>
-      <TextInput
-        accessibilityLabel={label}
-        accessibilityHint={hint}
-        placeholderTextColor={c.textMuted}
-        selectionColor={c.accent}
-        maxFontSizeMultiplier={1.6}
-        {...rest}
-        style={[styles.input, { color: c.text, backgroundColor: c.surface, borderColor: c.border }]}
-      />
-      {hint ? (
-        <Txt v="caption" color="textMuted">
-          {hint}
-        </Txt>
-      ) : null}
-    </View>
-  );
-}
+/** Moved to the UI kit; re-exported so existing imports keep working. */
+export { TextField } from "@/components/ui";
 
 /** Keeps a modal's bottom slot above the iOS keyboard on steps with text fields. */
 export function KeyboardSafe({ children }: { children: ReactNode }) {
@@ -130,14 +108,6 @@ export function ChoiceRow<T extends string | number>({
 
 const styles = StyleSheet.create({
   typed: { alignItems: "center", justifyContent: "center", minHeight: 56 },
-  input: {
-    minHeight: 56,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    paddingHorizontal: space.md,
-    fontFamily: fonts.body,
-    fontSize: 17,
-  },
   choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
   choice: { flexGrow: 1, flexBasis: "22%" },
 });

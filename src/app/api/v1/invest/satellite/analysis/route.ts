@@ -3,7 +3,7 @@ import { marketAnalysis } from "@/lib/invest/satellite";
 import type { Interval } from "@/lib/invest/market";
 
 export const GET = handle(async (req: Request) => {
-  await customer({ tick: false });
+  await customer({ tick: false, access: "read" });
   const url = new URL(req.url);
   const symbol = url.searchParams.get("symbol") ?? "BTC-USD";
   const tf = (url.searchParams.get("tf") ?? "4h") as Interval;

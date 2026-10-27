@@ -25,6 +25,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { useMe } from "@/components/shell";
+import { CUSTOM_RULES_ENABLED, CustomRuleFields, useCustomRuleDraft } from "@/components/custom-rule";
 
 type Rule = "none" | "fixed" | "percent_income" | "roundup";
 
@@ -33,7 +34,10 @@ function CreateVault({ open, onClose, initialCategory }: { open: boolean; onClos
   const router = useRouter();
   const toast = useToast();
   const [category, setCategory] = useState<VaultCategory>(initialCategory ?? "health");
-  const [template, setTemplate] = useState<VaultCategory>("custom");
+  // custom-rules: "own" means the customer writes their own rule instead of borrowing one.
+  const [template, setTemplate] = useState<VaultCategory | "own">("custom");
+  const ownRule = useCustomRuleDraft();
+  const writesOwnRule = CUSTOM_RULES_ENABLED && category === "custom" && template === "own";
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [targetDate, setTargetDate] = useState("");
@@ -54,7 +58,8 @@ function CreateVault({ open, onClose, initialCategory }: { open: boolean; onClos
       const r = await api.post<{ id: string }>("/api/v1/vaults", {
         name: name || CATEGORIES[category].label.split(" /")[0] + " fund",
         category,
-        template: category === "custom" ? template : undefined,
+        template: category === "custom" && template !== "own" ? template : undefined,
+        customRule: writesOwnRule ? ownRule.value() : undefined, // custom-rules
         target: Number(target),
         targetDate: targetDate || null,
         ruleType: rule,
@@ -87,7 +92,7 @@ function CreateVault({ open, onClose, initialCategory }: { open: boolean; onClos
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={submit} loading={busy} disabled={!Number(target)}>
+          <Button onClick={submit} loading={busy} disabled={!Number(target) || (writesOwnRule && !ownRule.valid)}>
             Create vault
           </Button>
         </>
@@ -121,7 +126,8 @@ function CreateVault({ open, onClose, initialCategory }: { open: boolean; onClos
             label="Verification template"
             hint="Custom goals borrow the closest template. Without one, every withdrawal gets the strictest review."
           >
-            <Select value={template} onChange={(e) => setTemplate(e.target.value as VaultCategory)}>
+            <Select value={template} onChange={(e) => setTemplate(e.target.value as VaultCategory | "own")}>
+              {CUSTOM_RULES_ENABLED && <option value="own">Write my own rule (checked by a person)</option>}
               <option value="custom">None — strictest tier (always reviewed by a person)</option>
               {CATEGORY_ORDER.filter((c) => c !== "custom").map((c) => (
                 <option key={c} value={c}>
@@ -131,6 +137,8 @@ function CreateVault({ open, onClose, initialCategory }: { open: boolean; onClos
             </Select>
           </Field>
         )}
+
+        {writesOwnRule && <CustomRuleFields draft={ownRule} />}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Name">

@@ -79,7 +79,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Vaultwise uses the camera to photograph receipts and invoices you send as proof, and to scan Pay with Vaultwise codes.",
+          "cameraPermission": "Vaultwise uses the camera to photograph receipts, invoices and documents you choose to send, and to scan Pay with Vaultwise codes.",
           "microphonePermission": false,
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true
@@ -88,8 +88,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Vaultwise lets you choose a photo of a receipt or invoice to send as proof.",
-          "cameraPermission": "Vaultwise uses the camera to photograph receipts and invoices you send as proof.",
+          "photosPermission": "Vaultwise lets you choose a photo of a receipt, invoice or document to send.",
+          "cameraPermission": "Vaultwise uses the camera to photograph receipts, invoices and documents you choose to send.",
           "microphonePermission": false
         }
       ],

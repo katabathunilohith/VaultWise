@@ -2,8 +2,9 @@ import { StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { CaretRightIcon, HourglassIcon, ReceiptIcon, type Icon } from "@/components/icons";
 import { Card, StatusPill, Txt, type Tone } from "@/components/ui";
-import { useEmergency, useMe } from "@/lib/api/hooks";
+import { useEmergency, useRules } from "@/lib/api/hooks";
 import { radius, space, useTheme } from "@/theme";
+import { useIdentityTodo } from "@/features/kyc"; // identity
 import { dayChip } from "./format";
 
 /**
@@ -11,12 +12,14 @@ import { dayChip } from "./format";
  * receipts owed after an emergency, and proofs still being checked. Hidden when there are none.
  */
 export function TodoCards({ receiptsDue, reviewPending, now }: { receiptsDue: number; reviewPending: number; now: number }) {
-  if (receiptsDue <= 0 && reviewPending <= 0) return null;
+  const idTodo = useIdentityTodo(); // identity: "Verify your ID to move money" (live, until verified)
+  if (!idTodo && receiptsDue <= 0 && reviewPending <= 0) return null;
   return (
     <View style={styles.list}>
       <Txt v="labelM" color="textMuted" accessibilityRole="header">
         To do
       </Txt>
+      {idTodo ? <TodoCard icon={idTodo.icon} title={idTodo.title} body={idTodo.body} pill={idTodo.pill} onPress={idTodo.onPress} /> : null}
       {receiptsDue > 0 ? <ReceiptTodo count={receiptsDue} now={now} /> : null}
       {reviewPending > 0 ? <ReviewTodo count={reviewPending} /> : null}
     </View>
@@ -53,8 +56,7 @@ function ReceiptTodo({ count, now }: { count: number; now: number }) {
  * appeals alike, so the copy doesn't claim a person is looking at every one of them.
  */
 function ReviewTodo({ count }: { count: number }) {
-  const me = useMe();
-  const hours = me.data?.onboarded ? me.data.rules.verification.reviewSlaHours : null;
+  const { reviewSlaHours: hours } = useRules();
   const title = count === 1 ? "Your proof is being checked" : `${count} proofs are being checked`;
   const body = `The money stays set aside until it's decided.${hours ? ` If a person checks it, usually within ${hours} hours.` : ""}`;
   return <TodoCard icon={HourglassIcon} title={title} body={body} pill={{ tone: "info", label: "Being checked" }} onPress={() => router.push("/vaults")} />;

@@ -4,7 +4,7 @@ import { paperEquity } from "@/lib/invest/satellite";
 
 /** Combined Core + Satellite portfolio summary. */
 export const GET = handle(async () => {
-  const user = await customer();
+  const user = await customer({ access: "read" });
   const core = await coreHoldings(user);
   const sat = paperEquity(user);
   const profile = riskProfile(user);

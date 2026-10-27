@@ -3,8 +3,9 @@ import { StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { CheckIcon, HeadsetIcon, LifebuoyIcon, ReceiptIcon, type Icon } from "@/components/icons";
 import { Card, Press, Txt } from "@/components/ui";
-import { categoryOf } from "@/lib/categories";
-import type { VaultCategory } from "@/lib/api/types";
+import { categoryOf, emergencyTier, rulesCategory } from "@/lib/categories";
+import type { CustomRule, VaultCategory } from "@/lib/api/types";
+import { CUSTOM_RULES_ENABLED, customUnlock } from "@/features/custom-rules"; // custom-rules
 import { layout, space, useTheme } from "@/theme";
 import { useReleaseRules } from "./hooks";
 
@@ -16,18 +17,26 @@ import { useReleaseRules } from "./hooks";
 export function ReleaseContract({
   category,
   template,
+  customRule,
   showSupportLink = true,
 }: {
   category: VaultCategory | string;
   template?: VaultCategory | string | null;
+  /** custom-rules: the vault's own rule, if it has one. */
+  customRule?: CustomRule | null;
   showSupportLink?: boolean;
 }) {
   const { c } = useTheme();
   const rules = useReleaseRules();
   const meta = categoryOf(category);
   // A custom vault follows the unlock rules of the template it borrowed.
-  const rulesFrom = meta.key === "custom" && template && template !== "custom" ? categoryOf(template) : meta;
-  const isHealth = rulesFrom.key === "health";
+  const rulesFrom = categoryOf(rulesCategory({ category, template }));
+  // The emergency tier follows the vault's own category, as on the server: a custom vault that
+  // borrows Health's bill rules still pays out as Tier 2.
+  const tier1 = emergencyTier(category) === 1;
+  // custom-rules: a custom vault lists its own rule (or the choice between one and a borrowed rule).
+  const own = customUnlock(category, template, customRule, { enabled: CUSTOM_RULES_ENABLED, reviewSlaHours: rules.reviewSlaHours });
+  const items = own?.items ?? rulesFrom.unlocksFor;
   const pause = rules.tier2HoldSeconds >= 120 ? `${Math.round(rules.tier2HoldSeconds / 60)}-minute` : `${rules.tier2HoldSeconds}-second`;
 
   return (
@@ -35,14 +44,18 @@ export function ReleaseContract({
       <Txt v="titleL" accessibilityRole="header">
         How this vault unlocks
       </Txt>
-      {rulesFrom !== meta ? (
+      {own && customRule ? (
+        <Txt v="bodyM" color="textMuted">
+          Follows your own rule.
+        </Txt>
+      ) : rulesFrom !== meta ? (
         <Txt v="bodyM" color="textMuted">
           Follows the {rulesFrom.label} rules.
         </Txt>
       ) : null}
 
       <Section icon={ReceiptIcon} title="With a matching bill">
-        {rulesFrom.unlocksFor.map((item) => (
+        {items.map((item) => (
           <View key={item} style={styles.bullet}>
             <CheckIcon size={16} color={c.text} weight="bold" />
             <Txt v="bodyM" style={{ flex: 1 }}>
@@ -51,14 +64,15 @@ export function ReleaseContract({
           </View>
         ))}
         <Txt v="bodyM" color="textMuted">
-          Add the bill within 24 hours of asking. It&apos;s checked in about 4 seconds. Anything unclear goes to a person, usually within{" "}
-          {rules.reviewSlaHours} hours.
+          {own
+            ? own.note
+            : `Add the bill within 24 hours of asking. It's checked in about 4 seconds. Anything unclear goes to a person, usually within ${rules.reviewSlaHours} hours.`}
         </Txt>
       </Section>
 
       <Section icon={LifebuoyIcon} title="In an emergency">
         <Txt v="bodyM" color="textMuted">
-          {isHealth
+          {tier1
             ? `Tier 1: the money is yours straight away. Add the receipt within ${rules.receiptWindowDays} days.`
             : `Tier 2: released after your PIN and a ${pause} safety pause you can cancel. Add the receipt within ${rules.receiptWindowDays} days.`}
         </Txt>

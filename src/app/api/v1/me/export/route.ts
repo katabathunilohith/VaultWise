@@ -4,7 +4,7 @@ import { audit } from "@/lib/audit";
 
 /** Data-subject access export (GDPR Art. 15 / CCPA / DPDP right to access). */
 export const GET = handle(async () => {
-  const user = await customer({ tick: false });
+  const user = await customer({ tick: false, access: "read" });
   const { pin_hash: _pin, ...profile } = user;
   void _pin;
   const data = {

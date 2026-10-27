@@ -8,7 +8,7 @@ function csvCell(v: unknown) {
 
 /** Contribution and investment summary for the calendar year, formatted for tax prep. */
 export const GET = handle(async (req: Request) => {
-  const user = await customer({ tick: false });
+  const user = await customer({ tick: false, access: "read" });
   const year = Number(new URL(req.url).searchParams.get("year") ?? new Date().getFullYear());
   const from = new Date(year, 0, 1).getTime();
   const to = new Date(year + 1, 0, 1).getTime();

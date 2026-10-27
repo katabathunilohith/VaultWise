@@ -1,5 +1,4 @@
-import type { ImageSourcePropType } from "react-native";
-import type { UploadFile } from "@/lib/api/types";
+import type { PickedImage } from "@/lib/media/pick";
 
 /** Steps of the withdraw-with-proof flow. Only the top of the step stack renders. */
 export type Step =
@@ -18,11 +17,7 @@ export type Step =
 export type DocSource = "camera" | "library" | "sample";
 
 /** A photo or sample ready to send, with what to show while reviewing it. */
-export interface PickedDoc {
-  file: UploadFile;
-  preview: ImageSourcePropType;
-  width?: number;
-  height?: number;
+export interface PickedDoc extends PickedImage {
   source: DocSource;
   /** Sample label, when it's one of ours. */
   label?: string;

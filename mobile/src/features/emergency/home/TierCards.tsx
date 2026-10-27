@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { CaretDownIcon, FirstAidKitIcon, ShieldCheckIcon, VaultIcon, type Icon } from "@/components/icons";
 import { Divider, Press, Row, Stack, Txt, VaultGlyph } from "@/components/ui";
 import type { EmergencyOverview, VaultCategory } from "@/lib/api/types";
+import { CATEGORIES, TIER1_CATEGORY } from "@/lib/categories";
 import { layout, radius, space, useTheme } from "@/theme";
 import { fmt } from "../format";
 
@@ -17,8 +18,8 @@ export function TierCards({ o }: { o: EmergencyOverview }) {
       <TierCard
         tier="Tier 1"
         icon={FirstAidKitIcon}
-        tint={cat("health").tint}
-        title="From Health, instantly"
+        tint={cat(TIER1_CATEGORY).tint}
+        title={`From ${CATEGORIES[TIER1_CATEGORY].short}, instantly`}
         body={
           o.healthVaults.length
             ? `No paperwork today — add the receipt within ${days} days.`

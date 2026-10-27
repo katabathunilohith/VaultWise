@@ -4,7 +4,7 @@ import { balanceOf, userAccount } from "@/lib/ledger";
 import { pendingRoundups } from "@/lib/vaults";
 
 export const GET = handle(async () => {
-  const user = await customer();
+  const user = await customer({ access: "read" });
   const bankBalance = balanceOf(userAccount(user.id, "bank", user.currency).id);
   const accounts = all<{ id: string; institution: string; name: string; kind: string; mask: string; balance: number; is_primary: number }>(
     "SELECT * FROM external_accounts WHERE user_id = ? ORDER BY is_primary DESC, created_at",

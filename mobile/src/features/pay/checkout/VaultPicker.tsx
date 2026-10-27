@@ -6,7 +6,7 @@ import type { PaymentIntent } from "@/lib/api/pay-types";
 import { money } from "@/lib/money";
 import { layout, radius, space, useTheme } from "@/theme";
 import { payAmount } from "../format";
-import { billWord, type VaultOption } from "./vaults";
+import { payBillWord, type VaultOption } from "./vaults";
 
 /**
  * Choose which vault pays. Vaults that can't pay this bill stay in the list, disabled, with the
@@ -43,7 +43,7 @@ export function VaultPicker({
             </Press>
           </Row>
           <Txt v="bodyM" color="textMuted">
-            Only vaults that cover {billWord(intent.category)} bills and have {payAmount(intent.amount, intent.currency)} available can pay this.
+            Only vaults that cover {payBillWord(intent.category)} bills and have {payAmount(intent.amount, intent.currency)} available can pay this.
           </Txt>
           <ScrollView style={styles.list} contentContainerStyle={styles.listContent} accessibilityRole="radiogroup">
             {options.map((o) => (

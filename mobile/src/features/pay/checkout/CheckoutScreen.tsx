@@ -1,12 +1,14 @@
 import { ModalScreen, ScreenSkeleton } from "@/components/ui";
 import { ApiError } from "@/lib/api/errors";
 import { CalmError } from "../CalmError";
-import { Declined, InReview, Paid, PaymentFailed } from "./Outcomes";
+import { outcomeOf } from "./outcome-table";
+import { PaymentFailed } from "./Outcomes";
 import { PinStep } from "./PinStep";
-import { Processing } from "./Processing";
 import { ReviewStep } from "./ReviewStep";
-import { Unavailable } from "./Unavailable";
+import { checkoutSteps } from "./stages";
+import { Expired, Unavailable } from "./Unavailable";
 import { useCheckoutFlow } from "./useCheckoutFlow";
+import { payingVault } from "./vaults";
 
 /** Pay with Vaultwise checkout (full-screen modal, calm core). Picks the view for where the payment is. */
 export function CheckoutScreen({ intentId }: { intentId: string | undefined }) {
@@ -31,24 +33,16 @@ export function CheckoutScreen({ intentId }: { intentId: string | undefined }) {
     );
   }
 
-  if (flow.expired) return <Unavailable reason="expired" merchant={intent.merchant.name} flow={flow} />;
+  if (flow.expired) return <Expired intent={intent} flow={flow} />;
 
-  switch (intent.status) {
-    case "requires_customer":
-      if (phase.kind === "pin" || (phase.kind === "submitting" && phase.from === "pin")) return <PinStep intent={intent} flow={flow} />;
-      if (phase.kind === "failed") return <PaymentFailed error={phase.error} flow={flow} />;
-      return <ReviewStep intent={intent} flow={flow} />;
-    case "processing":
-      return <Processing intent={intent} flow={flow} />;
-    case "succeeded":
-      return <Paid intent={intent} flow={flow} />;
-    case "in_review":
-      return <InReview intent={intent} flow={flow} />;
-    case "declined":
-      return <Declined intent={intent} flow={flow} />;
-    case "cancelled":
-      return <Unavailable reason="cancelled" merchant={intent.merchant.name} flow={flow} />;
-    default:
-      return <Unavailable reason="expired" merchant={intent.merchant.name} flow={flow} />;
+  const Outcome = outcomeOf(intent.status).View;
+  if (Outcome) {
+    const vault = payingVault(intent, flow.vault);
+    return <Outcome intent={intent} vault={vault} steps={checkoutSteps(intent, vault?.name ?? null)} flow={flow} />;
   }
+
+  // Still the customer's turn: where they are in paying picks the step.
+  if (phase.kind === "pin" || (phase.kind === "submitting" && phase.from === "pin")) return <PinStep intent={intent} flow={flow} />;
+  if (phase.kind === "failed") return <PaymentFailed error={phase.error} flow={flow} />;
+  return <ReviewStep intent={intent} flow={flow} />;
 }

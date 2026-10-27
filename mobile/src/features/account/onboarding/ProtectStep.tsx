@@ -3,15 +3,17 @@ import { StyleSheet, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { FingerprintIcon, LockKeyIcon, ScanSmileyIcon } from "@/components/icons";
-import { Banner, Button, Stack, Txt } from "@/components/ui";
+import { Banner, Button, Stack, Txt, useHardwareBack } from "@/components/ui";
+import { byName } from "@/lib/api/keys";
 import type { Me } from "@/lib/api/types";
-import { authenticateBiometric, setLockEnabled } from "@/lib/session";
+import { setLockEnabled } from "@/lib/auth/app-lock";
+import { authenticateBiometric } from "@/lib/auth/biometrics";
 import { radius, space, useTheme } from "@/theme";
-import { StepScreen, useHardwareBack } from "../layout";
-import { biometricName, useBiometricKind } from "../pin";
+import { StepScreen } from "../layout";
+import { biometricName, useBiometricKind } from "../pin-guard";
 import { clearDraft } from "./draft";
 
-const isMe = (q: { queryKey: readonly unknown[] }) => q.queryKey[1] === "me";
+const isMe = byName("me");
 
 /** Onboarding step 3: offer app lock (Face ID / fingerprint with the PIN as fallback), then enter the app. */
 export function ProtectStep() {

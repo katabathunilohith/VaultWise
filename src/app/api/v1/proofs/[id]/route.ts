@@ -7,7 +7,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export const GET = handle(async (_req: Request, ctx: Ctx) => {
   const { id } = await ctx.params;
-  const user = await customer({ tick: false });
+  const user = await customer({ tick: false, access: "read" });
   if (!get("SELECT 1 FROM proofs WHERE id = ? AND user_id = ?", id, user.id)) throw new HttpError(404, "Proof not found");
   return json(proofView(id));
 });

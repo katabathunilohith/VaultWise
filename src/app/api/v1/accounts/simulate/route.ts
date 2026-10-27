@@ -14,7 +14,7 @@ const SPENDS: [string, string, number, number][] = [
 
 /** Simulated open-banking events for the demo: a salary credit or a few card purchases. */
 export const POST = handle(async (req: Request) => {
-  const user = await customer({ tick: false });
+  const user = await customer({ tick: false, kyc: true });
   const b = await body(req, z.object({ type: z.enum(["salary", "spend"]) }));
   const m = CURRENCY_SCALE[user.currency] ?? 1;
   if (b.type === "salary") {

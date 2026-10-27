@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { router } from "expo-router";
 import { EmptyState, ScreenSkeleton, SectionHeader, Stack, Txt } from "@/components/ui";
+import { useInvestCore } from "@/lib/api/hooks";
 import { space } from "@/theme";
 import { CalmError } from "../CalmError";
 import { asFrequency } from "../format";
-import { activePlan, hasPortfolio, useCoreData } from "../use-invest";
+import { activePlan, hasPortfolio } from "../use-invest";
 import { CoreActions, CoreHero, PlanCard } from "./CoreSummary";
 import { Holdings } from "./Holdings";
 import { LumpSumModal } from "./LumpSumModal";
@@ -15,7 +16,7 @@ type Sheet = "plan" | "lump" | null;
 
 /** Core: the long-term model portfolio, bought on a plan or as lump sums. Calm, no celebrations. */
 export function CoreView() {
-  const q = useCoreData();
+  const q = useInvestCore();
   const [sheet, setSheet] = useState<Sheet>(null);
   // A fresh key per open remounts the flow, so every visit starts at its first step.
   const [opens, setOpens] = useState(0);

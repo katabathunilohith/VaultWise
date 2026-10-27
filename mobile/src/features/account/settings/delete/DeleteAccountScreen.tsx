@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { router, Stack as RouterStack } from "expo-router";
-import { Banner, Button, HoldToConfirm, Txt } from "@/components/ui";
+import { Banner, Button, HoldToConfirm, Txt, useHardwareBack } from "@/components/ui";
 import { errorMessage } from "@/lib/api/errors";
-import { useConnection } from "@/lib/api/hooks";
+import { useMe } from "@/lib/api/hooks"; // identity
+import { PRACTICE_PIN, usePracticeMode } from "@/lib/api/practice";
 import { haptic } from "@/lib/haptics";
-import { authenticateBiometric, useSession } from "@/lib/session";
+import { authenticateBiometric } from "@/lib/auth/biometrics";
+import { useSession } from "@/lib/auth/session-state";
 import { space, useTheme } from "@/theme";
-import { goBack, Page, StepScreen, useHardwareBack } from "../../layout";
+import { goBack, Page, StepScreen } from "../../layout";
 import { biometricName, GuardedPinPad, PinLayout, PinStatus, pinVerifier, useBiometricKind, usePinGuard } from "../../pin";
 import { finishDeletion } from "./finishDeletion";
 import { DeleteReview } from "./DeleteReview";
@@ -21,7 +23,10 @@ type Phase = "review" | "confirm" | "verify" | "deleting" | "failed";
  */
 export function DeleteAccountScreen() {
   const qc = useQueryClient();
-  const { mode } = useConnection();
+  const practice = usePracticeMode();
+  // identity: with sign-in on, the server closes the account (records kept) rather than deleting it.
+  const me = useMe();
+  const closing = !practice && me.data?.auth?.mode === "firebase";
   const [phase, setPhase] = useState<Phase>("review");
   const [ack, setAck] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
@@ -75,12 +80,14 @@ export function DeleteAccountScreen() {
         >
           <View style={styles.confirm}>
             <Txt v="headline" accessibilityRole="header">
-              Delete your account for good?
+              {closing ? "Close your account for good?" : "Delete your account for good?"}
             </Txt>
             <Txt v="bodyL">
-              {mode === "demo"
+              {practice
                 ? "The demo data and this phone's settings are reset. This can't be undone."
-                : "Your vaults close, your history is deleted and the balances go back to your bank. This can't be undone."}
+                : closing // identity
+                  ? "Closes your account and signs this login out. Records are kept as the law requires. This can't be undone."
+                  : "Your vaults close, your history is deleted and the balances go back to your bank. This can't be undone."}
             </Txt>
           </View>
         </Page>
@@ -100,7 +107,7 @@ export function DeleteAccountScreen() {
       <>
         {options}
         <StepScreen scroll={false}>
-          <Working />
+          <Working closing={closing} />
         </StepScreen>
       </>
     );
@@ -118,7 +125,7 @@ export function DeleteAccountScreen() {
             </>
           }
         >
-          <Banner tone="danger" title="Your account wasn't deleted" body={`${errorMessage(failure)} Nothing has changed.`} />
+          <Banner tone="danger" title={closing ? "Your account wasn't closed" : "Your account wasn't deleted"} body={`${errorMessage(failure)} Nothing has changed.`} />
           <Txt v="bodyM" color="textMuted">
             Try again, or ask a person to do it for you. You can also do this from the web app.
           </Txt>
@@ -141,7 +148,7 @@ export function DeleteAccountScreen() {
           />
         }
       >
-        <DeleteReview ack={ack} onAck={setAck} demo={mode === "demo"} />
+        <DeleteReview ack={ack} onAck={setAck} demo={practice} closing={closing} />
       </Page>
     </>
   );
@@ -172,7 +179,7 @@ function Verify({ onBack, onConfirmed }: { onBack: () => void; onConfirmed: () =
     );
 
   const bio = biometricName(kind);
-  const demoHint = !session.hasDevicePin ? " In demo mode the PIN is 1234." : "";
+  const demoHint = !session.hasDevicePin ? ` In demo mode the PIN is ${PRACTICE_PIN}.` : "";
   return (
     <StepScreen back={onBack} scroll={false}>
       <PinLayout
@@ -187,13 +194,13 @@ function Verify({ onBack, onConfirmed }: { onBack: () => void; onConfirmed: () =
 }
 
 /** While the deletion runs there's no way back: it finishes or reports what went wrong. */
-function Working() {
+function Working({ closing }: { closing: boolean }) {
   const { c } = useTheme();
   return (
     <View style={styles.working} accessibilityLiveRegion="polite">
       <ActivityIndicator color={c.text} size="large" />
       <Txt v="titleL" align="center" accessibilityRole="header">
-        Deleting your account
+        {closing ? "Closing your account" : "Deleting your account"}
       </Txt>
       <Txt v="bodyM" color="textMuted" align="center">
         This takes a few seconds.

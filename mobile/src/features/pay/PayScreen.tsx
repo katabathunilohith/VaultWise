@@ -2,7 +2,7 @@ import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FlashlightIcon } from "@/components/icons";
 import { Card, PracticeBadge, Row, Screen, SectionHeader, ToggleRow, Txt } from "@/components/ui";
-import { useDemoIntents } from "@/lib/api/hooks";
+import { usePayIntents } from "@/lib/api/hooks";
 import { layout, space } from "@/theme";
 import { MerchantCodeEntry } from "./MerchantCodeEntry";
 import { PendingCheckouts } from "./PendingCheckouts";
@@ -25,7 +25,7 @@ export function PayScreen() {
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const scanner = usePayScanner();
-  const intents = useDemoIntents();
+  const intents = usePayIntents();
   const viewfinderTop = insets.top + HEADER_HEIGHT + space.lg;
   const viewfinderHeight = Math.max(VIEWFINDER_MIN, Math.round(height * VIEWFINDER_END - viewfinderTop));
   const aimY = Math.round(height * AIM_AT - viewfinderTop);

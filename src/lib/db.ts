@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS proofs (
   ela_path TEXT,
   exif TEXT,
   extracted TEXT,
+  ai_allowed INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL
 );
 
@@ -361,6 +362,9 @@ function migrate(d: DatabaseSync) {
     d.exec("ALTER TABLE users ADD COLUMN country TEXT");
     d.exec("UPDATE users SET country = CASE jurisdiction WHEN 'UK' THEN 'GB' WHEN 'EU' THEN 'DE' ELSE jurisdiction END WHERE country IS NULL");
   }
+  // Whether the person let the AI read this proof (lib/ai-consent.ts).
+  const proofCols = (d.prepare("PRAGMA table_info(proofs)").all() as { name: string }[]).map((c) => c.name);
+  if (!proofCols.includes("ai_allowed")) d.exec("ALTER TABLE proofs ADD COLUMN ai_allowed INTEGER NOT NULL DEFAULT 1");
 }
 
 function open(): DatabaseSync {

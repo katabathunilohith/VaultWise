@@ -2,8 +2,8 @@ import { useEffect } from "react";
 import { StyleSheet, View, type DimensionValue } from "react-native";
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { Image } from "expo-image";
-import { WarningCircleIcon } from "@/components/icons";
-import { errorMessage } from "@/lib/api/errors";
+import { HourglassIcon, WarningCircleIcon } from "@/components/icons";
+import { errorMessage, isRecoveryHold, ON_HOLD } from "@/lib/api/errors"; // identity: ON_HOLD
 import { emoji3d } from "@/lib/categories";
 import { radius, space, useTheme } from "@/theme";
 import { Button } from "./Button";
@@ -42,42 +42,90 @@ export function ScreenSkeleton() {
   );
 }
 
+/** A quieter second action on an error, e.g. "Ask a person". */
+export interface ErrorAction {
+  label: string;
+  onPress: () => void;
+}
+
 /**
  * Errors explain what went wrong and how to fix it — no apologies, no vagueness.
- * `calm` (calm-core screens: money out, verification, emergency, limits, settings) swaps the 3D
- * object for a plain icon. `onHuman` adds the "Talk to a person" path.
+ * `variant="calm"` is for calm-core screens (money out, verification, emergency, invest, limits,
+ * settings), which never show 3D objects (DESIGN.md §2): a plain warning icon instead.
  */
 export function ErrorState({
   error,
-  onRetry,
-  onHuman,
-  calm,
   title = "This didn't load",
+  onRetry,
+  footnote,
+  secondaryAction,
+  variant = "illustrated",
+  iconSize = 32,
+  bareIcon = false,
+  compact = false,
+  heading = false,
 }: {
   error: unknown;
-  onRetry?: () => void;
-  onHuman?: () => void;
-  calm?: boolean;
   title?: string;
+  onRetry?: () => void;
+  /** Said after the reason, e.g. what didn't change. */
+  footnote?: string;
+  /** Shown under "Try again", the two stacked close together. */
+  secondaryAction?: ErrorAction;
+  variant?: "illustrated" | "calm";
+  /** Calm only: the warning icon's size. */
+  iconSize?: number;
+  /** Calm only: the icon without its raised disc. */
+  bareIcon?: boolean;
+  /** Smaller title and tighter spacing, for an error inside part of a screen. */
+  compact?: boolean;
+  /** Announces the title as a heading. */
+  heading?: boolean;
 }) {
   const { c } = useTheme();
-  return (
-    <View style={styles.center} accessibilityRole="alert">
-      {calm ? (
-        <View style={[styles.calmIcon, { backgroundColor: c.surfaceRaised }]}>
-          <WarningCircleIcon size={30} color={c.textMuted} />
+  // identity: while a recovery request waits, most of the account can't be read yet. That's a
+  // wait, not a failure: say when it opens, with no retry.
+  if (isRecoveryHold(error))
+    return (
+      <View style={compact ? styles.compact : styles.center} accessibilityRole="summary">
+        <View style={[styles.disc, { backgroundColor: c.surfaceRaised }]}>
+          <HourglassIcon size={iconSize} color={c.textMuted} />
         </View>
+        <Txt v={compact ? "titleM" : "titleL"} align="center" accessibilityRole={heading ? "header" : undefined}>
+          {ON_HOLD.title}
+        </Txt>
+        <Txt v="bodyM" color="textMuted" align="center">
+          {ON_HOLD.body}
+        </Txt>
+      </View>
+    );
+  const reason = errorMessage(error);
+  const retry = onRetry ? <Button label="Try again" variant="tonal" size="md" onPress={onRetry} /> : null;
+  return (
+    <View style={compact ? styles.compact : styles.center} accessibilityRole="alert">
+      {variant === "illustrated" ? (
+        <Image source={emoji3d.umbrella} style={styles.object} contentFit="contain" />
+      ) : bareIcon ? (
+        <WarningCircleIcon size={iconSize} color={c.textMuted} />
       ) : (
-        <Image source={emoji3d.umbrella} style={{ width: 88, height: 88 }} contentFit="contain" />
+        <View style={[styles.disc, { backgroundColor: c.surfaceRaised }]}>
+          <WarningCircleIcon size={iconSize} color={c.textMuted} />
+        </View>
       )}
-      <Txt v="titleL" align="center">
+      <Txt v={compact ? "titleM" : "titleL"} align="center" accessibilityRole={heading ? "header" : undefined}>
         {title}
       </Txt>
       <Txt v="bodyM" color="textMuted" align="center">
-        {errorMessage(error)}
+        {footnote ? `${reason} ${footnote}` : reason}
       </Txt>
-      {onRetry ? <Button label="Try again" variant="tonal" size="md" onPress={onRetry} /> : null}
-      {onHuman ? <Button label="Talk to a person" variant="ghost" size="md" onPress={onHuman} /> : null}
+      {secondaryAction ? (
+        <View style={styles.actions}>
+          {retry}
+          <Button label={secondaryAction.label} variant="ghost" size="sm" onPress={secondaryAction.onPress} />
+        </View>
+      ) : (
+        retry
+      )}
     </View>
   );
 }
@@ -101,5 +149,8 @@ export function EmptyState({ image, title, body, action, onAction }: { image?: n
 
 const styles = StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center", gap: space.sm, paddingVertical: space.xxl, paddingHorizontal: space.lg },
-  calmIcon: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center" },
+  compact: { alignItems: "center", gap: space.xs, paddingVertical: space.xl, paddingHorizontal: space.md },
+  object: { width: 88, height: 88 },
+  disc: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: space.xs },
+  actions: { alignItems: "center", gap: space.xs, marginTop: space.xs },
 });

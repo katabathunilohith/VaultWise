@@ -3,8 +3,10 @@ import { StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { BankIcon, BellIcon, CoinsIcon, ExportIcon, UserIcon, VibrateIcon, type Icon } from "@/components/icons";
 import { ListRow, PracticeBadge, ToggleRow, Txt } from "@/components/ui";
-import { giveAiConsent, useSession, withdrawAiConsent } from "@/lib/session";
+import { giveAiConsent, withdrawAiConsent } from "@/lib/consents";
+import { useSession } from "@/lib/auth/session-state";
 import { radius, space, useTheme } from "@/theme";
+import { setAiChecks } from "@/features/ai-consent"; // ai-consent
 import { Group } from "../controls";
 import { DoorOpenIcon, ScalesIcon } from "../icons";
 import { Page } from "../layout";
@@ -38,13 +40,13 @@ export function TrustScreen() {
       </Section>
 
       <Section icon={ScalesIcon} title="How decisions are made">
-        <Para>AI reads your bill and runs the checks. Anything unclear goes to a person instead of being declined.</Para>
+        <Para>If you allow it, AI reads your bill first and runs the checks. If not, a person reads it. Anything unclear goes to a person instead of being declined.</Para>
         <Para>Every decision says why. You can always appeal and ask a person to look again.</Para>
       </Section>
 
       <Section icon={UserIcon} title="Your data">
         <Para>We keep your profile, vaults, history and the documents you send.</Para>
-        <Para>It goes to two places: the Vaultwise server, and Groq, an AI provider that reads bills and writes the assistant’s replies.</Para>
+        <Para>It goes to the Vaultwise server. Only if you allow it, some of it also goes to Groq, an AI provider: bills and ID photos for it to read, a summary of your savings for your weekly tip, and your questions to the assistant.</Para>
         <Para>We don’t sell your data or use it for ads.</Para>
       </Section>
 
@@ -54,6 +56,19 @@ export function TrustScreen() {
           subtitle={session.aiConsent ? "On. Your questions go to Groq to write replies." : "Off. Turn on to let Groq write the assistant's replies."}
           value={session.aiConsent}
           onChange={(v) => void (v ? giveAiConsent() : withdrawAiConsent())}
+        />
+        {/* ai-consent */}
+        <ToggleRow
+          title="AI reads bills and IDs"
+          subtitle={
+            session.aiChecks === true
+              ? "On. Bills, receipts, ID photos and a savings summary for your weekly tip go to Groq."
+              : session.aiChecks === false
+                ? "Off. A person reads your bills and ID instead, which takes longer."
+                : "Off until you say yes. We'll ask before you first send a bill or ID."
+          }
+          value={session.aiChecks === true}
+          onChange={(v) => void setAiChecks(v)}
         />
         <ListRow icon={ExportIcon} title="Export or delete your data" subtitle="In Settings, under Account" onPress={() => router.navigate("/settings")} />
         <ListRow icon={VibrateIcon} title="Haptics & sounds" onPress={() => router.push("/settings/haptics")} />

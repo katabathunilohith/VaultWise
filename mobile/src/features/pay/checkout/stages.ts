@@ -1,6 +1,7 @@
 import type { StepState, TimelineStep } from "@/components/ui";
 import type { PaymentIntent } from "@/lib/api/pay-types";
 import type { Stage, StageStatus } from "@/lib/api/types";
+import { outcomeOf } from "./outcome-table";
 
 const STATE: Record<StageStatus, StepState> = {
   passed: "done",
@@ -44,26 +45,13 @@ function step(intent: PaymentIntent, s: Stage, vaultName: string | null): Timeli
     case "tamper":
       title = "Not paid before";
       break;
-    case "decision":
-      if (intent.status === "succeeded") {
-        title = intent.dryRun ? `Ready to pay ${intent.merchant.name}` : `Paid to ${intent.merchant.name}`;
-        if (intent.dryRun) detail = "Practice run, so nothing was paid";
-        state = "done";
-      } else if (intent.status === "in_review" && intent.dryRun) {
-        title = "A person would check it";
-        state = "warn";
-        detail = "Practice run, so nothing is set aside";
-      } else if (intent.status === "in_review") {
-        title = "A person checks it";
-        state = "active";
-        detail = "Your money is set aside until then";
-      } else if (intent.status === "declined") {
-        title = "Not paid";
-        state = "failed";
-      } else {
-        title = `Payment to ${intent.merchant.name}`;
-      }
+    case "decision": {
+      const decision = outcomeOf(intent.status).decision(intent);
+      title = decision.title;
+      state = decision.state ?? state;
+      detail = decision.detail;
       break;
+    }
   }
   if (state === "skipped") detail = SKIPPED_DETAIL;
   return { key: s.key, title, detail, state };

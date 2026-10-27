@@ -8,9 +8,13 @@ import { coreHoldings } from "@/lib/invest/core";
 import { paperEquity } from "@/lib/invest/satellite";
 
 export const GET = handle(async () => {
-  const user = await customer();
+  // identity: one of the few read routes open to a sign-in with provisional recovery access.
+  const user = await customer({ access: "read", recovery: true });
   const vaults = listVaults(user);
   const bank = balanceOf(userAccount(user.id, "bank", user.currency).id);
+  // wallet: always counted (money stays in the wallet even when the feature is switched off); no account → 0.
+  const walletId = get<{ id: string }>("SELECT id FROM accounts WHERE user_id = ? AND kind = 'wallet' LIMIT 1", user.id)?.id;
+  const wallet = walletId ? balanceOf(walletId) : 0;
   const saved = vaults.reduce((s, v) => s + v.balance, 0);
   let core = { total: 0, cost: 0, pnl: 0, cash: 0 };
   try {
@@ -59,8 +63,9 @@ export const GET = handle(async () => {
     totals: {
       saved,
       bank,
+      wallet, // wallet
       invested: core.total + core.cash + satellite.equity,
-      netWorth: saved + bank + core.total + core.cash + satellite.equity,
+      netWorth: saved + bank + wallet + core.total + core.cash + satellite.equity,
       corePnl: core.pnl,
     },
     vaults,

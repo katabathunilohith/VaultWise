@@ -1,66 +1,57 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { AppState, BackHandler } from "react-native";
-import { useFocusEffect, useIsFocused } from "expo-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef } from "react";
+import { AppState } from "react-native";
+import { useIsFocused } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
-import { isDemoProof } from "@/lib/api/demo";
-import { useConnection, useMe } from "@/lib/api/hooks";
-import type { ProofView } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/errors";
+import { useApiQuery } from "@/lib/api/hooks";
+import { byKey, qk } from "@/lib/api/keys";
 import { haptic } from "@/lib/haptics";
-import { practiceHistoryProof } from "./history";
 import { outcomeOf } from "./verdict";
 
-/** The rulebook values the proof screens quote, with the defaults the server ships. */
-export function useProofRules() {
-  const me = useMe();
-  const d = me.data?.onboarded ? me.data : null;
-  return {
-    currency: d?.user.currency ?? null,
-    userName: d?.user.name ?? null,
-    reviewSlaHours: d?.rules.verification.reviewSlaHours ?? 4,
-    maxDocAgeDays: d?.rules.verification.maxDocAgeDays ?? 120,
-  };
-}
-
 const POLL_MS = 400;
+/** After a network or server error, keep trying, but more gently. */
+const RETRY_MS = 2500;
+
+/** A 4xx answer (not found, not yours) won't change by asking again. */
+const isFinalError = (e: unknown) => e instanceof ApiError && e.status >= 400 && e.status < 500;
 
 /**
- * A proof by id, polled every 400 ms until it has an outcome. Same cache entry as the shared
- * `useProof`, but polling stops on any outcome, including a check the server handed to a person
- * after an error (status "error"), which `useProof` would keep polling forever.
+ * A proof by id, polled every 400 ms until it has an outcome. That includes a check the server
+ * handed to a person after an error (status "error"), so polling stops there too. A dropped
+ * connection or a server error doesn't stop it: it retries every few seconds, as the Verifying
+ * screen promises. Only an answer that can't change (a 4xx, such as not found) stops it.
  */
 export function useProofPoll(id: string | undefined) {
-  const { mode, checked } = useConnection();
-  return useQuery({
-    queryKey: [mode, "proof", id],
-    queryFn: () => api.proof(id!),
-    enabled: checked && !!id,
-    refetchInterval: (q) => (outcomeOf(q.state.data?.verification) ? false : POLL_MS),
+  return useApiQuery(qk.proof(id), () => api.proof(id!), {
+    enabled: !!id,
+    refetchInterval: (q) => {
+      if (outcomeOf(q.state.data?.verification)) return false;
+      if (q.state.status === "error") return isFinalError(q.state.error) ? false : RETRY_MS;
+      return POLL_MS;
+    },
   });
 }
 
 /**
- * A proof by id, polled until verification completes. In Practice mode, snapshot proofs the
- * simulator doesn't hold (the sample emergency receipt) are rebuilt from the fixtures.
+ * A proof by id, polled until verification completes. In Practice, a record from the sample
+ * snapshot says so (`fromPracticeHistory`).
  */
 export function useProofRecord(id: string | undefined) {
-  const { mode } = useConnection();
-  // Don't ask the simulator for ids it doesn't hold (and don't poll a 404).
-  const practice = useMemo(() => (mode === "demo" && id && !isDemoProof(id) ? practiceHistoryProof(id) : null), [mode, id]);
-  const q = useProofPoll(practice ? undefined : id);
-  const data: ProofView | undefined = practice ?? q.data;
+  const q = useProofPoll(id);
+  const data = q.data;
   return {
     data,
     error: data ? null : q.error,
-    refetch: () => (practice ? Promise.resolve() : q.refetch()),
-    fromPracticeHistory: !!practice,
+    refetch: () => q.refetch(),
+    fromPracticeHistory: !!data?.practiceSnapshot,
   };
 }
 
 /** Refetches one proof (after an appeal, say). */
 export function useRefreshProof() {
   const qc = useQueryClient();
-  return useCallback((id: string) => qc.invalidateQueries({ predicate: (q) => q.queryKey[1] === "proof" && q.queryKey[2] === id }), [qc]);
+  return useCallback((id: string) => qc.invalidateQueries({ predicate: byKey(qk.proof(id)) }), [qc]);
 }
 
 const BEAT_MS = 1200;
@@ -91,18 +82,4 @@ export function useVerifyingHeartbeat(running: boolean) {
     };
   }, [running, focused]);
   return lastBeat;
-}
-
-/** Android back: run `handler` (return true when handled) while this screen is focused. */
-export function useHardwareBack(handler: () => boolean) {
-  const ref = useRef(handler);
-  useEffect(() => {
-    ref.current = handler;
-  });
-  useFocusEffect(
-    useCallback(() => {
-      const sub = BackHandler.addEventListener("hardwareBackPress", () => ref.current());
-      return () => sub.remove();
-    }, []),
-  );
 }

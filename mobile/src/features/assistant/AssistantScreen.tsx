@@ -11,8 +11,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { useConnection, useVaults } from "@/lib/api/hooks";
-import { giveAiConsent, useSession } from "@/lib/session";
+import { useVaults } from "@/lib/api/hooks";
+import { usePracticeMode } from "@/lib/api/practice";
+import { giveAiConsent } from "@/lib/consents";
+import { useSession } from "@/lib/auth/session-state";
 import { layout, space, useTheme } from "@/theme";
 import { AssistantHeader } from "./components/AssistantHeader";
 import { ConsentCard, SuggestionChips, TalkToPersonLink } from "./components/BottomBits";
@@ -40,7 +42,7 @@ export function AssistantScreen() {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const session = useSession();
-  const { mode } = useConnection();
+  const practice = usePracticeMode();
   const vaults = useVaults();
   const consented = session.aiConsent;
   const chat = useChat(vaults.data?.vaults, consented);
@@ -116,7 +118,7 @@ export function AssistantScreen() {
             </>
           ) : (
             <ScrollView style={{ maxHeight: windowHeight * CONSENT_MAX_SHARE }} contentContainerStyle={styles.inset} bounces={false}>
-              <ConsentCard onAgree={() => void giveAiConsent()} onDecline={close} demo={mode === "demo"} />
+              <ConsentCard onAgree={() => void giveAiConsent()} onDecline={close} demo={practice} />
             </ScrollView>
           )}
         </View>

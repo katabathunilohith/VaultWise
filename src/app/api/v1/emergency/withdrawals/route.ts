@@ -4,7 +4,7 @@ import { executeEmergency } from "@/lib/emergency";
 
 /** Triggers the emergency cascade (Tier 1 → Tier 2) with guardrails. */
 export const POST = handle(async (req: Request) => {
-  const user = await customer();
+  const user = await customer({ kyc: true });
   const b = await body(
     req,
     z.object({

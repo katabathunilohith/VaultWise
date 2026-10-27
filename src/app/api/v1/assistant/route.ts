@@ -12,7 +12,7 @@ const WEB_NAV = `sidebar pages are Overview, Vaults, Emergency access, Invest (C
 const MOBILE_NAV = `the app's tabs are Home, Vaults, Pay, Invest and Emergency; settings, limits and "Talk to a person" are behind the profile picture. Home has quick actions "Add money", "Withdraw" and "Pay", and "Coming up" lists every scheduled automatic move. A vault's page has "Add money", "Withdraw" and an "Edit goal & rule" option in its menu.`;
 
 export const POST = handle(async (req: Request) => {
-  const user = await customer({ tick: false });
+  const user = await customer({ tick: false, access: "read" });
   const b = await body(req, z.object({ messages: z.array(Msg).min(1).max(30), client: z.enum(["web", "mobile"]).optional() }));
   if (!aiEnabled()) throw new HttpError(503, "The assistant needs GROQ_API_KEY in .env.local");
   const rules = rulesFor(user.jurisdiction);

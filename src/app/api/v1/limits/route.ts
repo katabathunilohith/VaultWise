@@ -3,7 +3,7 @@ import { body, customer, handle, json } from "@/lib/api";
 import { changeLimits, limitsOverview } from "@/lib/limits";
 
 export const GET = handle(async () => {
-  const user = await customer();
+  const user = await customer({ access: "read" });
   return json(limitsOverview(user));
 });
 

@@ -1,4 +1,7 @@
-import { ScrollView, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+// The gesture-handler ScrollView takes part in gesture arbitration, so swiping the cards scrolls
+// them instead of switching tabs.
+import { ScrollView } from "react-native-gesture-handler";
 import { router } from "expo-router";
 import { CheckCircleIcon, PlusIcon } from "@/components/icons";
 import { Amount, Press, Txt, VaultGlyph } from "@/components/ui";

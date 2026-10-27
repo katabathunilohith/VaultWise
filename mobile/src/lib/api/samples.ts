@@ -1,5 +1,6 @@
 import type { ImageSourcePropType } from "react-native";
 import { getConnection } from "./connection";
+import { isPracticeMode } from "./practice";
 import type { Sample } from "./types";
 
 /** Sample documents bundled with the app so "Use a sample" works in demo mode. */
@@ -25,7 +26,6 @@ export const DEMO_SAMPLES: Sample[] = [
 
 /** Image to show for a sample: the live server's render when connected, otherwise the bundled copy. */
 export function sampleSource(key: string): ImageSourcePropType {
-  const { mode, baseUrl } = getConnection();
-  if (mode === "live") return { uri: `${baseUrl}/api/v1/samples/${key}` };
+  if (!isPracticeMode()) return { uri: `${getConnection().baseUrl}/api/v1/samples/${key}` };
   return BUNDLED[key] ?? BUNDLED["medical-invoice"];
 }

@@ -1,33 +1,14 @@
+import type { ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import { CheckCircleIcon, UsersIcon } from "@/components/icons";
-import { Card, Chip, Divider, Press, Stack, ToggleRow, Txt } from "@/components/ui";
-import { CATEGORIES, categoryOf } from "@/lib/categories";
+import { Card, Chip, Divider, InfoButton, Press, Stack, TextField, ToggleRow, Txt } from "@/components/ui";
+import { CATEGORIES, categoryOf, TEMPLATE_CATEGORIES, VAULT_CATEGORIES } from "@/lib/categories";
 import type { VaultCategory } from "@/lib/api/types";
 import { moneyWhole } from "@/lib/money";
 import { radius, space, useTheme } from "@/theme";
-import { TextField } from "./fields";
-import { formatDate, parseIsoDate, ruleFromDraft, ruleLine, TEMPLATES, type RuleDraft } from "./format";
-
-const PURPOSES: VaultCategory[] = ["health", "education", "housing", "emergency", "retirement", "custom"];
-
-const BLURB: Record<VaultCategory, string> = {
-  health: "Bills, pharmacy, tests",
-  education: "Fees, books, exams",
-  housing: "Rent, deposits, lease",
-  emergency: "Repairs, urgent travel",
-  retirement: "Pension, later life",
-  custom: "Your goal, borrowed rules",
-};
-
-const NAME_IDEAS: Record<VaultCategory, string> = {
-  health: "Family health fund",
-  education: "Maya's college fund",
-  housing: "Apartment deposit",
-  emergency: "Rainy day fund",
-  retirement: "Retirement top-up",
-  custom: "Wedding fund",
-};
+import { formatDate, parseIsoDate, ruleFromDraft, ruleLine, type RuleDraft } from "./format";
+import { openRules } from "./rules";
 
 export function StepTitle({ title, body }: { title: string; body?: string }) {
   return (
@@ -46,45 +27,62 @@ export function StepTitle({ title, body }: { title: string; body?: string }) {
 
 /* ---------- 1 · purpose ---------- */
 
+/**
+ * Pick a purpose. Each tile has an "i" at its top right that opens that category's rules. When
+ * Custom is picked, `customSection` decides how its rules are chosen (the template picker by default).
+ */
 export function PurposeStep({
   category,
-  template,
   onCategory,
-  onTemplate,
+  customSection,
 }: {
   category: VaultCategory | null;
-  template: VaultCategory | null;
   onCategory: (c: VaultCategory) => void;
-  onTemplate: (c: VaultCategory) => void;
+  customSection: ReactNode;
 }) {
   return (
     <Stack gap={space.lg}>
-      <StepTitle title="What's it for?" body="The purpose decides which bills can unlock it." />
+      <StepTitle title="What's it for?" body="The purpose decides which bills can unlock it. Tap the i to read a purpose's rules." />
       <View accessibilityRole="radiogroup" accessibilityLabel="Purpose" style={styles.grid}>
-        {PURPOSES.map((k) => (
+        {VAULT_CATEGORIES.map((k) => (
           <PurposeTile key={k} category={k} selected={category === k} onPress={() => onCategory(k)} />
         ))}
       </View>
-      {category === "custom" ? (
-        <Stack gap={space.sm}>
-          <Txt v="titleM" accessibilityRole="header">
-            Which rules should it follow?
-          </Txt>
-          <Txt v="bodyM" color="textMuted">
-            A custom vault unlocks with the same kind of bill as the template you pick.
-          </Txt>
-          <View accessibilityRole="radiogroup" accessibilityLabel="Template" style={styles.grid}>
-            {TEMPLATES.map((t) => {
-              const meta = CATEGORIES[t];
-              return (
-                <View key={t} style={styles.cell}>
-                  <Chip tall icon={meta.Icon} label={meta.label} selected={template === t} onPress={() => onTemplate(t)} />
-                </View>
-              );
-            })}
-          </View>
-        </Stack>
+      {category === "custom" ? customSection : null}
+    </Stack>
+  );
+}
+
+/** Borrow a category's rules for a custom vault. */
+export function TemplatePicker({
+  template,
+  onTemplate,
+  withTitle = false,
+}: {
+  template: VaultCategory | null;
+  onTemplate: (c: VaultCategory) => void;
+  withTitle?: boolean;
+}) {
+  return (
+    <Stack gap={space.sm}>
+      {withTitle ? (
+        <Txt v="titleM" accessibilityRole="header">
+          Which rules should it follow?
+        </Txt>
       ) : null}
+      <Txt v="bodyM" color="textMuted">
+        A custom vault unlocks with the same kind of bill as the category you pick.
+      </Txt>
+      <View accessibilityRole="radiogroup" accessibilityLabel="Rules to borrow" style={styles.grid}>
+        {TEMPLATE_CATEGORIES.map((t) => {
+          const meta = CATEGORIES[t];
+          return (
+            <View key={t} style={styles.cell}>
+              <Chip tall icon={meta.Icon} label={meta.label} selected={template === t} onPress={() => onTemplate(t)} />
+            </View>
+          );
+        })}
+      </View>
     </Stack>
   );
 }
@@ -94,28 +92,37 @@ function PurposeTile({ category, selected, onPress }: { category: VaultCategory;
   const meta = CATEGORIES[category];
   const fill = cat(category).fill;
   return (
-    <Press
-      accessibilityRole="radio"
-      accessibilityState={{ selected }}
-      accessibilityLabel={`${meta.label}. ${BLURB[category]}`}
-      hapticOnPressIn="select.tick"
-      onPress={onPress}
-      scaleTo={0.97}
-      style={[styles.tile, { backgroundColor: selected ? fill : c.surface, borderColor: selected ? fill : c.border }]}
-    >
-      <Image source={meta.object3d} style={styles.tileObject} contentFit="contain" accessible={false} />
-      <Txt v="titleM" color={selected ? "ink" : "text"}>
-        {meta.label}
-      </Txt>
-      <Txt v="caption" color={selected ? "ink" : "textMuted"} numberOfLines={2}>
-        {BLURB[category]}
-      </Txt>
-      {selected ? (
-        <View style={styles.tick}>
-          <CheckCircleIcon size={22} color={c.ink} weight="fill" />
-        </View>
-      ) : null}
-    </Press>
+    // The "i" is a sibling of the tile, not inside it, so screen readers can reach both.
+    <View style={styles.tileWrap}>
+      <Press
+        accessibilityRole="radio"
+        accessibilityState={{ selected }}
+        accessibilityLabel={`${meta.label}. ${meta.blurb}`}
+        hapticOnPressIn="select.tick"
+        onPress={onPress}
+        scaleTo={0.97}
+        style={[styles.tile, { backgroundColor: selected ? fill : c.surface, borderColor: selected ? fill : c.border }]}
+      >
+        <Image source={meta.object3d} style={styles.tileObject} contentFit="contain" accessible={false} />
+        <Txt v="titleM" color={selected ? "ink" : "text"}>
+          {meta.label}
+        </Txt>
+        <Txt v="caption" color={selected ? "ink" : "textMuted"} numberOfLines={2} style={{ paddingRight: selected ? 26 : 0 }}>
+          {meta.blurb}
+        </Txt>
+        {selected ? (
+          <View style={styles.tick}>
+            <CheckCircleIcon size={22} color={c.ink} weight="fill" />
+          </View>
+        ) : null}
+      </Press>
+      <InfoButton
+        label={`${meta.label} rules`}
+        onPress={() => openRules({ category })}
+        color={selected ? c.ink : undefined}
+        style={styles.info}
+      />
+    </View>
   );
 }
 
@@ -147,7 +154,7 @@ export function NameStep({
         label="Vault name"
         value={name}
         onChangeText={onName}
-        placeholder={NAME_IDEAS[category]}
+        placeholder={CATEGORIES[category].nameIdea}
         maxLength={50}
         autoCapitalize="sentences"
         returnKeyType={joint ? "next" : "done"}
@@ -184,6 +191,7 @@ export function NameStep({
 export function ReviewSummary({
   category,
   template,
+  ownRule = false,
   name,
   member,
   target,
@@ -193,6 +201,8 @@ export function ReviewSummary({
 }: {
   category: VaultCategory;
   template: VaultCategory | null;
+  /** The vault follows a rule its owner wrote (custom-rules). */
+  ownRule?: boolean;
   name: string;
   member: string | null;
   target: number;
@@ -212,7 +222,7 @@ export function ReviewSummary({
           </Txt>
           <Txt v="bodyM" color="textMuted">
             {meta.label}
-            {category === "custom" && template ? ` · ${categoryOf(template).label} rules` : ""}
+            {ownRule ? " · Your own rule" : category === "custom" && template ? ` · ${categoryOf(template).label} rules` : ""}
             {member ? ` · With ${member}` : ""}
           </Txt>
         </View>
@@ -242,8 +252,7 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   cell: { flexBasis: "47%", flexGrow: 1 },
   tile: {
-    flexBasis: "47%",
-    flexGrow: 1,
+    flex: 1,
     minHeight: 148,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth * 2,
@@ -251,7 +260,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   tileObject: { width: 56, height: 56, marginBottom: space.xs },
-  tick: { position: "absolute", top: space.sm, right: space.sm },
+  tileWrap: { flexBasis: "47%", flexGrow: 1 },
+  info: { position: "absolute", top: space.xs, right: space.xs },
+  tick: { position: "absolute", bottom: space.sm, right: space.sm },
   summaryHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
   summaryObject: { width: 56, height: 56 },
   line: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 48 },

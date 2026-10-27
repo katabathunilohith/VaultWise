@@ -6,7 +6,7 @@ import { riskProfile } from "@/lib/invest/core";
 import { BANDS, modelPortfolio, QUESTIONS, scoreAnswers } from "@/lib/invest/profile";
 
 export const GET = handle(async () => {
-  const user = await customer({ tick: false });
+  const user = await customer({ tick: false, access: "read" });
   const profile = riskProfile(user);
   return json({ questions: QUESTIONS, bands: BANDS, profile, portfolio: profile ? modelPortfolio(user.jurisdiction, profile.band) : null });
 });

@@ -2,10 +2,10 @@ import { useState } from "react";
 import { Linking, StyleSheet, useWindowDimensions, View } from "react-native";
 import { router, useIsFocused } from "expo-router";
 import { ArrowLeftIcon, ArrowUpRightIcon, DotsThreeIcon, ExportIcon, PencilSimpleIcon, PlusIcon, TrashIcon, UsersIcon } from "@/components/icons";
-import { Banner, Button, Card, Celebration, EmptyState, ErrorState, Press, Screen, ScreenSkeleton, SectionHeader, Stack, Txt } from "@/components/ui";
+import { Banner, Button, Card, Celebration, EmptyState, ErrorState, InfoButton, Press, Screen, ScreenSkeleton, SectionHeader, Stack, Txt } from "@/components/ui";
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
-import { useConnection, useVault } from "@/lib/api/hooks";
+import { useVault } from "@/lib/api/hooks";
 import type { VaultDetail } from "@/lib/api/types";
 import { categoryOf, emoji3d } from "@/lib/categories";
 import { moneyWhole } from "@/lib/money";
@@ -18,6 +18,7 @@ import { MILESTONE_TITLE, useMilestoneWatch } from "./hooks";
 import { MembersList } from "./MembersList";
 import { ReleaseContract } from "./ReleaseContract";
 import { RuleCard } from "./RuleCard";
+import { openRules } from "./rules";
 import { Sparkline } from "./Sparkline";
 import { VaultHero } from "./VaultHero";
 import { WithdrawalList } from "./WithdrawalList";
@@ -31,9 +32,14 @@ export function VaultDetailScreen({ id }: { id: string }) {
   const [edit, setEdit] = useState<EditTab | null>(null);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const focused = useIsFocused();
-  const exportStatement = useExport();
   const milestone = useMilestoneWatch(q.data?.vault, focused && !edit);
-  const header = <DetailHeader onMenu={q.data ? () => setMenu(true) : undefined} />;
+  const loaded = q.data?.vault;
+  const header = (
+    <DetailHeader
+      onMenu={q.data ? () => setMenu(true) : undefined}
+      onInfo={loaded ? () => openRules({ category: loaded.category, template: loaded.template, vaultId: loaded.id }) : undefined}
+    />
+  );
 
   if (!q.data && !q.isError)
     return (
@@ -70,7 +76,7 @@ export function VaultDetailScreen({ id }: { id: string }) {
         {q.isError ? <Banner tone="warning" title="Couldn't refresh" body="Showing this vault as it was. Pull down to try again." /> : null}
         <VaultHero vault={vault} />
         <ActionRow vaultId={vault.id} available={vault.available} held={vault.held} currency={vault.currency} />
-        <ReleaseContract category={vault.category} template={vault.template} />
+        <ReleaseContract category={vault.category} template={vault.template} customRule={vault.customRule} />
         {detail.withdrawals.length ? (
           <Stack gap={0}>
             <SectionHeader title="Withdrawals" />
@@ -121,17 +127,15 @@ export function VaultDetailScreen({ id }: { id: string }) {
   );
 }
 
-/** Live: opens the statement export in the browser. Demo has no server to export from. */
-function useExport() {
-  const { mode } = useConnection();
-  return (explain: (kind: "export" | "exportFailed") => void) => {
-    const url = mode === "live" ? api.exportUrl() : "";
-    if (!url) return explain("export");
-    Linking.openURL(url).catch(() => explain("exportFailed"));
-  };
+/** Live: opens the statement export in the browser. Practice has no server to export from. */
+function exportStatement(explain: (kind: "export" | "exportFailed") => void) {
+  const url = api.exportUrl();
+  if (!url) return explain("export");
+  Linking.openURL(url).catch(() => explain("exportFailed"));
 }
 
-function DetailHeader({ onMenu }: { onMenu?: () => void }) {
+/** Back on the left; on the right, this vault's rules (the "i") and more options. */
+function DetailHeader({ onMenu, onInfo }: { onMenu?: () => void; onInfo?: () => void }) {
   const { c } = useTheme();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/vaults"));
   return (
@@ -139,11 +143,16 @@ function DetailHeader({ onMenu }: { onMenu?: () => void }) {
       <Press onPress={back} accessibilityLabel="Back" hitSlop={8} style={[styles.headerBtn, { backgroundColor: c.surfaceRaised }]}>
         <ArrowLeftIcon size={22} color={c.text} weight="bold" />
       </Press>
-      {onMenu ? (
-        <Press onPress={onMenu} accessibilityLabel="More options" hitSlop={8} style={[styles.headerBtn, { backgroundColor: c.surfaceRaised }]}>
-          <DotsThreeIcon size={24} color={c.text} weight="bold" />
-        </Press>
-      ) : null}
+      <View style={styles.headerRight}>
+        {onInfo ? (
+          <InfoButton label="How this vault unlocks" onPress={onInfo} color={c.text} style={[styles.headerBtn, { backgroundColor: c.surfaceRaised }]} />
+        ) : null}
+        {onMenu ? (
+          <Press onPress={onMenu} accessibilityLabel="More options" hitSlop={8} style={[styles.headerBtn, { backgroundColor: c.surfaceRaised }]}>
+            <DotsThreeIcon size={24} color={c.text} weight="bold" />
+          </Press>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -262,6 +271,7 @@ function VaultDialogs({ kind, detail, onDismiss }: { kind: DialogKind | null; de
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: layout.hit, paddingTop: space.xs },
   headerBtn: { width: layout.hit, height: layout.hit, borderRadius: layout.hit / 2, alignItems: "center", justifyContent: "center" },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: space.xs },
   actions: { flexDirection: "row", gap: space.sm },
   actionsStacked: { flexDirection: "column" },
   actionBtn: { flex: 1 },

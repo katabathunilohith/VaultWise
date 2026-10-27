@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler } from "react-native";
+import { useCallback, useRef, useState } from "react";
 import { router } from "expo-router";
-import { ModalScreen, PracticeBadge, ScreenSkeleton } from "@/components/ui";
+import { ModalScreen, PracticeBadge, ScreenSkeleton, useHardwareBack } from "@/components/ui";
 import { api } from "@/lib/api/client";
 import { ApiError, errorMessage } from "@/lib/api/errors";
-import { useConnection, useEmergency, useInvalidateMoney } from "@/lib/api/hooks";
-import type { EmergencyOverview, EmergencyPreview, Guardrail } from "@/lib/api/types";
+import { useEmergency, useInvalidateMoney } from "@/lib/api/hooks";
+import type { EmergencyOverview, EmergencyPreview } from "@/lib/api/types";
 import { haptic } from "@/lib/haptics";
 import { parseAmount } from "@/lib/money";
 import { CalmError } from "../CalmError";
@@ -44,7 +43,6 @@ const isWrongPin = (e: unknown) => e instanceof ApiError && (e.status === 403 ||
 const wantsNote = (e: unknown) => e instanceof ApiError && e.status === 400 && /description|note/i.test(e.message);
 
 function Flow({ o }: { o: EmergencyOverview }) {
-  const { mode } = useConnection();
   const invalidate = useInvalidateMoney();
 
   const [step, setStep] = useState<Step>("amount");
@@ -80,27 +78,12 @@ function Flow({ o }: { o: EmergencyOverview }) {
 
   // Android back steps back through the flow instead of closing it mid-way. While sending, it
   // closes like the X does (the request carries on).
-  useEffect(() => {
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (step === "amount" || step === "outcome" || step === "sending") return false;
-      back();
-      return true;
-    });
-    return () => sub.remove();
-  }, [step, back]);
+  useHardwareBack(step === "amount" || step === "outcome" || step === "sending" ? null : back);
 
-  /** A live blocked request comes back as HTTP 422 without its body: re-check to say why. */
-  const blockedOutcome = async (p: EmergencyPreview, checks?: Guardrail[]) => {
-    let fresh: EmergencyPreview = p;
-    if (!checks) {
-      try {
-        fresh = await api.emergencyPreview(p.amount / 100);
-      } catch {
-        // keep the plan we had
-      }
-    }
+  /** A safety limit stopped the request: say which, from the plan that explains it. */
+  const blockedOutcome = (p: EmergencyPreview) => {
     haptic("warning");
-    setOutcome({ kind: "blocked", reason: blockedReason(checks ?? fresh.checks, o, fresh) });
+    setOutcome({ kind: "blocked", reason: blockedReason(p.checks, o, p) });
     setStep("outcome");
   };
 
@@ -116,12 +99,11 @@ function Flow({ o }: { o: EmergencyOverview }) {
       void invalidate();
       const receiptRequired = r.receiptRequired ?? true;
       // The server re-plans at submit time; show what actually moved, not the earlier preview.
-      const done = Array.isArray(r.plan) ? { ...plan, items: r.plan } : r.plan;
       if (r.status === "blocked") {
-        await blockedOutcome(done, done.checks);
+        blockedOutcome(r.plan);
         return;
       }
-      setPlan(done);
+      setPlan(r.plan);
       // With a PIN step the hold committed nothing; the money commits here.
       if (pin) haptic("irreversible.commit");
       if (r.status === "processing") {
@@ -144,7 +126,7 @@ function Flow({ o }: { o: EmergencyOverview }) {
         setPinMessage("That PIN isn't right.");
         setStep("pin");
       } else if (e instanceof ApiError && e.status === 422) {
-        await blockedOutcome(plan);
+        blockedOutcome(plan);
       } else if (wantsNote(e)) {
         haptic("error");
         setForceNote(true);
@@ -194,7 +176,6 @@ function Flow({ o }: { o: EmergencyOverview }) {
       <PinStep
         o={o}
         plan={plan}
-        demo={mode === "demo"}
         length={pinLength}
         onLength={(n) => {
           setPinLength(n);

@@ -1,15 +1,22 @@
-import { Card, ModalScreen, PracticeBadge, Stack, Timeline, Txt } from "@/components/ui";
+import { Card, ModalScreen, PracticeBadge, Stack, Timeline, Txt, type TimelineStep } from "@/components/ui";
 import type { PaymentIntent } from "@/lib/api/pay-types";
 import { space } from "@/theme";
 import { payAmount } from "../format";
-import { checkoutSteps } from "./stages";
 import type { CheckoutFlow } from "./useCheckoutFlow";
-import { payingVault } from "./vaults";
+import type { PayVault } from "./vaults";
 
 /** While the checkout's checks run: where it is and what happens next (the release tracker). */
-export function Processing({ intent, flow }: { intent: PaymentIntent; flow: CheckoutFlow }) {
-  const vault = payingVault(intent, flow.vault);
-  const steps = checkoutSteps(intent, vault?.name ?? null);
+export function Processing({
+  intent,
+  vault,
+  steps,
+  flow,
+}: {
+  intent: PaymentIntent;
+  vault: PayVault | null;
+  steps: TimelineStep[];
+  flow: Pick<CheckoutFlow, "close">;
+}) {
   return (
     <ModalScreen title="Checkout" onClose={flow.close}>
       <Stack gap={space.xs}>

@@ -1,4 +1,4 @@
-import { handle, json } from "@/lib/api";
+import { admin, handle, json } from "@/lib/api";
 import { all, get, parseJson } from "@/lib/db";
 import { verifyAuditChain } from "@/lib/audit";
 import { reconcile } from "@/lib/ledger";
@@ -8,6 +8,7 @@ import { pendingLimitReviews } from "@/lib/limits";
 
 /** Operations console: review queue, risk flags, model metrics, ledger and audit integrity. */
 export const GET = handle(async () => {
+  await admin(); // identity: ops team only when sign-in is on
   const queue = all<{
     proof_id: string;
     confidence: number | null;

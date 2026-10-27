@@ -5,7 +5,7 @@ import { latestPrice } from "@/lib/invest/market";
 import { bandInfo, modelPortfolio } from "@/lib/invest/profile";
 
 export const GET = handle(async () => {
-  const user = await customer();
+  const user = await customer({ access: "read" });
   const profile = riskProfile(user);
   if (!profile) return json({ profile: null });
   const allocations = modelPortfolio(user.jurisdiction, profile.band);

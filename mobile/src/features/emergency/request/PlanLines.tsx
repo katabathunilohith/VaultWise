@@ -2,16 +2,22 @@ import type { ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import { MoneyText, Row, Txt, VaultGlyph } from "@/components/ui";
 import type { EmergencyPlanItem, EmergencyPreview } from "@/lib/api/types";
+import { CATEGORIES, TIER1_CATEGORY } from "@/lib/categories";
 import { layout, space } from "@/theme";
 import { fmt } from "../format";
 import { OtherVaultsGlyph } from "../OtherVaultsGlyph";
 
-/** "₹X from Health now" / "₹Y from other vaults after your PIN and a short pause". */
+/** "₹X from Health now" (Tier 1) / "₹Y from other vaults after your PIN and a short pause" (Tier 2). */
 export function SplitLines({ p, currency }: { p: Pick<EmergencyPreview, "tier1" | "tier2">; currency: string }) {
   return (
     <View style={styles.list}>
       {p.tier1 > 0 ? (
-        <Line glyph={<VaultGlyph category="health" size={36} />} label="from Health now" amount={p.tier1} currency={currency} />
+        <Line
+          glyph={<VaultGlyph category={TIER1_CATEGORY} size={36} />}
+          label={`from ${CATEGORIES[TIER1_CATEGORY].short} now`}
+          amount={p.tier1}
+          currency={currency}
+        />
       ) : null}
       {p.tier2 > 0 ? (
         <Line glyph={<OtherVaultsGlyph />} label="from other vaults after your PIN and a short pause" amount={p.tier2} currency={currency} />

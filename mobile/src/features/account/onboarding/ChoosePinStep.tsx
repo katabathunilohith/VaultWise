@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { router, Stack as RouterStack } from "expo-router";
-import { Banner, Button, PinPad, PracticeBadge, Txt, useNow } from "@/components/ui";
+import { Banner, Button, PinPad, PracticeBadge, Txt, useNow, useHardwareBack } from "@/components/ui";
 import { api } from "@/lib/api/client";
 import { ApiError, errorMessage } from "@/lib/api/errors";
 import { haptic } from "@/lib/haptics";
-import { setDevicePin } from "@/lib/session";
+import { setDevicePin } from "@/lib/auth/device-pin";
 import { space, useTheme } from "@/theme";
-import { StepScreen, useHardwareBack } from "../layout";
-import { isWeakPin, PinLayout } from "../pin";
+import { StepScreen } from "../layout";
+import { isWeakPin } from "../pin-guard";
+import { PinLayout } from "../PinLayout";
 import { draftReady, getDraft } from "./draft";
 
 type Phase = "choose" | "confirm" | "creating" | "failed";

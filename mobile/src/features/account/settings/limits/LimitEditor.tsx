@@ -6,6 +6,7 @@ import { CheckCircleIcon } from "@/components/icons";
 import { Amount, AmountKeypad, Banner, Button, PracticeBadge, Stack, Txt } from "@/components/ui";
 import { api } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
+import { invalidate } from "@/lib/api/keys";
 import type { LimitKey, LimitsOverview } from "@/lib/api/types";
 import { haptic } from "@/lib/haptics";
 import { moneyWhole, parseAmount } from "@/lib/money";
@@ -66,7 +67,7 @@ export function LimitEditor({
       const res = await api.setLimits({ [limitKey]: amount / 100 });
       setSaved(res.overview);
       // The emergency overview shows the monthly emergency limit, so it's re-read too.
-      await qc.invalidateQueries({ predicate: (q) => q.queryKey[1] === "limits" || q.queryKey[1] === "emergency" });
+      await invalidate(qc, "limits", "emergency");
       setStep("done");
     } catch (e) {
       haptic("error");

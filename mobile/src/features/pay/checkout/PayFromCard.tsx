@@ -6,7 +6,7 @@ import type { PaymentIntent } from "@/lib/api/pay-types";
 import { categoryOf } from "@/lib/categories";
 import { layout, space, useTheme } from "@/theme";
 import { midSentence, payAmount } from "../format";
-import { billWord, type PayVault } from "./vaults";
+import { payBillWord, type PayVault } from "./vaults";
 
 /** Which vault pays, why it matched, and whether it has enough. "Change" opens the picker. */
 export function PayFromCard({ intent, vault, canChange, onChange }: { intent: PaymentIntent; vault: PayVault | null; canChange: boolean; onChange: () => void }) {
@@ -21,7 +21,7 @@ export function PayFromCard({ intent, vault, canChange, onChange }: { intent: Pa
         <Row gap={8} style={styles.top}>
           <WarningCircleIcon size={20} color={c.warning} weight="fill" />
           <Txt v="bodyM" style={styles.flex}>
-            None of your vaults covers {billWord(intent.category)} bills, so this can&apos;t be paid from Vaultwise yet.
+            None of your vaults covers {payBillWord(intent.category)} bills, so this can&apos;t be paid from Vaultwise yet.
           </Txt>
         </Row>
         <Button

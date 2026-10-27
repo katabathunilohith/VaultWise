@@ -2,20 +2,21 @@ import { View } from "react-native";
 import { router } from "expo-router";
 import { ListChecksIcon } from "@/components/icons";
 import { Card, Row, ScreenSkeleton, StatusPill, Timeline, Txt, VaultGlyph, useNow } from "@/components/ui";
-import { useConnection } from "@/lib/api/hooks";
+import { DEFAULT_CURRENCY, useRules } from "@/lib/api/hooks";
+import { usePracticeMode } from "@/lib/api/practice";
 import { space, useTheme } from "@/theme";
 import { CalmError } from "../components/CalmError";
 import { TalkToPerson, TextLink } from "../components/Links";
 import { amountText, describeProof } from "../describe";
-import { useProofRecord, useProofRules } from "../hooks";
+import { useProofRecord } from "../hooks";
 import { trackerSteps } from "../stages";
 
 /** Compact tracker for one proof: where it is, the exact time, and the next step. */
 export function ProofTrack({ id }: { id: string }) {
   const { cat } = useTheme();
   const record = useProofRecord(id);
-  const rules = useProofRules();
-  const { mode } = useConnection();
+  const rules = useRules();
+  const practice = usePracticeMode();
   const now = useNow(30_000, true);
   const proof = record.data;
 
@@ -24,7 +25,7 @@ export function ProofTrack({ id }: { id: string }) {
   const receipt = proof.purpose === "emergency_receipt";
   const category = proof.vault?.category ?? (receipt ? "emergency" : proof.category);
   const vaultName = proof.vault?.name ?? (receipt ? "your emergency payout" : "this vault");
-  const currency = rules.currency ?? proof.extracted?.currency ?? "INR";
+  const currency = rules.currency ?? proof.extracted?.currency ?? DEFAULT_CURRENCY;
   const amount = proof.withdrawal?.amount ?? null;
   const d = describeProof(proof, {
     vaultName,
@@ -34,7 +35,7 @@ export function ProofTrack({ id }: { id: string }) {
     maxDocAgeDays: rules.maxDocAgeDays,
     reviewSlaHours: rules.reviewSlaHours,
     now,
-    demo: mode === "demo",
+    demo: practice,
   });
   const steps = trackerSteps(proof, { vaultName, outcome: d.outcome, withTimes: true, reviewBy: d.reviewBy, reviewLate: d.reviewLate, now });
 

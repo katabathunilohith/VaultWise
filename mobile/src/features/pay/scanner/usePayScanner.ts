@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Platform } from "react-native";
-import { useCameraPermissions } from "expo-camera";
 import { router, useFocusEffect } from "expo-router";
 import { haptic } from "@/lib/haptics";
-import { openAppSettings, withSystemUi } from "@/lib/session";
+import { useCameraAccess } from "@/lib/media/camera";
 import { parseIntentId } from "../intent-link";
 
 export type ScanStatus =
@@ -28,7 +26,8 @@ const NOTICE_MS = 2500;
  * preview at a time; it stops when a checkout opens on top), and the torch resets on blur.
  */
 export function usePayScanner() {
-  const [permission, requestPermission, getPermission] = useCameraPermissions();
+  // Coming back from Settings (or another app) may have changed the permission: read it again then.
+  const camera = useCameraAccess({ recheckOnReturn: true });
   const [focused, setFocused] = useState(false);
   const [torch, setTorch] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -48,17 +47,6 @@ export function usePayScanner() {
     }, []),
   );
 
-  // Coming back from Settings (or another app) may have changed the camera permission; the
-  // permission hook only reads it on mount, so read it again when the app is active again.
-  const granted = !!permission?.granted;
-  useEffect(() => {
-    if (Platform.OS === "web" || granted) return;
-    const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active") void getPermission().catch(() => {});
-    });
-    return () => sub.remove();
-  }, [granted, getPermission]);
-
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(null), NOTICE_MS);
@@ -66,17 +54,7 @@ export function usePayScanner() {
   }, [notice]);
 
   const status: ScanStatus =
-    Platform.OS === "web"
-      ? "unsupported"
-      : cameraError
-        ? "failed"
-        : !permission
-          ? "checking"
-          : permission.granted
-            ? "running"
-            : permission.canAskAgain
-              ? "needs-permission"
-              : "blocked";
+    camera.status === "unsupported" ? "unsupported" : cameraError ? "failed" : camera.status === "granted" ? "running" : camera.status;
 
   const onCode = (data: string) => {
     if (handling.current) return;
@@ -106,9 +84,9 @@ export function usePayScanner() {
       setCameraError(message || "The camera couldn't start.");
     },
     retryCamera: () => setCameraError(null),
-    // The permission prompt and Settings are system UI: the app lock waits for them.
-    requestPermission: () => void withSystemUi(requestPermission).catch(() => {}),
-    openSettings: () => void openAppSettings(),
+    // The permission prompt and Settings are system UI: the app lock waits for them (useCameraAccess).
+    requestPermission: () => void camera.request(),
+    openSettings: camera.openSettings,
   };
 }
 

@@ -3,7 +3,8 @@ import { KeyboardAvoidingView, Platform, View } from "react-native";
 import { router } from "expo-router";
 import { ListChecksIcon } from "@/components/icons";
 import { Button, Card, ModalScreen, PracticeBadge, Timeline, Txt } from "@/components/ui";
-import { useConnection } from "@/lib/api/hooks";
+import { useRules } from "@/lib/api/hooks";
+import { usePracticeMode } from "@/lib/api/practice";
 import type { ProofView } from "@/lib/api/types";
 import { haptic, type TokenName } from "@/lib/haptics";
 import { space, useTheme } from "@/theme";
@@ -12,7 +13,6 @@ import { DocumentCard } from "../components/DocumentCard";
 import { TalkToPerson, TextLink } from "../components/Links";
 import { amountText, describeProof } from "../describe";
 import { whenText } from "../format";
-import { useProofRules } from "../hooks";
 import { trackerSteps } from "../stages";
 import type { Outcome } from "../verdict";
 import type { FlowVault } from "./types";
@@ -48,8 +48,8 @@ export function ResultView({
   onTryAnother: (reason: string) => void;
 }) {
   const { cat } = useTheme();
-  const rules = useProofRules();
-  const { mode } = useConnection();
+  const rules = useRules();
+  const practice = usePracticeMode();
   const [now] = useState(() => Date.now());
   const [noteOpen, setNoteOpen] = useState(false);
   const [appealed, setAppealed] = useState(false);
@@ -61,7 +61,7 @@ export function ResultView({
     maxDocAgeDays: rules.maxDocAgeDays,
     reviewSlaHours: rules.reviewSlaHours,
     now,
-    demo: mode === "demo",
+    demo: practice,
   });
 
   // The outcome haptic plays once, in the commit that first shows the result (the camera closed steps ago).
