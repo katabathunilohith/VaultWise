@@ -1,10 +1,10 @@
 import { forwardRef, useState } from "react";
-import { StyleSheet, TextInput, View, type TextInputProps } from "react-native";
+import { StyleSheet, TextInput, View, type TextInputInstance, type TextInputProps } from "react-native";
 import { Txt } from "@/components/ui";
 import { fonts, radius, useTheme } from "@/theme";
 
 /** Labelled text input, 56 pt tall (taller when multiline), with an optional hint below. */
-export const Field = forwardRef<TextInput, TextInputProps & { label: string; hint?: string | null; error?: boolean }>(function Field(
+export const Field = forwardRef<TextInputInstance, TextInputProps & { label: string; hint?: string | null; error?: boolean }>(function Field(
   { label, hint, error, multiline, style, onFocus, onBlur, ...rest },
   ref,
 ) {

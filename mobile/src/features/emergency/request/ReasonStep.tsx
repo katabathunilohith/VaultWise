@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Platform, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Keyboard, Platform, ScrollView, StyleSheet, TextInput, View, type ScrollViewInstance } from "react-native";
 import { Banner, Button, Chip, ModalScreen, PracticeBadge, Stack, Txt } from "@/components/ui";
 import { EMERGENCY_REASONS } from "@/lib/api/types";
 import { radius, space, type, useTheme } from "@/theme";
@@ -33,7 +33,7 @@ export function ReasonStep({
   const { c } = useTheme();
   const noteOk = !noteRequired || note.trim().length >= NOTE_MIN;
   const short = Math.max(0, NOTE_MIN - note.trim().length);
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   const keyboard = useKeyboardShown();
   return (
     <ModalScreen

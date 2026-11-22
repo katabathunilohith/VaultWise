@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { AccessibilityInfo, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, type ScrollViewInstance } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Banner, PracticeBadge, SectionHeader, Skeleton, Txt, useNow } from "@/components/ui";
 import { layout, radius, space, useTheme } from "@/theme";
@@ -22,7 +22,7 @@ export function SupportScreen({ topic, reference }: { topic?: SupportTopic; refe
   const insets = useSafeAreaInsets();
   const cases = useCases();
   const now = useNow(30_000);
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   const [sent, setSent] = useState<SupportCase | null>(null);
 
   // Context handed over by the assistant (read once; route params win).

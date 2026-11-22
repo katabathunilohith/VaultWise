@@ -1,5 +1,5 @@
 import { forwardRef, useState } from "react";
-import { StyleSheet, TextInput, View, type TextInputProps } from "react-native";
+import { StyleSheet, TextInput, View, type TextInputInstance, type TextInputProps } from "react-native";
 import { CheckCircleIcon, EyeIcon, EyeSlashIcon } from "@/components/icons";
 import { Press, Txt } from "@/components/ui";
 import { FieldError } from "@/features/account/controls";
@@ -11,7 +11,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const isEmail = (v: string) => EMAIL.test(v.trim());
 
 /** Email for signing in: no capitals, no autocorrect, the email keyboard. */
-export const EmailField = forwardRef<TextInput, Omit<TextInputProps, "style"> & { label?: string; hint?: string; error?: string | null }>(function EmailField(
+export const EmailField = forwardRef<TextInputInstance, Omit<TextInputProps, "style"> & { label?: string; hint?: string; error?: string | null }>(function EmailField(
   { label = "Email", ...rest },
   ref,
 ) {
@@ -48,7 +48,7 @@ interface PasswordProps extends Omit<TextInputProps, "style" | "secureTextEntry"
 }
 
 /** Password with a Show/Hide control (44 pt), so people can check what they typed. */
-export const PasswordField = forwardRef<TextInput, PasswordProps>(function PasswordField(
+export const PasswordField = forwardRef<TextInputInstance, PasswordProps>(function PasswordField(
   { label = "Password", error, purpose, onFocus, onBlur, ...rest },
   ref,
 ) {

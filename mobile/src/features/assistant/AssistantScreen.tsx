@@ -8,6 +8,7 @@ import {
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type ScrollViewInstance,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -50,7 +51,7 @@ export function AssistantScreen() {
   const [draft, setDraft] = useState("");
   const [reporting, setReporting] = useState<AssistantMessage | null>(null);
   const keyboard = useKeyboardVisible();
-  const list = useRef<ScrollView>(null);
+  const list = useRef<ScrollViewInstance>(null);
   const atEnd = useRef(true);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));

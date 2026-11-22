@@ -1,4 +1,4 @@
-import type { ImageSourcePropType } from "react-native";
+import type { ImageSource } from "expo-image";
 import {
   FirstAidKitIcon,
   GraduationCapIcon,
@@ -20,7 +20,7 @@ export interface CategoryMeta {
   label: string;
   short: string;
   Icon: Icon;
-  object3d: ImageSourcePropType;
+  object3d: ImageSource | number;
   unlocksFor: string[];
   proofHint: string;
   /** A few words for the purpose picker. */
@@ -72,7 +72,7 @@ export const emoji3d = {
   bags: require("@/assets/emoji3d/shopping_bags.png"),
   umbrella: require("@/assets/emoji3d/umbrella_with_rain_drops.png"),
   stopwatch: require("@/assets/emoji3d/stopwatch.png"),
-} satisfies Record<string, ImageSourcePropType>;
+} satisfies Record<string, ImageSource | number>;
 
 export const CATEGORIES: Record<CategoryKey, CategoryMeta> = {
   health: {

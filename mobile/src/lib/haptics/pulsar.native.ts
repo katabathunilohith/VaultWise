@@ -22,7 +22,7 @@ interface Spec extends TurboModule {
 function load(): PulsarBackend | null {
   let mod: Spec | null = null;
   try {
-    mod = TurboModuleRegistry.get<Spec>("RNPulsar");
+    mod = TurboModuleRegistry.get<Spec>("RNPulsar") ?? null;
   } catch {
     mod = null;
   }

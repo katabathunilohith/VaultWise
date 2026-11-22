@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { TextInput, View } from "react-native";
+import { View, type TextInputInstance } from "react-native";
 import { router } from "expo-router";
 import { Button, PracticeBadge, ScreenSkeleton, Stack, ToggleRow, Txt } from "@/components/ui";
 import { api } from "@/lib/api/client";
@@ -42,7 +42,7 @@ export function AboutYouStep() {
   const [adult, setAdult] = useState(session.ageConfirmed);
   const [demo, setDemo] = useState(initial.demo);
   const [errors, setErrors] = useState<Errors>({});
-  const emailRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInputInstance>(null);
 
   const countries = me.data?.countries ?? [];
   const region = useApiQuery(qk.region(), api.region, { staleTime: Infinity, retry: 0 });

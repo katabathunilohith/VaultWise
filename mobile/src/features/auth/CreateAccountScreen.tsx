@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { TextInput, View } from "react-native";
+import { View, type TextInputInstance } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Banner, Button, Txt } from "@/components/ui";
 import { goBack, StepScreen } from "@/features/account/layout";
@@ -30,7 +30,7 @@ export function CreateAccountScreen() {
   const [errors, setErrors] = useState<Errors>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const passwordRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
 
   const submit = async () => {
     const e: Errors = {};

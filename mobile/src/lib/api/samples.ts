@@ -1,10 +1,10 @@
-import type { ImageSourcePropType } from "react-native";
+import type { ImageSource } from "expo-image";
 import { getConnection } from "./connection";
 import { isPracticeMode } from "./practice";
 import type { Sample } from "./types";
 
 /** Sample documents bundled with the app so "Use a sample" works in demo mode. */
-const BUNDLED: Record<string, ImageSourcePropType> = {
+const BUNDLED: Record<string, ImageSource | number> = {
   "medical-invoice": require("@/assets/samples/medical-invoice.jpg"),
   "pharmacy-receipt": require("@/assets/samples/pharmacy-receipt.jpg"),
   "tuition-invoice": require("@/assets/samples/tuition-invoice.jpg"),
@@ -25,7 +25,7 @@ export const DEMO_SAMPLES: Sample[] = [
 ];
 
 /** Image to show for a sample: the live server's render when connected, otherwise the bundled copy. */
-export function sampleSource(key: string): ImageSourcePropType {
+export function sampleSource(key: string): ImageSource | number {
   if (!isPracticeMode()) return { uri: `${getConnection().baseUrl}/api/v1/samples/${key}` };
   return BUNDLED[key] ?? BUNDLED["medical-invoice"];
 }

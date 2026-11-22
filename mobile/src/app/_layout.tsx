@@ -19,6 +19,7 @@ import { ThemeProvider, useTheme } from "@/theme";
 import { fontMap } from "@/theme/fonts";
 import { startAuth, useServerSignOut, useSignInGate } from "@/features/auth"; // identity
 import { isRecoveryAccess, RecoveryChrome } from "@/features/recovery"; // identity
+import { TESTER_ENABLED, TesterHost } from "@/features/tester"; // tester
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -104,6 +105,8 @@ function Shell() {
   return (
     <NavThemeProvider value={navTheme}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+      {/* tester */}
+      {TESTER_ENABLED ? <TesterHost /> : null}
       {/* identity: the read-only bar while a recovery request waits for a person */}
       <RecoveryChrome active={readOnly}>
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
@@ -139,6 +142,8 @@ function Shell() {
             <Stack.Screen name="activity" options={{ headerShown: false }} />
             <Stack.Screen name="support" options={{ headerShown: false }} />
             <Stack.Screen name="settings" options={{ headerShown: false }} />
+            {/* tester */}
+            <Stack.Screen name="tester-feedback" options={modal} />
             {/* identity */}
             <Stack.Screen name="verify-id" options={modal} />
           </Stack.Protected>

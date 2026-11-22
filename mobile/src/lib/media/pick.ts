@@ -1,4 +1,5 @@
-import { Platform, type ImageSourcePropType } from "react-native";
+import type { ImageSource } from "expo-image";
+import { Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { api } from "@/lib/api/client";
 import { sampleSource } from "@/lib/api/samples";
@@ -14,7 +15,7 @@ import { withSystemUi } from "@/lib/auth/app-lock";
 /** A photo ready to send, with what to show before sending it. */
 export interface PickedImage {
   file: UploadFile;
-  preview: ImageSourcePropType;
+  preview: ImageSource | number;
   width?: number;
   height?: number;
 }

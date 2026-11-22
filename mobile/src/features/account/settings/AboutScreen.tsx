@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import Constants from "expo-constants";
 import { useLocalSearchParams } from "expo-router";
+import { versionLine } from "@/lib/version";
 import { Banner, PracticeBadge, Segmented, Txt } from "@/components/ui";
 import { radius, space, useTheme } from "@/theme";
 import { Page } from "../layout";
@@ -47,7 +47,7 @@ function Policy({ title }: { title: string }) {
 }
 
 function About() {
-  const version = Constants.expoConfig?.version ?? "—";
+  const version = versionLine();
   return (
     <View style={{ gap: space.md }}>
       <View style={{ gap: space.xs }}>

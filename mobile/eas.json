@@ -5,6 +5,7 @@
   },
   "build": {
     "development": {
+      "channel": "development",
       "developmentClient": true,
       "distribution": "internal"
     },
@@ -15,9 +16,22 @@
       }
     },
     "preview": {
+      "channel": "preview",
       "distribution": "internal"
     },
+    "apk": {
+      "channel": "apk",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_PRACTICE_ONLY": "1"
+      },
+      "autoIncrement": true
+    },
     "production": {
+      "channel": "production",
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_PRACTICE_ONLY": "1"

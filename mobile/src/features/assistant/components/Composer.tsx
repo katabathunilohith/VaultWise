@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Platform, StyleSheet, TextInput, useWindowDimensions, View, type NativeSyntheticEvent, type TextInputKeyPressEventData } from "react-native";
+import { Platform, StyleSheet, TextInput, useWindowDimensions, View, type TextInputKeyPressEvent } from "react-native";
 import { PaperPlaneRightIcon } from "@/components/icons";
 import { Press } from "@/components/ui";
 import { layout, type, useTheme } from "@/theme";
@@ -38,9 +38,9 @@ export function Composer({
     setHeight(MIN_H);
   };
 
-  const onKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+  const onKeyPress = (e: TextInputKeyPressEvent) => {
     if (Platform.OS !== "web") return;
-    const ev = e.nativeEvent as TextInputKeyPressEventData & { shiftKey?: boolean; isComposing?: boolean };
+    const ev = e.nativeEvent as TextInputKeyPressEvent["nativeEvent"] & { shiftKey?: boolean; isComposing?: boolean };
     if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) {
       e.preventDefault();
       send();

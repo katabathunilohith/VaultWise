@@ -4,6 +4,7 @@ import { demo } from "./demo";
 import { ApiError } from "./errors";
 import { authHeaders, formWith, post, request } from "./http";
 import { identityLive } from "./identity";
+import { observed } from "./observe"; // tester
 import { walletLive } from "./wallet";
 import { payDryRun } from "./pay-sim";
 import type { PaymentIntent } from "./pay-types";
@@ -187,6 +188,6 @@ export type Api = typeof live;
 export const api: Api = new Proxy(live, {
   get(target, prop: keyof Api) {
     const source: Api = isPracticeMode() ? demo : target;
-    return source[prop];
+    return observed(prop, source[prop]); // tester
   },
 });

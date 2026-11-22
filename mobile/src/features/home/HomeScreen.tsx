@@ -7,6 +7,7 @@ import { useDashboard } from "@/lib/api/hooks";
 import { invalidate, type QueryName } from "@/lib/api/keys";
 import type { Dashboard } from "@/lib/api/types";
 import { WalletCard } from "@/features/wallet"; // wallet
+import { TesterCard } from "@/features/tester"; // tester
 import { ComingUpCard } from "./ComingUpCard";
 import { FreshStartCard } from "./FreshStartCard";
 import { Hero } from "./Hero";
@@ -51,6 +52,8 @@ function HomeBody({ data }: { data: Dashboard }) {
   const large = fontScale >= 1.3;
   return (
     <>
+      {/* tester */}
+      <TesterCard />
       <Hero saved={data.totals.saved} currency={data.currency} now={now} large={large} />
       {/* wallet */}
       <WalletCard />

@@ -1,5 +1,5 @@
 import { forwardRef, useState } from "react";
-import { StyleSheet, TextInput, View, type TextInputProps } from "react-native";
+import { StyleSheet, TextInput, View, type TextInputInstance, type TextInputProps } from "react-native";
 import { Txt } from "@/components/ui";
 import { fonts, layout, radius, useTheme } from "@/theme";
 import { FieldError } from "../controls";
@@ -11,7 +11,7 @@ interface Props extends Omit<TextInputProps, "style"> {
 }
 
 /** Labelled text field: 56 pt tall, label above, hint or error below (error has an icon). */
-export const TextField = forwardRef<TextInput, Props>(function TextField({ label, hint, error, onFocus, onBlur, ...rest }, ref) {
+export const TextField = forwardRef<TextInputInstance, Props>(function TextField({ label, hint, error, onFocus, onBlur, ...rest }, ref) {
   const { c } = useTheme();
   const [focused, setFocused] = useState(false);
   return (
