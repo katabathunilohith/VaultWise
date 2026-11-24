@@ -45,3 +45,38 @@ describe("deploy scripts run as root only from root-owned copies", () => {
     expect(commands(src).some((l) => l.includes("YOUR-BUCKET-NAME"))).toBe(false);
   });
 });
+
+describe("audit anchors in the deploy files (security review gap 15)", () => {
+  it("backup.sh copies the anchors before the database, so the S3 copy and a restore get a matching pair", () => {
+    const run = commands(read("backup.sh"));
+    const copyAnchors = run.findIndex((l) => l.startsWith('cp "$ANCHORS" "$DEST/audit-anchors.jsonl"'));
+    const backupDb = run.findIndex((l) => l.includes(".backup '$DEST/vaultwise.db'"));
+    const s3 = run.findIndex((l) => l.includes('s3 cp --recursive "$DEST"'));
+    expect(copyAnchors).toBeGreaterThanOrEqual(0);
+    expect(copyAnchors).toBeLessThan(backupDb);
+    expect(s3).toBeGreaterThan(copyAnchors); // the whole backup folder, anchors included
+    expect(run).toContain('ANCHORS="${AUDIT_ANCHOR_FILE:-$DATA_DIR/audit-anchors.jsonl}"');
+  });
+
+  it("backup.sh checks the newest anchor without running app code, and only with validated values", () => {
+    const src = read("backup.sh");
+    const run = commands(src);
+    expect(run.some((l) => /(^|[;&|]\s*|\$\()(sudo\s+)?(npm|node|npx)\s/.test(l))).toBe(false);
+    // The anchors file is writable by the app user: only digits and a 64-character hex hash reach sqlite3.
+    expect(src).toContain(String.raw`sed -n 's/.*"lastId":\([0-9][0-9]*\).*/\1/p'`);
+    expect(src).toContain(String.raw`sed -n 's/.*"headHash":"\([0-9a-f]\{64\}\)".*/\1/p'`);
+    expect(src).toContain("AUDIT ANCHOR MISMATCH");
+  });
+
+  it("README and restore.md run the checker as the app user, never as root, and restore the matching anchors", () => {
+    const readme = read("README.md");
+    const restore = read("restore.md");
+    for (const doc of [readme, restore]) {
+      expect(doc).toContain("npm run audit:verify");
+      for (const line of doc.split("\n").filter((l) => l.includes("npm run audit:verify") && l.trim().startsWith("sudo")))
+        expect(line).toMatch(/^\s*sudo -u vaultwise -H bash -c 'cd \/opt\/vaultwise && /);
+    }
+    expect(restore).toContain("sudo cp $B/audit-anchors.jsonl /var/lib/vaultwise/audit-anchors.jsonl");
+    expect(restore).toContain("/var/backups/vaultwise/$LATEST/audit-anchors.jsonl");
+  });
+});

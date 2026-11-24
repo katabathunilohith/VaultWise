@@ -4,7 +4,7 @@ Two kinds of backup exist (see [README.md](README.md)):
 
 | Backup | Made by | Kept | Use it when |
 |---|---|---|---|
-| Nightly copy in `/var/backups/vaultwise/<date>/` (`vaultwise.db` + `uploads.tar.gz`) | `/usr/local/sbin/vaultwise-backup` (the root-owned copy of `deploy/backup.sh`) from cron | 14 days | The data is wrong or lost but the server is fine |
+| Nightly copy in `/var/backups/vaultwise/<date>/` (`vaultwise.db` + `uploads.tar.gz` + `audit-anchors.jsonl`) | `/usr/local/sbin/vaultwise-backup` (the root-owned copy of `deploy/backup.sh`) from cron | 14 days | The data is wrong or lost but the server is fine |
 | Lightsail automatic snapshot (the whole disk) | Lightsail | 7 days | The server itself is broken or gone |
 
 Run every command below on the server, over SSH, unless it says otherwise.
@@ -27,7 +27,7 @@ This doesn't touch the live app.
 
    ```bash
    sudo rm -rf /tmp/restore-test && sudo mkdir -p /tmp/restore-test
-   sudo cp /var/backups/vaultwise/$LATEST/vaultwise.db /tmp/restore-test/
+   sudo cp /var/backups/vaultwise/$LATEST/vaultwise.db /var/backups/vaultwise/$LATEST/audit-anchors.jsonl /tmp/restore-test/
    sudo tar -C /tmp/restore-test -xzf /var/backups/vaultwise/$LATEST/uploads.tar.gz
    ```
 
@@ -41,6 +41,14 @@ This doesn't touch the live app.
 
    Compare the counts with the live database (`sudo sqlite3 /var/lib/vaultwise/vaultwise.db "SELECT COUNT(*) FROM users;"`):
    they should match, or be a little lower if people signed up since the backup.
+
+   Then check the copy's audit log against the anchors saved with it, as the app user (never as root). It must end
+   with `OK:`:
+
+   ```bash
+   sudo chown -R vaultwise:vaultwise /tmp/restore-test && sudo chmod 700 /tmp/restore-test
+   sudo -u vaultwise -H bash -c 'cd /opt/vaultwise && npm run audit:verify -- --db /tmp/restore-test/vaultwise.db --anchors /tmp/restore-test/audit-anchors.jsonl'
+   ```
 
 4. Clean up (the copy holds personal data):
 
@@ -76,12 +84,22 @@ Write the date and the counts in your project log, so you can show the restore w
 
    ```bash
    sudo cp $B/vaultwise.db /var/lib/vaultwise/vaultwise.db
+   sudo cp $B/audit-anchors.jsonl /var/lib/vaultwise/audit-anchors.jsonl
    sudo tar -C /var/lib/vaultwise -xzf $B/uploads.tar.gz
    sudo chown -R vaultwise:vaultwise /var/lib/vaultwise
    sudo chmod 750 /var/lib/vaultwise
    ```
 
    Don't copy any old `vaultwise.db-wal` or `vaultwise.db-shm` files: the backup is already complete without them.
+   The audit anchors come from the same backup as the database, so they match it. The anchors written since then
+   name audit rows the restored database doesn't have, so keep that file as a record (it holds no personal data)
+   instead of putting it back:
+
+   ```bash
+   sudo cp /var/lib/vaultwise.before-restore-$(date +%F)/audit-anchors.jsonl /var/backups/vaultwise/audit-anchors.before-restore-$(date +%F).jsonl
+   ```
+
+   (If you made the anchors file append-only with `chattr +a`, do the same to the restored one after step 5.)
 
 5. Start the app and check it:
 
@@ -91,11 +109,17 @@ Write the date and the counts in your project log, so you can show the restore w
    curl -fsS https://YOUR-DOMAIN/api/v1/region
    ```
 
-   Then sign in on the website and open a vault with a bill photo, to check photos load.
+   Then sign in on the website and open a vault with a bill photo, to check photos load. Check the audit log against
+   its anchors (it must end with `OK:`; the app added a new anchor when it started):
+
+   ```bash
+   sudo -u vaultwise -H bash -c 'cd /opt/vaultwise && export VAULTWISE_DATA_DIR=/var/lib/vaultwise && set -a && . /etc/vaultwise.env && set +a && npm run audit:verify'
+   ```
 
 6. When you're sure everything works (give it a few days), delete the old copy, because it holds personal data:
 
    ```bash
+   sudo chattr -a /var/lib/vaultwise.before-restore-*/audit-anchors.jsonl 2> /dev/null || true
    sudo rm -rf /var/lib/vaultwise.before-restore-*
    ```
 
