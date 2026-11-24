@@ -43,3 +43,6 @@ next-env.d.ts
 
 # local data (SQLite database, uploaded proofs)
 /data
+
+# verification evaluation: generated bills and raw runs (docs/evaluation keeps the results)
+/eval/verification/out/
