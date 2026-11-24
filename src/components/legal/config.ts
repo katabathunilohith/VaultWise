@@ -4,9 +4,9 @@
  * BEFORE GOING LIVE, replace CONTACT_EMAIL with a real inbox the team reads (for example privacy@ on the
  * domain from deploy/README.md), and update LAST_UPDATED whenever the policy text changes.
  */
-export const CONTACT_EMAIL = "privacy@<your-domain>";
+export const CONTACT_EMAIL = "vaultwise007@gmail.com";
 
-export const LAST_UPDATED = "22 November 2026";
+export const LAST_UPDATED = "24 November 2026";
 
 /** Who runs Vaultwise, as the pages name it. */
 export const OPERATOR = "the Vaultwise student team";
