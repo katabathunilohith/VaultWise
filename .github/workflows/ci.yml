@@ -1,0 +1,63 @@
+# Checks every push and pull request: the server and web app (repo root) and the phone app (mobile/).
+# No secrets are needed: tests run without a Groq key (AI checks fall back to a person) and without
+# Firebase (prototype mode). The live-AI suite (`npm run test:ai`) and the end-to-end API suite
+# (`npm run test:e2e`) stay manual; see docs/reference/commands.md.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    name: Server and web app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Type check
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit and integration tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+
+  mobile:
+    name: Phone app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - name: Type check (app and tests)
+        run: npm run typecheck
+      - name: Lint
+        run: npx eslint src scripts --max-warnings=0
+      - name: Unit and contract tests
+        # The contract runners read ../tests/contract/vectors, so the whole repo is checked out.
+        run: npm test
+      - name: Web bundle builds
+        run: npx expo export --platform web --output-dir "$RUNNER_TEMP/web-export"
