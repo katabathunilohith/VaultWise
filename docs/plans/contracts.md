@@ -34,7 +34,7 @@
 
 `src/lib/money-routes.ts` holds the single map. Routes call `customer({ money: "<action>" })` and pass the body's `pin` to `requireMpin()`.
 
-| Action | Route | MPIN | KYC gate (unchanged) |
+| Action | Route | MPIN | KYC gate |
 |---|---|---|---|
 | `withdraw` | `POST /vaults/{id}/withdrawals` | yes | yes |
 | `wallet_spend` | `POST /wallet/spend` | yes | yes |
@@ -44,10 +44,23 @@
 | `emergency` | `POST /emergency/withdrawals` (every tier) | yes | yes |
 | `limits_loosen` | `PUT /limits` when any limit goes up; `POST /limits/emergency` | yes | no |
 | `invest_buy` | `POST /invest/core/buy` | yes | yes |
+| `invest_sip` | `POST /invest/core/sip` (added 2026-11-24) | when setting one up or moving more money (`sipNeedsMpin()`, `src/lib/invest/sip-rule.ts`); not when lowering or pausing (`DELETE`) | yes |
+| `satellite_opt_in` | `POST /invest/satellite/opt-in` (added 2026-11-24) | yes, every allocation | yes |
 | `close_account` | `POST /reset` in firebase mode | yes | no |
 | `mpin_change` | `POST /mpin` | current MPIN | no |
 
-Money in (deposits, top-ups) needs no MPIN. KYC gates stay as they are today.
+Money in from the linked bank needs no MPIN and one KYC gate for all of it (changed 2026-11-24, [security](../security.md) gap 7; before, deposits were ungated and top-ups gated). These actions carry `moneyIn: true` and routes only call `customer({ money })`:
+
+| Action | Route | MPIN | KYC gate |
+|---|---|---|---|
+| `wallet_top_up` | `POST /wallet/top-up` | no | yes |
+| `vault_deposit` | `POST /vaults/{id}/deposits`; `POST /vaults` with `initialDeposit` (`moneyGate()` in `src/lib/api.ts`, before anything is written) | no | yes |
+| `bank_simulate` | `POST /accounts/simulate` | no | yes |
+| `roundup_sweep` | `POST /accounts/sweep` | no | yes |
+
+Moving money already in the account (wallet → vault) is `wallet_move`: MPIN and KYC. `POST /invest/satellite/run` records paper positions only: no MPIN, KYC gate as before.
+
+`POST /invest/core/sip` takes `{ amount, frequency, startDate?, pin }` and answers 400 `bad_start_date` for a `startDate` that isn't a date. `POST /invest/satellite/opt-in` takes `{ amount, acknowledged, pin }`. The Practice simulator follows the same table, held to it by `tests/contract/vectors/money-actions.json` and `sip-mpin.json`.
 
 ### API
 
@@ -155,7 +168,7 @@ Switch: `MPIN_ENFORCED` (default on). Off: checks are skipped, attempts still re
 
 | Contract | As built | Where |
 |---|---|---|
-| The action table lists ten actions. | Added: `device_trust`, `device_revoke` and `phone_change` (`POST /me/phone`, adding or replacing the verified number), each with the MPIN always checked. `mpin_change` also covers `PATCH /me` with a new `pin`. Each entry also has a `deviceCap` flag (plan 06). | `src/lib/money-routes.ts` |
+| The action table lists ten actions. | Added: `device_trust`, `device_revoke` and `phone_change` (`POST /me/phone`, adding or replacing the verified number), each with the MPIN always checked. `mpin_change` also covers `PATCH /me` with a new `pin`. Each entry also has a `deviceCap` flag (plan 06). (The SIP, Satellite and money-in actions of 2026-11-24 are in the contract table above.) | `src/lib/money-routes.ts` |
 | `wallet_limit_raise`: `PUT/POST /wallet/settings`. | Changed: only `PUT /wallet/settings` exists; there is no `POST`. The MPIN is asked only when a limit already exists and goes up or is turned off. | `src/app/api/v1/wallet/settings/route.ts` |
 | Routes call `customer({ money: "<action>" })` and pass `pin` to `requireMpin()`. | Changed in detail: `PUT /limits` and `PUT /wallet/settings` call `customer()` without `money` (they ask for the MPIN only for some bodies; their map entries have `kyc: false`). `POST /reset` uses `resolveCustomer()` with the map's KYC flag. `POST /emergency/withdrawals` passes `pin` to `executeEmergency()`, which calls `requireMpin()` before its transaction. | the routes named |
 | Switch off: checks skipped, attempts still recorded. | Added: in rollback mode a new PIN only has to be 4 to 6 digits. The `always` checks (Tier 2 emergency, changing the PIN, changing the phone number, trusting or signing out devices) behave exactly as when enforced, the lock included, with `triesLeft` and `lockedUntil`, so rollback mode can't be used to guess the PIN without limit. A PIN sent with a money move while a lock is on isn't checked at all. The lock messages and the `mpin_locked` alert say "anything that needs your MPIN" rather than claiming money moves are locked. `GET /me` reports `lockedUntil: null` and `enforced: false`. | `src/lib/mpin/verify.ts`, `change.ts`, `attempts.ts`, `src/lib/alerts/messages.ts` |
@@ -210,7 +223,7 @@ Switch: `MPIN_ENFORCED` (default on). Off: checks are skipped, attempts still re
 | A general limit per user and per IP. | Changed: the per-IP limit applies only when the client IP can be trusted (behind a proxy named by `TRUST_PROXY_HOPS` or `TRUST_PROXY_HEADER`); the per-user limit applies only in firebase mode. The per-user limit runs in `session()`, so it covers `GET /me` too and runs before the calling device is recorded; a recovery claimant is counted under its own sign-in, not the wallet. Added: `TRUST_PROXY_HEADER`, to believe exactly one proxy header. | `src/lib/api.ts`, `src/lib/auth/session.ts`, `src/lib/auth/context.ts` |
 | Tighter limits on MPIN, OTP and uploads. | Changed: uploads have 20 per person per hour (`UPLOADS_PER_HOUR`) across bills, receipts, ID photos and limit-request documents. Only an accepted upload counts: `POST /kyc` refuses a steps-flow account before counting, `POST /limits/emergency` counts only when a file is sent, and the proof and receipt routes check `assertUploadsLeft()` before reading the body and count once the withdrawal or request is known to take the file. OTP keeps its own limits. MPIN has no separate rate limit: the escalating lock does that job. A 429 from the shared limiter carries `Retry-After`. | `src/lib/rate-limit.ts`, `src/app/api/v1/kyc/route.ts`, `src/app/api/v1/limits/emergency/route.ts` |
 | The assistant route checks `x-ai-consent`. | Added: the refusal is 403 `ai_consent_required`. | `src/app/api/v1/assistant/route.ts` |
-| `x-ai-consent`: a missing header means no. | Added: the same holds in storage. `proofs.ai_allowed` defaults to 0 (in `CREATE TABLE` and the migration; an older database keeps its `DEFAULT 1`, but every insert passes the value). `createProof()` requires `aiAllowed`, and only `true` lets the AI read the proof. The seed passes 1 for the bundled sample documents. | `src/lib/db.ts`, `src/lib/verification/pipeline.ts`, `src/lib/seed.ts` |
+| `x-ai-consent`: a missing header means no. | Added: the same holds in storage. `proofs.ai_allowed` defaults to 0 (in `CREATE TABLE` and the migration; an older database keeps its `DEFAULT 1`, but every insert passes the value). `createProof()` requires `aiAllowed`, and only `true` lets the AI read the proof. The seed passes 1 for the bundled sample documents. | `src/lib/db.ts`, `src/lib/verification/proofs.ts` (was `pipeline.ts`), `src/lib/seed.ts` |
 
 ### Error codes beyond the contract
 
@@ -224,3 +237,4 @@ The contract lists `mpin_required`, `mpin_wrong`, `mpin_locked`, `mpin_weak`, `d
 | KYC steps | `kyc_flow_off` (409), `kyc_flow_steps` (409), `kyc_step_order` (409), `kyc_step_done` (409), `kyc_step_waiting` (409), `kyc_request_expired` (409), `kyc_request_not_found` (404), `provider_unavailable` (503), `name_in_check` (409, `PATCH /me`); and the existing `invalid_id`, `kyc_done`, `kyc_in_review`, `name_locked` (403), `rate_limited`, `server_config` |
 | Rate limits | `rate_limited` (429, with `Retry-After`) |
 | AI | `ai_consent_required` (403) |
+| Investing | `bad_start_date` (400, `POST /invest/core/sip`, added 2026-11-24) |

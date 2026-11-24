@@ -1,7 +1,7 @@
 # Data model reference
 
 Every table in the server's SQLite database, and every key the phone app keeps on the device.
-As of commit `012a9fc` plus the server work for plans 03, 05, 06 and 07 (2026-11-22).
+As of commit `012a9fc` plus the server work for plans 03, 05, 06 and 07 (2026-11-22) and the external review fixes (2026-11-24).
 
 ## The server database
 
@@ -10,6 +10,7 @@ As of commit `012a9fc` plus the server work for plans 03, 05, 06 and 07 (2026-11
 | Engine | SQLite through Node's built-in `node:sqlite` (`DatabaseSync`) |
 | File | `<DATA_DIR>/vaultwise.db`. `DATA_DIR` is `VAULTWISE_DATA_DIR`, or `./data` when that is unset. |
 | Uploads | `<DATA_DIR>/uploads` (proof images, ELA images, ID photos) |
+| Audit anchors | `<DATA_DIR>/audit-anchors.jsonl`, or `AUDIT_ANCHOR_FILE`. Not a table: one JSON line per anchor, `{ ts, lastId, headHash, count }` (the audit chain's head), appended at every server start and once a day by the scheduler, and printed to the log as `[vaultwise] audit_anchor {...}`. `npm run audit:verify` checks the chain against it. See [`src/lib/audit-anchors/README.md`](../../src/lib/audit-anchors/README.md). |
 | Opened by | `db()` in [`src/lib/db.ts`](../../src/lib/db.ts). One connection per process, kept on `globalThis.__vaultwiseDb`. |
 | Pragmas | `journal_mode = WAL`, `foreign_keys = ON`, `busy_timeout = 5000` |
 | Helpers | `all()`, `get()`, `run()`, `tx()` (nested calls join the outer transaction, which starts with `BEGIN IMMEDIATE`), `newId(prefix)`, `parseJson()` |
@@ -31,17 +32,18 @@ There are two places, and both are idempotent (`CREATE TABLE IF NOT EXISTS`):
    If hot reload keeps an old connection and `SCHEMA` has changed, `db()` runs `SCHEMA` and `migrate()` again.
 2. **Feature modules create their own tables on first use.** Each module keeps a `WeakSet<DatabaseSync>` named `ready`, so it runs its `CREATE` once per database. A reset makes a new database object, so the tables are created again.
    These modules create 17 tables: `identities`, `vault_custom_rules`, `kyc_records`, `recovery_claims`, `recovery_attempts`, `wallet_settings` and `wallet_payments`, and, since plans 03 to 07, `mpin_attempts`, `mpin_meta`, `devices`, `alerts`, `push_tokens`, `otp_codes`, `otp_verifications`, `kyc_checks`, `bank_accounts` and `rate_limits`.
-   The MPIN, devices, alerts and OTP modules add a database to their `ready` set only when no transaction is open, because a `CREATE` inside a transaction that rolls back would be lost.
+   The MPIN, devices, alerts, OTP, wallet and custom-rules modules add a database to their `ready` set only when no transaction is open, because a `CREATE` inside a transaction that rolls back would be lost (`POST /vaults` saves a custom rule inside the transaction that creates the vault, since 2026-11-24).
 
 ### Migrations
 
-All migrations are additive. They check `PRAGMA table_info` and only add what is missing.
+Migrations check `PRAGMA table_info` and only change what is missing. All but one are additive; `splitSharedStrategies()` rebuilds a table.
 
 | Where | Change | Why |
 |---|---|---|
 | `migrate()` in [`src/lib/db.ts`](../../src/lib/db.ts) | `ALTER TABLE users ADD COLUMN country TEXT`, then backfill `country` from `jurisdiction` (`UK` → `GB`, `EU` → `DE`, anything else unchanged) | Countries replaced markets as the onboarding choice. |
 | `migrate()` in [`src/lib/db.ts`](../../src/lib/db.ts) | `ALTER TABLE proofs ADD COLUMN ai_allowed INTEGER NOT NULL DEFAULT 0` | Records whether the person let the AI read the proof (`x-ai-consent`); older rows count as no. A database whose column was added earlier with `DEFAULT 1` keeps that default (SQLite can't change it without rebuilding the table), which is safe because every insert passes the value. |
 | `migrate()` in [`src/lib/db.ts`](../../src/lib/db.ts) | `UPDATE users SET kyc_level = 1 WHERE kyc_status IN ('pending', 'needs_review') AND kyc_level = 0` | Older sign-ups waiting for an ID check were stored at level 0; the one rule (`kycLevelFor()` in `src/lib/kyc/levels.ts`) says 1. |
+| `splitSharedStrategies()` in [`src/lib/db.ts`](../../src/lib/db.ts), when `strategies` has no `user_id` column | Renames the old table to `strategies_shared`, creates the per-customer table, copies each old row to the customer of the newest `strategy.gate_passed` or `strategy.gate_failed` audit row for that strategy, then drops the old table. A row with no such audit row is dropped (a backtest the customer can run again). All or nothing, inside a savepoint. | Strategies were shared, so one customer's backtest overwrote another's (maintainability B9, 2026-11-24). |
 | `ensureIdentityTables()` in [`src/lib/auth/identities.ts`](../../src/lib/auth/identities.ts) | `ALTER TABLE users ADD COLUMN closed_at INTEGER` | Marks a closed account (data kept for audit). Only added on databases that touch the identity module. |
 | `ensurePhoneColumns()` in [`src/lib/otp/phone.ts`](../../src/lib/otp/phone.ts) | `ALTER TABLE users ADD COLUMN phone TEXT`, `ALTER TABLE users ADD COLUMN phone_verified_at INTEGER` | The verified phone number (plan 06). Only added on databases that touch the OTP module. |
 | `ensureDevicesTable()` in [`src/lib/devices/store.ts`](../../src/lib/devices/store.ts) | `ALTER TABLE devices ADD COLUMN cool_down INTEGER NOT NULL DEFAULT 1`, `ALTER TABLE users ADD COLUMN devices_revoked_at INTEGER` | Devices first seen after a sign-out, and the account's last device sign-out (security review, 22 November 2026). Only added on databases that touch the devices module. |
@@ -49,6 +51,7 @@ All migrations are additive. They check `PRAGMA table_info` and only add what is
 | `ensureChecksTables()` in [`src/lib/kyc/checks/store.ts`](../../src/lib/kyc/checks/store.ts) | `ALTER TABLE kyc_checks ADD COLUMN review_note TEXT` | A note only the reviewer sees, such as a duplicate PAN (security review, 22 November 2026). |
 | `ensureRecoveryTables()` in [`src/lib/recovery/claims.ts`](../../src/lib/recovery/claims.ts) | `ALTER TABLE recovery_claims ADD COLUMN provisional INTEGER NOT NULL DEFAULT 0` | Whether the claimant got read-only access at once. |
 | `ensureRecoveryTables()` | `CREATE UNIQUE INDEX idx_claims_one_pending ON recovery_claims(claimant_uid) WHERE status = 'pending'` | One pending claim per sign-in, even with parallel requests. |
+| `ensureRecoveryTables()` | `ALTER TABLE recovery_claims ADD COLUMN notified_email TEXT` | The address the "recovery started" notice went to, so the claim keeps showing it after approval changes the account's email (2026-11-24). Older claims keep `NULL`. |
 
 ### Triggers
 
@@ -75,8 +78,8 @@ The 32 tables, grouped by area. "Owner" is the module that creates most rows. "A
 | `vault_members` | `db.ts` | `src/lib/vaults.ts` | People in a joint vault. |
 | `vault_custom_rules` | module | [`src/lib/custom-rules.ts`](../../src/lib/custom-rules.ts) | The owner's own rule for a custom vault. |
 | `withdrawals` | `db.ts` | `src/lib/vaults.ts` | Proof-gated vault withdrawals. |
-| `proofs` | `db.ts` | [`src/lib/verification/pipeline.ts`](../../src/lib/verification/pipeline.ts) | Uploaded bills and receipts. |
-| `verifications` | `db.ts` | `src/lib/verification/pipeline.ts` | The verification run and decision for each proof. |
+| `proofs` | `db.ts` | [`src/lib/verification/proofs.ts`](../../src/lib/verification/proofs.ts) (rows), the stages in `src/lib/verification/stages/` (`exif`, `extracted`, `phash`, `ela_path`) | Uploaded bills and receipts. |
+| `verifications` | `db.ts` | [`src/lib/verification/persistence.ts`](../../src/lib/verification/persistence.ts), `proofs.ts`, `review.ts` | The verification run and decision for each proof. |
 | `emergency_requests` | `db.ts` | [`src/lib/emergency.ts`](../../src/lib/emergency.ts) | Emergency cascade requests and receipt follow-up. |
 | `fraud_flags` | `db.ts` | [`src/lib/fraud.ts`](../../src/lib/fraud.ts) | Risk flags for the operations team. |
 | `audit_log` | `db.ts` | [`src/lib/audit.ts`](../../src/lib/audit.ts) | Hash-chained, append-only activity log. |
@@ -85,11 +88,11 @@ The 32 tables, grouped by area. "Owner" is the module that creates most rows. "A
 | `sip_plans` | `db.ts` | [`src/lib/invest/core.ts`](../../src/lib/invest/core.ts) | Recurring Core investment plans. |
 | `holdings` | `db.ts` | `src/lib/invest/core.ts` | Units held per sleeve and symbol. |
 | `orders` | `db.ts` | `src/lib/invest/core.ts` | Filled Core buy orders. |
-| `strategies` | `db.ts` | [`src/lib/invest/satellite.ts`](../../src/lib/invest/satellite.ts) | Satellite strategies and their last backtest. |
+| `strategies` | `db.ts` | [`src/lib/invest/strategies.ts`](../../src/lib/invest/strategies.ts) | Each customer's Satellite strategies and their last backtest. |
 | `paper_positions` | `db.ts` | `src/lib/invest/satellite.ts` | Satellite paper trades. |
 | `paper_state` | `db.ts` | `src/lib/invest/satellite.ts` | Per-user, per-market state of the paper engine. |
-| `user_limits` | `db.ts` | [`src/lib/limits.ts`](../../src/lib/limits.ts) | Each user's personal withdrawal and emergency limits. |
-| `limit_changes` | `db.ts` | `src/lib/limits.ts` | History of limit changes and emergency limit requests. |
+| `user_limits` | `db.ts` | [`src/lib/limits/store.ts`](../../src/lib/limits/store.ts) | Each user's personal withdrawal and emergency limits. |
+| `limit_changes` | `db.ts` | [`src/lib/limits/`](../../src/lib/limits/README.md) (`change.ts`, `emergency-request.ts`, `review.ts`, `expiry.ts`) | History of limit changes and emergency limit requests. |
 | `kyc_records` | module | [`src/lib/kyc/store.ts`](../../src/lib/kyc/store.ts) | ID checks. Keeps the last 4 digits and an HMAC, never the full number. |
 | `recovery_claims` | module | [`src/lib/recovery/claims.ts`](../../src/lib/recovery/claims.ts) | Requests to take over a wallet by proving the same ID. |
 | `recovery_attempts` | module | `src/lib/recovery/claims.ts` (table), [`src/lib/recovery/limits.ts`](../../src/lib/recovery/limits.ts) (rows) | Rate-limit log for the recovery routes. |
@@ -113,7 +116,7 @@ The 32 tables, grouped by area. "Owner" is the module that creates most rows. "A
 #### `users`
 
 One row per wallet. In prototype mode the oldest row is the customer (`currentUser()`).
-Also writes: `api/v1/me/route.ts` (name, email, jurisdiction), `mpin/change.ts` (`pin_hash`, through `setMpin()`), `otp/phone.ts` (phone), `devices/store.ts` (`devices_revoked_at`), `api/v1/invest/profile/route.ts` (risk profile), `kyc/service.ts` (KYC status, also for the steps flow through `setUserKyc()`), `invest/satellite.ts` (opt-in), `recovery/service.ts`, `auth/identities.ts`, `seed.ts`.
+Also writes: `api/v1/me/route.ts` (name, email, jurisdiction), `mpin/change.ts` (`pin_hash`, through `setMpin()`), `otp/phone.ts` (phone), `devices/store.ts` (`devices_revoked_at`), `api/v1/invest/profile/route.ts` (risk profile), `kyc/service.ts` (KYC status, also for the steps flow through `setUserKyc()`), `invest/satellite.ts` (opt-in), `recovery/admin.ts` (the contact email on approval), `auth/identities.ts`, `seed.ts`.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -176,7 +179,7 @@ Indexes: `idx_kyc_user (user_id, created_at)`, `idx_kyc_hash (id_hash)`.
 #### `recovery_claims`
 
 A new sign-in asking to take over an existing, verified wallet by proving the same ID. Created by `ensureRecoveryTables()`.
-Also writes: `src/lib/recovery/service.ts`, `src/lib/auth/account.ts`.
+Also writes: `src/lib/recovery/claimant.ts` (create, cancel), `src/lib/recovery/admin.ts` (decide), `src/lib/auth/account.ts` (closing an account ends its claims).
 
 | Column | Type | Notes |
 |---|---|---|
@@ -189,6 +192,7 @@ Also writes: `src/lib/recovery/service.ts`, `src/lib/auth/account.ts`.
 | `checks`, `reasons` | TEXT | JSON arrays |
 | `file_path` | TEXT | ID photo. Deleted once rejected, cancelled or expired. |
 | `provisional` | INTEGER NOT NULL, default 0 | 1 = automated checks passed and the claimant got read-only access at once |
+| `notified_email` | TEXT | The account's address the "recovery started" notice went to; `""` when the account had none; `NULL` for claims made before 2026-11-24 (shown as the account's current email). Added on first use. `ClaimView.notifiedEmail` shows it masked. |
 | `created_at`, `decided_at`, `decided_by` | INTEGER, INTEGER, TEXT | `decided_by` can be a reviewer, `claimant` or `system:expiry` |
 
 Indexes: `idx_claims_uid (claimant_uid, created_at)`, `idx_claims_status (status, created_at)`, unique partial `idx_claims_one_pending (claimant_uid) WHERE status = 'pending'`.
@@ -268,6 +272,7 @@ A projection of `ledger_entries`, updated in the same transaction. `reconcile()`
 #### `vaults`
 
 Also writes: `api/v1/vaults/[id]/route.ts` (PATCH runs SQL directly), [`src/lib/wallet/moves.ts`](../../src/lib/wallet/moves.ts) (`next_run_at`), `seed.ts`.
+`POST /vaults` creates the vault, its custom rule and the opening deposit in one transaction.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -283,7 +288,7 @@ Also writes: `api/v1/vaults/[id]/route.ts` (PATCH runs SQL directly), [`src/lib/
 | `rule_amount` | INTEGER | For `fixed` |
 | `rule_percent` | REAL | For `percent_income` (1–50) |
 | `rule_frequency` | TEXT | `weekly`, `biweekly` or `monthly` (for `fixed`) |
-| `next_run_at` | INTEGER | Next auto-save |
+| `next_run_at` | INTEGER | Next auto-save. Each scheduled run (from the bank in `runDueContributions()`, or from the wallet in `runDueWalletContributions()`) commits together with its move of `next_run_at`, so a run already paid is never paid again. |
 | `is_joint` | INTEGER NOT NULL, default 0 | |
 | `status` | TEXT NOT NULL, default `'locked'` | `closed` also exists |
 | `created_at` | INTEGER NOT NULL | |
@@ -313,7 +318,7 @@ Created by `ensureTable()` in [`src/lib/custom-rules.ts`](../../src/lib/custom-r
 
 #### `withdrawals`
 
-Also writes: `verification/pipeline.ts` (status after review), `seed.ts`.
+Also writes: `verification/persistence.ts` (`applyOutcome()`: denied or in review; a payout goes through `payoutWithdrawal()` in `vaults.ts`), `verification/proofs.ts` (verifying), `verification/review.ts` (appealed), `seed.ts`.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -401,7 +406,7 @@ One per proof.
 
 #### `emergency_requests`
 
-Also writes: `verification/pipeline.ts` (receipt result), `seed.ts`.
+Also writes: `verification/proofs.ts` (receipt submitted), `verification/persistence.ts` (receipt result), `seed.ts`.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -437,7 +442,7 @@ Also writes: `verification/pipeline.ts` (receipt result), `seed.ts`.
 
 #### `audit_log`
 
-Append-only (triggers) and hash-chained. Each row's `hash` is SHA-256 of `prev_hash` plus a JSON array of `[ts, user_id, actor, actor_type, action, entity_type, entity_id, details]`. The first `prev_hash` is 64 zeros. `verifyAuditChain()` replays the chain.
+Append-only (triggers) and hash-chained. Each row's `hash` is SHA-256 of `prev_hash` plus a JSON array of `[ts, user_id, actor, actor_type, action, entity_type, entity_id, details]`. The first `prev_hash` is 64 zeros (`GENESIS`). `verifyAuditChain()` replays the chain through `walkAuditRows()`, the same pure walk the offline checker (`npm run audit:verify`) uses; `auditHead()` gives the head an anchor records (the audit anchors file, above).
 
 | Column | Type | Notes |
 |---|---|---|
@@ -469,7 +474,7 @@ Append-only (triggers) and hash-chained. Each row's `hash` is SHA-256 of `prev_h
 | `user_id` | TEXT NOT NULL | |
 | `kind` | TEXT NOT NULL | `tighten`, `standard` or `emergency` |
 | `status` | TEXT NOT NULL | `applied`, `in_review`, `denied`, `reverted` or `superseded` |
-| `before_limits`, `after_limits` | TEXT NOT NULL | JSON |
+| `before_limits`, `after_limits` | TEXT NOT NULL | JSON. For an applied emergency increase: `after_limits` is what the increase grants each limit it raises, and `before_limits` is what that limit falls back to on expiry (the lower of the limit when applied and the fall-back of any other increase still applied to it); other limits hold their value when it was applied. A reviewer's approval rewrites both to the increase as applied (since 2026-11-24; before, the filed values were applied whole). See [`src/lib/limits/README.md`](../../src/lib/limits/README.md). |
 | `reason_code`, `explanation` | TEXT | Emergency requests |
 | `assessment` | TEXT | JSON from the AI assessor |
 | `model` | TEXT | |
@@ -700,11 +705,12 @@ Primary key `(key, window_start)`. Index: `idx_rate_limits_expiry (expires_at)`.
 
 #### `strategies`
 
-Not per user. One row per Satellite market and timeframe (`smc:<symbol>:<tf>`).
+One row per customer and strategy, primary key `(user_id, id)` (since 2026-11-24; before, one shared row per strategy, migrated by `splitSharedStrategies()` above). Queries live in [`src/lib/invest/strategies.ts`](../../src/lib/invest/strategies.ts): `strategyFor(userId, id)`, `saveStrategyBacktest()` (replaces only that customer's row) and `allStrategies()` (every customer's, with their name, for the reviewer console).
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | TEXT PK | |
+| `user_id` | TEXT NOT NULL | The customer who ran the backtest |
+| `id` | TEXT NOT NULL | `strategyId(symbol, tf)`: `smc:<symbol>:<tf>` |
 | `name` | TEXT NOT NULL | |
 | `params` | TEXT NOT NULL | JSON |
 | `stage` | TEXT NOT NULL | Governance stage |
@@ -746,7 +752,7 @@ Not per user. One row per Satellite market and timeframe (`smc:<symbol>:<tf>`).
 |---|---|---|
 | `key` | TEXT PK | |
 | `fetched_at` | INTEGER NOT NULL | |
-| `source` | TEXT NOT NULL | `yahoo` when fetched |
+| `source` | TEXT NOT NULL | The price provider's name (`yahoo` by default, `src/lib/invest/prices.ts`) |
 | `payload` | TEXT NOT NULL | JSON series |
 
 #### `ai_cache`
@@ -815,7 +821,7 @@ SecureStore can reject values over about 2 KB on some iOS versions. Bigger secre
 | What | Used by | Backend | Notes |
 |---|---|---|---|
 | `vw.install` | `lib/storage.ts` (`INSTALL_MARKER`) | **AsyncStorage** (goes with the app) | The fresh-install marker: `"1"`, or `"wiping"` while a fresh install's wipe runs. Never wiped. |
-| `vw.bulk.practice` | [`mobile/src/lib/api/demo/persist.ts`](../../mobile/src/lib/api/demo/persist.ts) | **AsyncStorage** on phones, localStorage on web, through `getBulkItem` / `setBulkItem` in `storage.ts` | The saved Practice data: `{ format, slices: { state, proofs, checkouts, alerts } }`. Not secret: the typed name and email, the MPIN and the phone number are in the sensitive slices, and alerts carry no phone number or payee name. Removed on Delete account (through `onDeviceReset`); reset by Start Practice over. |
+| `vw.bulk.practice` | [`mobile/src/lib/api/demo/persist.ts`](../../mobile/src/lib/api/demo/persist.ts) | **AsyncStorage** on phones, localStorage on web, through `getBulkItem` / `setBulkItem` in `storage.ts` | The saved Practice data: `{ format, slices: { state, proofs, checkouts, alerts } }`. The `state` slice's `invest` part holds the saved Core plan, the Core buys and, since 2026-11-24, `satellite` (this session's Satellite allocations; saves from before it lack it). Not secret: the typed name and email, the MPIN and the phone number are in the sensitive slices, and alerts carry no phone number or payee name. Removed on Delete account (through `onDeviceReset`); reset by Start Practice over. |
 | `firebase:*` (older builds only) | `lib/auth/firebase.ts` | **AsyncStorage** | A session an older build kept here is copied to the secure store (`vwauth.*`, chunked) and each key deleted only once the Keychain gives the same value back. The web keeps `browserLocalPersistence`. |
 
 The Firebase Auth session itself now lives in the secure store under `vwauth.<encoded key>` (chunked, listed in `vw.chunkedKeys`, not in the `vw.*` index), only when sign-in is on and Firebase is configured. Signing out removes it; a fresh iOS install wipes it.

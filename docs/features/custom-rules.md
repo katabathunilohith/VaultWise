@@ -41,7 +41,7 @@ sequenceDiagram
 2. **Create.** The client sends `customRule` with `category: "custom"`. The route validates it with `CustomRuleSchema`. When a rule is present the route ignores any `template`, so `createVault()` stores `custom`. A rule sent with any other category is ignored.
 3. **Store.** `saveCustomRule()` runs after `createVault()` returns, as a separate write. It uses `INSERT OR REPLACE` into `vault_custom_rules`, with `uses` as a JSON array. `ensureTable()` creates the table on first use, once per database connection (tracked in a `WeakSet`, so a demo reset that replaces the database gets a fresh table).
 4. **Show.** `toView()` in [vaults.ts](../../src/lib/vaults.ts) adds `customRule: customRuleFor(id)` for custom vaults and `null` for others. `customRuleFor()` returns `null` if the stored JSON is broken or not an array.
-5. **Verify.** In [pipeline.ts](../../src/lib/verification/pipeline.ts), when the vault's template is `custom`, the extraction prompt gets `customRulePrompt(rule)`. That line lists the uses and the promised proof (double quotes replaced with single quotes) and says to score `purpose_match` against the rule. For the `custom` template, the match score is `purpose_match` alone.
+5. **Verify.** In the extract stage ([stages/ai-read.ts](../../src/lib/verification/stages/ai-read.ts)), when the vault's template is `custom`, the extraction prompt gets `customRulePrompt(rule)`. That line lists the uses and the promised proof (double quotes replaced with single quotes) and says to score `purpose_match` against the rule. For the `custom` template, the match score is `purpose_match` alone.
 6. **Decide.** The `custom` template is never auto-approved. It can still be auto-denied: a match score below 0.2 on a real document is a hard fail, and confidence at or below the market's `autoDeny` (0.35) declines. Everything else goes to a person.
 7. **Review.** `proofView()` returns `customRule`, and the admin review page shows it with `CustomRuleCard`.
 
@@ -65,7 +65,7 @@ sequenceDiagram
 | [src/lib/custom-rules.ts](../../src/lib/custom-rules.ts) | Schema, storage, prompt line | `CustomRuleSchema` zod limits, `saveCustomRule()` upsert, `customRuleFor()` read or null, `customRulePrompt()` model line, `CustomRule` type |
 | [src/app/api/v1/vaults/route.ts](../../src/app/api/v1/vaults/route.ts) | Accepts `customRule` on create | `POST` |
 | [src/lib/vaults.ts](../../src/lib/vaults.ts) | Adds the rule to the vault view | `toView()` |
-| [src/lib/verification/pipeline.ts](../../src/lib/verification/pipeline.ts) | Uses the rule in the prompt and shows it to reviewers | `customRuleLine()` (private), `proofView()` |
+| [src/lib/verification/stages/ai-read.ts](../../src/lib/verification/stages/ai-read.ts), [proofs.ts](../../src/lib/verification/proofs.ts) | Uses the rule in the prompt; shows it to reviewers | `customRuleLine()` (private, ai-read.ts), `proofView()` (proofs.ts) |
 
 ### Web app
 

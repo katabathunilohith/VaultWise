@@ -229,7 +229,7 @@ The web card is `DevicesAlertsCard` in [src/components/devices-alerts.tsx](../..
 
 ## Tests
 
-The phone app has no tests. [mobile/package.json](../../mobile/package.json) has `lint` and `typecheck` scripts only. Server tests that touch this area: [tests/auth.test.ts](../../tests/auth.test.ts) (onboarding, PIN change rules), [tests/limits.test.ts](../../tests/limits.test.ts) (limits), [tests/emergency.test.ts](../../tests/emergency.test.ts) (the server PIN for Tier 2), [tests/mpin.test.ts](../../tests/mpin.test.ts) (MPIN change and closing an account), [tests/devices.test.ts](../../tests/devices.test.ts), [tests/alerts.test.ts](../../tests/alerts.test.ts) and [tests/otp.test.ts](../../tests/otp.test.ts) (the Devices and alerts card's routes).
+The phone has a test runner since 24 November 2026 (Jest with jest-expo, `cd mobile && npm test`), but nothing in this area has phone tests yet; the MPIN policy and the protection rules it uses are tested in `mobile/src/features/mpin/__tests__/` and `mobile/src/features/protection/__tests__/`. Server tests that touch this area: [tests/auth.test.ts](../../tests/auth.test.ts) (onboarding, PIN change rules), [tests/limits.test.ts](../../tests/limits.test.ts) (limits), [tests/emergency.test.ts](../../tests/emergency.test.ts) (the server PIN for Tier 2), [tests/mpin.test.ts](../../tests/mpin.test.ts) (MPIN change and closing an account), [tests/devices.test.ts](../../tests/devices.test.ts), [tests/alerts.test.ts](../../tests/alerts.test.ts) and [tests/otp.test.ts](../../tests/otp.test.ts) (the Devices and alerts card's routes).
 
 ## Known limits
 

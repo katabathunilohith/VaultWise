@@ -1,7 +1,7 @@
 # Configuration reference
 
 Every setting that changes how Vaultwise behaves: environment variables, switches in the code, EAS build profiles and `app.json`.
-As of commit `012a9fc` plus the server work for plans 03, 05, 06 and 07 (2026-11-22).
+As of commit `012a9fc` plus the server work for plans 03, 05, 06 and 07 (2026-11-22) and the external review fixes (2026-11-24).
 
 ## Where settings live
 
@@ -13,6 +13,7 @@ As of commit `012a9fc` plus the server work for plans 03, 05, 06 and 07 (2026-11
 | `mobile/.env.local` | The phone app. Expo inlines `EXPO_PUBLIC_*` values into the bundle. Restart `npx expo start` (add `--clear` if a value doesn't change). | No |
 | [`mobile/eas.json`](../../mobile/eas.json) | EAS cloud builds and over-the-air updates | Yes |
 | [`mobile/app.json`](../../mobile/app.json) | Expo app config | Yes |
+| [`.nvmrc`](../../.nvmrc), [`package.json`](../../package.json) `engines` | The Node version: `.nvmrc` says `24` (CI's `setup-node` reads it for both jobs); `engines.node` is `>=22.18.0`, the oldest Node with the built-in `node:sqlite` and the type stripping `npm run audit:verify` needs | Yes |
 
 A blank value means "not set". Without any settings, the server runs in prototype mode with no AI.
 
@@ -29,9 +30,9 @@ A blank value means "not set". Without any settings, the server runs in prototyp
 | `GROQ_TEXT_MODEL` | `src/lib/groq.ts` | `openai/gpt-oss-120b` | Model for text (assistant, insight, assessments). Read once when the module loads. |
 | `FIREBASE_PROJECT_ID` | [`src/lib/auth/config.ts`](../../src/lib/auth/config.ts) (`authMode()`, `productionStartupProblem()`), [`src/lib/auth/verify.ts`](../../src/lib/auth/verify.ts) | unset | **The sign-in switch.** Unset: prototype mode (no sign-in, the first user is the customer, admin routes open). Set: firebase mode (every request needs a Firebase ID token; issuer and audience are checked against this project). Read on every call. With `NODE_ENV=production` the server **refuses to start** without it, unless `ALLOW_PROTOTYPE_IN_PRODUCTION=true`. |
 | `ALLOW_PROTOTYPE_IN_PRODUCTION` | `src/lib/auth/config.ts` (`productionStartupProblem()`) | unset | `true` (trimmed, any case) lets a production server start without `FIREBASE_PROJECT_ID`, as the open prototype. For a local `npm start` check and the e2e suite only. A warning is still logged. |
-| `FIREBASE_WEB_API_KEY` | [`src/lib/recovery/service.ts`](../../src/lib/recovery/service.ts) | unset | Lets the server send password-reset emails through the Firebase Identity Toolkit (`POST /recovery/reset`). Unset: no email is sent and a warning is logged once. The answer to the client is the same either way. |
+| `FIREBASE_WEB_API_KEY` | [`src/lib/recovery/reset-email.ts`](../../src/lib/recovery/reset-email.ts) (`sendPasswordReset()`), `src/lib/auth/config.ts` (start-up warning) | unset | Lets the server send password-reset emails through the Firebase Identity Toolkit (`POST /recovery/reset`). Unset: no email is sent and a warning is logged once. The answer to the client is the same either way. |
 | `ADMIN_EMAILS` | `src/lib/auth/config.ts` (`adminEmails()`) | empty | Comma-separated list of emails allowed on admin routes in firebase mode. Trimmed and lowercased. The signed-in email must also be verified in Firebase. No effect in prototype mode. |
-| `KYC_ENFORCED` | `src/lib/auth/config.ts` (`kycEnforced()`, `kycGateOn()`) | on in firebase mode, off in prototype mode | **New sign-ups:** start KYC `pending` when enforced, else `verified`. Firebase mode enforces unless the value is `false`; prototype mode enforces only if it is `true`. **Money-out gate** (`kyc: true` routes): on unless the value is exactly `false` (trimmed, any case). So `false` also lets accounts that started `pending` move money. |
+| `KYC_ENFORCED` | `src/lib/auth/config.ts` (`kycEnforced()`, `kycGateOn()`) | on in firebase mode, off in prototype mode | **New sign-ups:** start KYC `pending` when enforced, else `verified`. Firebase mode enforces unless the value is `false`; prototype mode enforces only if it is `true`. **The ID gate** (`kyc: true` routes, and money actions marked `kyc: true` in `src/lib/money-routes.ts`: money out, investing, and money in from the linked bank): on unless the value is exactly `false` (trimmed, any case). So `false` also lets accounts that started `pending` move money. |
 | `KYC_PROVIDER` | [`src/lib/kyc/service.ts`](../../src/lib/kyc/service.ts) | `practice` | Which ID checker runs. `practice` = AI plus a person. `external` = the slot for a licensed partner. Unknown values fall back to `practice`. |
 | `IDENTITY_SECRET` | [`src/lib/kyc/secret.ts`](../../src/lib/kyc/secret.ts), [`src/lib/otp/service.ts`](../../src/lib/otp/service.ts) | unset | HMAC key for matching ID numbers (photo check and the PAN step) without storing them, for signing recovery `findToken`s, and for hashing texted codes. Unset in prototype mode (not production): a fixed development key is used and a warning is logged. Unset in firebase mode or when `NODE_ENV=production`: ID routes answer `500 server_config` (texted codes fall back to a fixed key). Changing it breaks matching for every ID saved before. |
 | `MPIN_ENFORCED` | [`src/lib/mpin/config.ts`](../../src/lib/mpin/config.ts) (`mpinEnforced()`) | on | Anything but `false` (trimmed, any case): every money action needs the right MPIN, wrong tries lock money moves, and a new PIN must pass the 6-digit policy. `false` is rollback mode: money moves skip the check (a PIN that is sent is still checked and counted, except during a lock, when it isn't checked at all) and aren't locked; the checks that always need the MPIN (Tier 2 emergency, changing the PIN, changing the phone number, trusting or signing out a device) behave exactly as when enforced, lock included; `GET /me` reports `mpin.enforced: false`; a new PIN only has to be 4 to 6 digits. Read on every call. See [mpin.md](../features/mpin.md). |
@@ -56,10 +57,11 @@ A blank value means "not set". Without any settings, the server runs in prototyp
 | `TRUST_PROXY_HOPS` | [`src/lib/auth/context.ts`](../../src/lib/auth/context.ts) (`clientIp()`) | `0` | How many trusted proxies stand in front of the server. 1 or more: the rate-limit IP comes from `cf-connecting-ip`, then `x-real-ip`, then the `X-Forwarded-For` entry that many places from the right. 0 (or not a whole number): all three headers are ignored, because a client could fake them, and IP limits are skipped. Set `1` behind Caddy. |
 | `TRUST_PROXY_HEADER` | `src/lib/auth/context.ts` | unset | `cf-connecting-ip` or `x-real-ip` (trimmed, any case): believe only that header for the client IP. Any other value: neither header. `X-Forwarded-For` still needs `TRUST_PROXY_HOPS`. |
 | `RATE_LIMIT_PER_MINUTE` | [`src/lib/rate-limit.ts`](../../src/lib/rate-limit.ts) (`generalLimitPerMinute()`) | `120` | The general limit per client IP and per signed-in person (applied in `session()`, so `GET /me` counts too), per minute, on every route. `0` turns it off. Anything that isn't a whole number ≥ 0 means 120. |
-| `VAULTWISE_DATA_DIR` | [`src/lib/db.ts`](../../src/lib/db.ts) | `<cwd>/data` | Folder for `vaultwise.db` and `uploads/`. The tests and the e2e script point it at a temporary folder. |
+| `VAULTWISE_DATA_DIR` | [`src/lib/db.ts`](../../src/lib/db.ts) | `<cwd>/data` | Folder for `vaultwise.db`, `uploads/` and (by default) `audit-anchors.jsonl`. The tests and the e2e script point it at a temporary folder. |
+| `AUDIT_ANCHOR_FILE` | [`src/lib/audit-anchors/config.ts`](../../src/lib/audit-anchors/config.ts) (`anchorFile()`), [`deploy/backup.sh`](../../deploy/backup.sh) | `<VAULTWISE_DATA_DIR>/audit-anchors.jsonl` | Where the audit anchors are appended (the audit chain's head, once at every start and once a day; checked by `npm run audit:verify`). Trimmed and resolved to an absolute path; read on every call. On the server it must stay inside the service's `ReadWritePaths` (the default, under `/var/lib/vaultwise`, is), and `backup.sh` needs the same value. See [`src/lib/audit-anchors/README.md`](../../src/lib/audit-anchors/README.md). |
 | `MOBILE_DEV_ORIGIN` | [`next.config.ts`](../../next.config.ts) | `http://localhost:8081` | The origin allowed by the development CORS headers on `/api/*` (the Expo web preview). Native apps send no `Origin`, so they need no CORS. |
 | `NODE_ENV` | `next.config.ts`, `src/lib/kyc/secret.ts`, `src/lib/auth/config.ts`, `src/lib/otp/config.ts`, `src/lib/kyc/checks/config.ts`, `src/lib/kyc/checks/providers/setu.ts` | Set by Next.js (`development` for `next dev`, `production` for `next build`/`next start`) | `production` turns on the start-up guard and the security headers (HSTS, CSP and others), turns off the development CORS headers, makes `IDENTITY_SECRET` required, refuses the OTP test sender, the KYC test provider and Setu's sandbox unless allowed, and makes `SETU_BASE_URL` required for Setu. |
-| `NEXT_RUNTIME` | [`src/instrumentation.ts`](../../src/instrumentation.ts) | Set by Next.js | The start-up guard runs only when it is `nodejs`. |
+| `NEXT_RUNTIME` | [`src/instrumentation.ts`](../../src/instrumentation.ts) | Set by Next.js | The start-up guard and the start-up audit anchor run only when it is `nodejs`. |
 | `NEXT_PUBLIC_FIREBASE_API_KEY` | [`src/components/identity/config.ts`](../../src/components/identity/config.ts) | empty | Web sign-in. Together with the project ID it turns on `SIGN_IN_ON` in the browser. Inlined at build time. |
 | `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | `src/components/identity/config.ts`, `next.config.ts` | `<projectId>.firebaseapp.com` | Web Firebase config. A custom domain (not `*.firebaseapp.com` or `*.web.app`) is also added to the CSP's `frame-src` at build time. |
 | `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | `src/components/identity/config.ts` | empty | Web Firebase config. Needed for `SIGN_IN_ON`. Should match `FIREBASE_PROJECT_ID`. |
@@ -77,7 +79,8 @@ At start-up in production, `productionStartupWarnings()` logs a `[vaultwise]` wa
 | `VAULTWISE_DATA_DIR` | [`deploy/backup.sh`](../../deploy/backup.sh) | `/var/lib/vaultwise` | Where the database and uploads are. The systemd unit sets the same value for the app. |
 | `BACKUP_DIR` | `deploy/backup.sh` | `/var/backups/vaultwise` | Where backups go, one folder per run. Must not be empty or `/`. |
 | `KEEP_DAYS` | `deploy/backup.sh` | `14` | How many days of backups to keep. |
-| `BACKUP_S3_URI` | `deploy/backup.sh` | unset | A private S3 bucket for a second copy, e.g. `s3://my-bucket/vaultwise`. Set: each backup is copied there with `aws s3 cp --sse AES256`. |
+| `BACKUP_S3_URI` | `deploy/backup.sh` | unset | A private S3 bucket for a second copy, e.g. `s3://my-bucket/vaultwise`. Set: each backup (database, photos and anchors) is copied there with `aws s3 cp --sse AES256`. |
+| `AUDIT_ANCHOR_FILE` | `deploy/backup.sh` | `$VAULTWISE_DATA_DIR/audit-anchors.jsonl` | The app's anchors file, if `/etc/vaultwise.env` moved it. The backup copies it before the database and checks the newest anchor against the copy; a mismatch still keeps the backup but makes the run exit 1. |
 
 The backup's settings go as lines in `/etc/cron.d/vaultwise-backup` (for example `BACKUP_S3_URI=…` above the schedule line), so neither the repository's `backup.sh` nor the installed copy (`/usr/local/sbin/vaultwise-backup`) is edited.
 
@@ -92,8 +95,9 @@ On the server the app's settings live in `/etc/vaultwise.env` (read by [`deploy/
 | `E2E_ONLY_AI` | `scripts/e2e.mjs` | unset | Any value runs only the live-AI part. |
 | `GROQ_LIVE_KEY` | [`scripts/test-ai.mjs`](../../scripts/test-ai.mjs), `tests/ai-verification.test.ts` | unset | Lets the AI verification test call Groq for real. `npm run test:ai` sets it from `GROQ_API_KEY` in `.env.local`. |
 | `AI_CHECK_REPORT` | `tests/ai-verification.test.ts` | unset | File the AI test writes its decisions to. Set by `npm run test:ai`. |
+| `EVAL_DATASET`, `EVAL_LIMIT`, `EVAL_DELAY_MS`, `EVAL_CONFIG`, `EVAL_RAW_OUT` | [`eval/verification/evaluate.eval.ts`](../../eval/verification/evaluate.eval.ts) | set by `eval/verification/run.mjs` | Set by `npm run eval:verification` from its options; not meant to be set by hand. See [docs/evaluation/](../evaluation/README.md). |
 
-`tests/setup.ts` sets `VAULTWISE_DATA_DIR` to a temporary folder and deletes `GROQ_API_KEY`, so `npm test` never calls Groq or touches `./data`.
+`tests/setup.ts` sets `VAULTWISE_DATA_DIR` to a temporary folder, deletes `GROQ_API_KEY`, installs a deterministic price provider (`setPriceProvider(fakePrices())`, `tests/helpers/prices.ts`) and replaces `fetch` with one that always fails, so `npm test` never calls Groq or Yahoo, never uses the network and never touches `./data`.
 
 `scripts/e2e.mjs` starts its server with `ALLOW_PROTOTYPE_IN_PRODUCTION=true` (the open prototype under `next start`) and `TRUST_PROXY_HEADER=x-real-ip` (so one test can act as visitors behind a proxy), and reads `RATE_LIMIT_PER_MINUTE` (default 120) for its rate-limit test.
 
@@ -133,7 +137,9 @@ These are constants or functions in the code. Change them by editing the file.
 | `productionStartupProblem()` / `productionStartupWarnings()` | `src/lib/auth/config.ts` | from `NODE_ENV`, `FIREBASE_PROJECT_ID`, `ALLOW_PROTOTYPE_IN_PRODUCTION` and others | The start-up guard. Takes the environment as an argument, so tests pass their own. |
 | `generalLimitPerMinute()` | [`src/lib/rate-limit.ts`](../../src/lib/rate-limit.ts) | from `RATE_LIMIT_PER_MINUTE` | See above |
 | `mpinEnforced()` | [`src/lib/mpin/config.ts`](../../src/lib/mpin/config.ts) | from `MPIN_ENFORCED` | See above |
-| `MONEY_ROUTES` | [`src/lib/money-routes.ts`](../../src/lib/money-routes.ts) | code | Which money actions need the MPIN, keep the KYC gate, and get the new-device cap |
+| `MONEY_ROUTES` | [`src/lib/money-routes.ts`](../../src/lib/money-routes.ts) | code | Which money actions need the MPIN, take the KYC gate and get the new-device cap, and which are money in from the bank (`moneyIn`: the KYC gate, never the MPIN) |
+| `setPriceProvider()` / `priceProvider()` | [`src/lib/invest/prices.ts`](../../src/lib/invest/prices.ts) | the Yahoo adapter ([`yahoo.ts`](../../src/lib/invest/yahoo.ts)) by default | Where market prices come from. Tests install a fake; `null` goes back to Yahoo. |
+| `setBillReader()` | [`src/lib/verification/stages/ai-read.ts`](../../src/lib/verification/stages/ai-read.ts) | the Groq call by default | Replaces the bill reader (the offline evaluation and tests); `null` restores it. Consent still comes first. |
 | `devicesEnforced()` | [`src/lib/devices/config.ts`](../../src/lib/devices/config.ts) | from `DEVICES_ENFORCED` | See above |
 | `pushEnabled()` / `setAlertSenders()` | [`src/lib/alerts/config.ts`](../../src/lib/alerts/config.ts), [`senders.ts`](../../src/lib/alerts/senders.ts) | from `ALERTS_PUSH` | Tests (or a new channel) can swap the alert senders. |
 | `otpMode()` / `otpTestAllowed()` | [`src/lib/otp/config.ts`](../../src/lib/otp/config.ts) | from `OTP_MODE`, `OTP_TEST_ALLOWED`, `NODE_ENV` | See above |
@@ -149,8 +155,9 @@ Tunable limits (constants, not switches):
 | `FIND_TOKEN_TTL_MS` | [`src/lib/recovery/tokens.ts`](../../src/lib/recovery/tokens.ts) | 10 minutes |
 | `LIMIT_PER_DAY` | `src/lib/kyc/service.ts` | 5 ID checks per day |
 | `RAISE_WINDOW_MS` | [`src/lib/wallet/plan.ts`](../../src/lib/wallet/plan.ts) | 30 days between raising (or turning off) the wallet daily limit |
-| `MAX_BYTES` | [`src/lib/verification/pipeline.ts`](../../src/lib/verification/pipeline.ts) | 10 MB per upload (413 above it) |
-| `PIPELINE_VERSION` | `src/lib/verification/pipeline.ts` | `vw-proof@1.4` |
+| `MAX_BYTES` | [`src/lib/verification/proofs.ts`](../../src/lib/verification/proofs.ts) | 10 MB per upload (413 above it) |
+| `PIPELINE_VERSION` | [`src/lib/verification/types.ts`](../../src/lib/verification/types.ts) | `vw-proof@1.5` |
+| `ANCHOR_EVERY_MS` | [`src/lib/audit-anchors/config.ts`](../../src/lib/audit-anchors/config.ts) | 24 hours between scheduled audit anchors (plus one at every start) |
 | Per-market rules (caps, SLAs, satellite limits, limit allowances) | [`src/lib/compliance.ts`](../../src/lib/compliance.ts) | `rulesFor(jurisdiction)` |
 | `MPIN_LENGTH`, `TRIES_PER_LOCK`, `LOCK_STEPS_MS`, `MAX_PIN_INPUT` | [`src/lib/mpin/config.ts`](../../src/lib/mpin/config.ts) | 6 digits; 5 wrong tries per lock; locks of 1 minute, 5 minutes, 30 minutes, then 24 hours; `pin` at most 12 characters |
 | `COMMON_MPINS` | [`src/lib/mpin/policy.ts`](../../src/lib/mpin/policy.ts) | 20 refused PINs (mirrored in the phone simulator) |
@@ -225,7 +232,7 @@ The script warns when `mobile/` has uncommitted changes, because they ship in th
 | Setting | Value | Why it matters |
 |---|---|---|
 | `name` / `slug` | `Vaultwise` / `vaultwise` | Display name and Expo project slug |
-| `version` | `0.1.0` | App version. Bump it on a release, together with `CHANGELOG.md`. |
+| `version` | `0.2.0` | App version. Bump it on a release, together with `mobile/package.json` and `CHANGELOG.md`. The fingerprint runtime ignores it, so a version bump alone doesn't need a new build. |
 | `scheme` | `vaultwise` | Deep links (`vaultwise://…`) |
 | `orientation` | `portrait` | |
 | `userInterfaceStyle` | `automatic` | Follows the phone's light or dark setting |
@@ -249,5 +256,5 @@ The script warns when `mobile/` has uncommitted changes, because they ship in th
 
 - What the switches change in the API: [api.md](api.md)
 - How to run things: [commands.md](commands.md)
-- Module notes: [`src/lib/auth/README.md`](../../src/lib/auth/README.md), [`src/lib/wallet/README.md`](../../src/lib/wallet/README.md), [`src/lib/mpin/README.md`](../../src/lib/mpin/README.md), [`src/lib/devices/README.md`](../../src/lib/devices/README.md), [`src/lib/alerts/README.md`](../../src/lib/alerts/README.md), [`src/lib/otp/README.md`](../../src/lib/otp/README.md), [`src/lib/kyc/checks/README.md`](../../src/lib/kyc/checks/README.md), [`mobile/src/features/tester/README.md`](../../mobile/src/features/tester/README.md)
+- Module notes: [`src/lib/auth/README.md`](../../src/lib/auth/README.md), [`src/lib/wallet/README.md`](../../src/lib/wallet/README.md), [`src/lib/mpin/README.md`](../../src/lib/mpin/README.md), [`src/lib/devices/README.md`](../../src/lib/devices/README.md), [`src/lib/alerts/README.md`](../../src/lib/alerts/README.md), [`src/lib/otp/README.md`](../../src/lib/otp/README.md), [`src/lib/kyc/checks/README.md`](../../src/lib/kyc/checks/README.md), [`src/lib/audit-anchors/README.md`](../../src/lib/audit-anchors/README.md), [`src/lib/invest/README.md`](../../src/lib/invest/README.md), [`mobile/src/features/tester/README.md`](../../mobile/src/features/tester/README.md)
 - Running the server online: [running-online.md](../features/running-online.md) and [deploy/README.md](../../deploy/README.md)

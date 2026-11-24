@@ -263,7 +263,7 @@ The web preview has no secure store, screen capture, root check or biometrics. U
 
 ## Tests
 
-- **Phone:** no test runner yet. `pin-policy.ts`, `routes.ts`, `https.ts`, the chunk helpers in `storage.ts` (`splitChunks()`, `parseChunkHead()`, `chunkKey()`), `generaliseAlert()` and `features/mpin/policy.ts` are pure and ready for one.
+- **Phone** (Jest with jest-expo since 24 November 2026, `cd mobile && npm test`): `features/protection/__tests__/protection.test.ts` covers `routes.ts`, `pin-policy.ts` and `https.ts`; `features/mpin/__tests__/` covers `policy.ts` (also held to the server's copy by `tests/contract/vectors/mpin-policy.json`) and `errors.ts`; `lib/api/demo/__tests__/persist.test.ts` covers restoring a damaged Practice save. Still untested: the chunk helpers in `storage.ts` (`splitChunks()`, `parseChunkHead()`, `chunkKey()`) and `generaliseAlert()`.
 - **Checked for this work:** `npm run typecheck` and `npm run lint` in `mobile/` pass, `npx expo export --platform android` bundles, and the flows were walked in the browser preview on Practice data (see [plan 04](../plans/04-phone-protection.md#what-was-built-phone)).
 
 ## How to change it safely

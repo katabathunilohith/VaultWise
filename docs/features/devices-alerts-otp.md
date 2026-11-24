@@ -82,7 +82,7 @@ sequenceDiagram
 | `device_trusted` | `trustDevice()` |
 | `device_revoked` | `revokeDevice()`. The text says the device must sign in again and can then send only small amounts until trusted; it doesn't promise the device is out for good. |
 | `money_out` | `payoutWithdrawal()` (`src/lib/vaults.ts`); `spend()` and `cashOut()` (`src/lib/wallet/moves.ts`); `executeEmergency()` and `settleEmergencies()` (`src/lib/emergency.ts`) |
-| `limit_loosened` | `changeLimits()` (a standard raise), `requestEmergencyLimitChange()` when approved, `reviewLimitChange()` when approved (`src/lib/limits.ts`); `updateWalletSettings()` when the daily limit goes up or off |
+| `limit_loosened` | `changeLimits()` (a standard raise, `src/lib/limits/change.ts`), `requestEmergencyLimitChange()` when approved (`emergency-request.ts`), `reviewLimitChange()` when approved (`review.ts`); `updateWalletSettings()` when the daily limit goes up or off |
 | `mpin_locked` | `recordFailure()` when a wrong try starts a lock. With `MPIN_ENFORCED=false` the text says only the changes that need the MPIN are locked, not money moves. |
 | `mpin_changed` | `setMpin()` (change and reset) |
 | `phone_verified` | `setVerifiedPhone()`, when a number is added or replaced. The text says the number can't reset the MPIN for 72 hours. |

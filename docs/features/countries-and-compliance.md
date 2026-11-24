@@ -65,9 +65,9 @@ No third-party IP lookup is used.
 
 | Rule group | Used by |
 |---|---|
-| `limits.*`, `emergency.monthlyCap` | [limits.ts](../../src/lib/limits.ts) bounds, monthly allowance, emergency requests |
+| `limits.*`, `emergency.monthlyCap` | [src/lib/limits/](../../src/lib/limits/README.md): bounds (`bounds.ts`, `store.ts`), monthly allowance (`change.ts`), emergency requests (`emergency-request.ts`, `policy.ts`, `increase.ts`) |
 | `emergency.*` | [emergency.ts](../../src/lib/emergency.ts) velocity, cooling-off, Tier 2 hold, receipt window |
-| `verification.*` | [pipeline.ts](../../src/lib/verification/pipeline.ts) auto-approve and auto-deny thresholds, document age; admin overview SLA |
+| `verification.*` | Auto-approve and auto-deny thresholds in [stages/decision.ts](../../src/lib/verification/stages/decision.ts), document age in [stages/rules.ts](../../src/lib/verification/stages/rules.ts); admin overview SLA |
 | `satellite.*` | [satellite.ts](../../src/lib/invest/satellite.ts) eligibility, allocation cap, asset classes, risk and drawdown halts |
 | `dataRegime` | Assistant prompt; settings page |
 | `*Regime`, `disclosures`, `coolingOffDays` | Settings page "market rules" card; Satellite page disclosures |

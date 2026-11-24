@@ -18,14 +18,14 @@
 
 ### Reading and enforcing limits
 
-1. `getLimits(user)` reads `user_limits`. With no row it uses the market defaults. It then caps each value at the market maximum.
-2. `assertWithinWithdrawalLimits()` runs inside `createWithdrawal()` ([vaults.ts](../../src/lib/vaults.ts)). It refuses an amount above the single limit, or one that would take today's total past the daily limit. "Today" counts withdrawals created since local midnight on the server that are not `denied`, `cancelled` or `expired`.
+1. `getLimits(user)` ([store.ts](../../src/lib/limits/store.ts)) reads `user_limits`. With no row it uses the market defaults. It then caps each value at the market maximum.
+2. `assertWithinWithdrawalLimits()` ([usage.ts](../../src/lib/limits/usage.ts)) runs inside `createWithdrawal()` ([vaults.ts](../../src/lib/vaults.ts)). It refuses an amount above the single limit, or one that would take today's total past the daily limit. "Today" counts withdrawals created since local midnight on the server that are not `denied`, `cancelled` or `expired`.
 3. `effectiveEmergencyCap()` returns the lower of the market's emergency cap and the personal monthly emergency limit. The emergency module ([emergency.ts](../../src/lib/emergency.ts)) uses it.
 
 ### Standard change (`PUT /api/v1/limits`)
 
 1. `validate()` checks each value is an integer, at least 0 and not above the market maximum.
-2. `changeLimits()` compares before and after. No change → 400.
+2. `changeLimits()` ([change.ts](../../src/lib/limits/change.ts)) compares before and after. No change → 400.
 3. If any limit goes up and the customer already used this month's allowance → 409 with the date of the next allowance.
 4. Kind is `standard` if anything went up (even if other limits went down), otherwise `tighten`.
 5. It saves `user_limits`, writes a `limit_changes` row with status `applied`, and audits `limits.standard` or `limits.tighten`.
@@ -51,19 +51,29 @@ flowchart TD
 ```
 
 1. The route reads limit fields in major units, converts to minor units, and validates an optional image with `validateUpload()` from the verification pipeline.
-2. `requestEmergencyLimitChange()` requires a known `reasonCode` (`medical`, `accident`, `job_loss`, `urgent_travel`, `home_repair`, `bereavement`, `other`) and an explanation of at least 20 characters. A request that only lowers limits is refused ("just save it"). More than 2 requests in the calendar month → 429.
+2. `requestEmergencyLimitChange()` ([emergency-request.ts](../../src/lib/limits/emergency-request.ts)) requires a known `reasonCode` (`medical`, `accident`, `job_loss`, `urgent_travel`, `home_repair`, `bereavement`, `other`) and an explanation of at least 20 characters. A request that only lowers limits is refused ("just save it"). A third request in the calendar month → 429.
 3. **Ratio.** For each raised limit, `after / max(before, unit)`, where `unit = max(100, singleWithdrawal default / 100)`. The largest ratio is kept.
 4. **Deterministic screen.** `screenText()` matches 8 scam patterns (gift cards, crypto transfer, investment pitch, instructed by a third party, "safe account" or verification request, prize or inheritance, online relationship, remote access) and 4 prompt-injection patterns.
 5. **AI assessment.** Only when `aiEnabled()` and `aiConsented()` are both true. The prompt marks the customer's text as data between fixed markers, adds account facts (account age, emergency releases this month, open risk flags, whether the monthly allowance is used), and asks for JSON scores. With an image it uses the vision model; the image is first normalised by `preprocess()`. Temperature 0, 700 tokens, 45 s timeout. Scores are clamped to 0–1; an AI error is stored as `aiError` and the request continues without scores.
 6. **Policy.** `decideLimitRequest()` decides (see the rules table below). The model informs; it never approves on its own.
-7. **Record.** One `limit_changes` row of kind `emergency` stores before, after, reason, explanation, the full assessment JSON and the model name. Approved → limits saved and `expires_at = now + 14 days`.
+7. **Record.** One transaction first counts this month's requests again (429 with the same message: requests that passed step 2 together while the model was asked can't all be recorded). It then writes one `limit_changes` row of kind `emergency` with before, after, reason, explanation, the full assessment JSON and the model name. Approved → the increase is applied on top of the limits as they are at that moment (`planIncrease()`, see [Temporary increases](#temporary-increases)) and `expires_at = now + 14 days`.
 8. **Flags.** Denied with scam risk ≥ 0.6 → high-severity fraud flag. Manipulation → medium flag (score 60). Other scam risk ≥ 0.6 → medium flag.
 9. The response returns the decision, reasons, the model's customer message, the expiry and the updated overview. The web app shows the model's message only when the request goes to a person.
 
 ### Review and expiry
 
-- **Ops review.** `pendingLimitReviews()` feeds the admin overview's "Limit requests" tab. `reviewLimitChange()` (via `POST /api/v1/admin/limit-requests/{id}`) approves or denies a request in `in_review`, re-validates the limits on approval, and sets a fresh 14-day expiry.
-- **Expiry.** `revertExpiredLimitIncreases()` runs in every `tick`. For each applied emergency increase past `expires_at`, it sets each limit to the lower of the current value and the saved "before" value, then marks the row `reverted`. A tightening made during the window is kept.
+- **Ops review.** `pendingLimitReviews()` feeds the admin overview's "Limit requests" tab. `reviewLimitChange()` (via `POST /api/v1/admin/limit-requests/{id}`) approves or denies a request in `in_review` (404 unknown, 409 not awaiting review). On approval it re-validates the requested limits, applies the increase on top of the limits as they are now (`planIncrease()`), rewrites the row's `before_limits` / `after_limits` to the increase actually applied, and sets a fresh 14-day expiry. The `limits.reviewed_<decision>` audit row is stamped with the decision time (`ts: now`).
+- **Expiry.** `revertExpiredLimitIncreases()` ([expiry.ts](../../src/lib/limits/expiry.ts)) runs in every `tick`. For each applied emergency increase past `expires_at`, `fallBack()` works out the limits, they are saved, and the row is marked `reverted`, all in one transaction.
+
+### Temporary increases
+
+An approved emergency increase, whether the policy approves it at once or a reviewer approves it later, is applied on top of the limits **as they are when it is applied**, read inside the transaction that saves it ([increase.ts](../../src/lib/limits/increase.ts)):
+
+- `planIncrease()`: a limit the request **raises** goes to the requested value (or stays higher, if it is higher by then). A limit the request **lowers** goes to the lower of its current and requested values. **Every other limit keeps its current value**, so a limit lowered while the request waited, or during the AI call, stays lowered.
+- The row stores, for each raised limit, `before_limits` = the level it falls back to (the lower of the limit when applied and the fall-back of any other increase still applied to that limit) and `after_limits` = the level this increase grants.
+- `fallBack()`: when an increase expires, each limit it raised falls back to the higher of its fall-back level and what any other still-active increase grants that limit, never above the current value. Limits it didn't raise are left alone. So an expiring increase never undoes another active one, a tightening made during the window is kept, and a chain of overlapping increases ends at the level before the first.
+
+**Changed 2026-11-24.** Before, an approval saved the request's filed `after_limits` whole (undoing any limit lowered since), the monthly number of requests was checked only before the AI call, an expiry set every limit to the lower of now and the expiring request's `before` (undoing other active increases early), and `limits.reviewed_*` audit rows took the clock's time. `limits.emergency_approved` details now carry the applied `before` / `after`, which equal the filed ones unless the limits changed meanwhile or another increase was active.
 
 ### Phone app
 
@@ -75,7 +85,21 @@ The Limits screen shows usage, bounds and whether this month's raise is free. Ra
 
 | File | What it holds | Key exports |
 |---|---|---|
-| [src/lib/limits.ts](../../src/lib/limits.ts) | Limits, monthly allowance, emergency requests, review, expiry | `getLimits()` effective limits, `limitBounds()`, `assertWithinWithdrawalLimits()`, `withdrawnToday()`, `effectiveEmergencyCap()`, `limitsOverview()` screen data, `changeLimits()` standard change, `screenText()` deterministic screen, `decideLimitRequest()` pure policy, `requestEmergencyLimitChange()`, `revertExpiredLimitIncreases()`, `pendingLimitReviews()`, `reviewLimitChange()`, `viewChange()`, `LIMIT_KEYS` |
+| [src/lib/limits/index.ts](../../src/lib/limits/index.ts) | The module's public surface (re-exports only); other code imports `@/lib/limits` | everything below marked exported |
+| [src/lib/limits/bounds.ts](../../src/lib/limits/bounds.ts) | Which limits exist, their market bounds, how a change compares | `LIMIT_KEYS`, `Limits`, `Bound`, `limitBounds()`; internal `validate()` (400 out of bounds), `diff()` → `{ loosened, tightened }` |
+| [src/lib/limits/period.ts](../../src/lib/limits/period.ts) | Calendar boundaries in the server's local time | internal `dayStart()`, `monthStart()`, `nextMonthStart()` |
+| [src/lib/limits/store.ts](../../src/lib/limits/store.ts) | `user_limits` reads and writes; the `limit_changes` row shape | `getLimits()` effective limits, `effectiveEmergencyCap()`; internal `saveLimits()`, `ChangeRow` |
+| [src/lib/limits/usage.ts](../../src/lib/limits/usage.ts) | Daily and monthly counters, the withdrawal guard | `withdrawnToday()`, `assertWithinWithdrawalLimits()`; internal `standardChangesThisMonth()`, `emergencyRequestsThisMonth()` |
+| [src/lib/limits/change.ts](../../src/lib/limits/change.ts) | Standard change: lower any time, raise once a month | `changeLimits()` |
+| [src/lib/limits/screen.ts](../../src/lib/limits/screen.ts) | Deterministic text screen | `screenText()` → `TextScreen` |
+| [src/lib/limits/policy.ts](../../src/lib/limits/policy.ts) | Pure decision over the scores and the screen | `decideLimitRequest()`, `LimitAssessment`, `StoredAssessment` |
+| [src/lib/limits/assess.ts](../../src/lib/limits/assess.ts) | The AI assessor: account facts, prompt, model call (scores only) | internal `accountFacts()`, `assessWithModel()` → `{ ai, aiError, model }` |
+| [src/lib/limits/emergency-request.ts](../../src/lib/limits/emergency-request.ts) | Emergency request end to end: checks, screen, assessment, policy, row, audit, fraud flag | `requestEmergencyLimitChange()` |
+| [src/lib/limits/increase.ts](../../src/lib/limits/increase.ts) | The arithmetic of temporary increases | internal `planIncrease()`, `fallBack()` |
+| [src/lib/limits/expiry.ts](../../src/lib/limits/expiry.ts) | Scheduler tick: approved increases expire | `revertExpiredLimitIncreases()` |
+| [src/lib/limits/review.ts](../../src/lib/limits/review.ts) | The reviewer's queue and decision | `pendingLimitReviews()`, `reviewLimitChange()` |
+| [src/lib/limits/view.ts](../../src/lib/limits/view.ts) | What the screens read | `limitsOverview()` screen data, `viewChange()` |
+| [src/lib/limits/README.md](../../src/lib/limits/README.md) | The module's file map, flow, audit and touch points | — |
 | [src/lib/compliance.ts](../../src/lib/compliance.ts) | Market bounds and quotas | `rulesFor()` → `limits` and `emergency.monthlyCap` |
 | [src/lib/shared.ts](../../src/lib/shared.ts) | Labels shared with clients | `LIMIT_LABELS`, `EMERGENCY_REASONS`, `LimitKey` |
 | [src/lib/groq.ts](../../src/lib/groq.ts) | AI provider client | `aiEnabled()`, `chatJson()`, `TEXT_MODEL`, `VISION_MODEL`, `describeAiError()` |
@@ -121,7 +145,7 @@ Admin is open in prototype mode and needs an email in `ADMIN_EMAILS` in firebase
 | `user_limits` | `user_id`, `single_withdrawal`, `daily_withdrawal`, `monthly_emergency`, `updated_at` |
 | `limit_changes` | `id` (`lim_`), `kind` (`tighten` / `standard` / `emergency`), `status` (`applied` / `in_review` / `denied` / `reverted` / `superseded`), `before_limits`, `after_limits` (JSON), `reason_code`, `explanation`, `assessment` (JSON: `ai`, `aiError`, `screen`, `ratio`, `decision`, `reasons`, `scamRisk`), `model`, `reviewer`, `reviewer_note`, `expires_at`, `created_at`, `decided_at` |
 | `fraud_flags` | Rows with `source = 'limits'` |
-| `audit_log` | `limits.tighten`, `limits.standard`, `limits.emergency_<decision>`, `limits.reviewed_<decision>`, `limits.emergency_expired` |
+| `audit_log` | `limits.tighten`, `limits.standard` (change.ts), `limits.emergency_<decision>` (emergency-request.ts; actor the model, or `limits-policy`), `limits.reviewed_<decision>` (review.ts; `ts` = the decision time), `limits.emergency_expired` (expiry.ts; actor `scheduler`) |
 
 No phone storage keys.
 
@@ -171,7 +195,7 @@ Because rule 1 fires on a single scam phrase (0.5 + 0.2 = 0.7), any match declin
 
 | File | What it covers |
 |---|---|
-| [tests/limits.test.ts](../../tests/limits.test.ts) | Market defaults scale with currency; tighten any time, loosen once a month; refuse values above the maximum; single and daily limits block withdrawals; a lower emergency limit becomes the cap; the pure policy (approve, review, decline, manipulation, moderate risk); `screenText()`; the full flow with AI off (review → approve → revert without loosening); scam decline with a high flag; tighten-only refusal and the 2-per-month cap |
+| [tests/limits.test.ts](../../tests/limits.test.ts) | Market defaults scale with currency; tighten any time, loosen once a month; refuse values above the maximum; single and daily limits block withdrawals; a lower emergency limit becomes the cap; the pure policy (approve, review, decline, manipulation, moderate risk); `screenText()`; the full flow with AI off (review → approve → revert without loosening); scam decline with a high flag; tighten-only refusal and the 2-per-month cap; increases meeting later changes (an approval keeps a limit lowered while the request waited, or during the AI call; requests sent at once can't pass the monthly number; an expiring increase doesn't undo another active one; a reviewer's decision is audited at the decision time) |
 
 ## Known limits and open issues
 
@@ -185,7 +209,7 @@ Because rule 1 fires on a single scam phrase (0.5 + 0.2 = 0.7), any match declin
 ## Maintainability notes
 
 - **Good seams.** `decideLimitRequest()` and `screenText()` are pure and well tested. Market numbers come only from `rulesFor()`.
-- **SRP.** [limits.ts](../../src/lib/limits.ts) is about 650 lines and mixes persistence, the monthly allowance, scam patterns, prompt text, the AI call, the policy, fraud flagging and the reviewer flow. Splitting screen, assessment and policy into their own files would make each easier to change.
+- **SRP (done 2026-11-24).** The old 650-line `src/lib/limits.ts` is now the [src/lib/limits/](../../src/lib/limits/README.md) folder, one job per file (maintainability S2). The split itself changed no behaviour; the fixes listed under [Temporary increases](#temporary-increases) came with it.
 - **Magic numbers.** The policy thresholds (0.75, 0.6, 0.3, 0.25, 0.8) and the `unit` formula are inline. Moving them into the market rules or named constants would make tuning safer.
-- **Duplication.** `monthStart`, `nextMonthStart` and `dayStart` are local helpers here, while the wallet uses zoned versions. The PUT route has its own `toMinor` instead of the shared one. The phone's Practice simulator re-implements the limit checks and error messages.
-- **Coupling.** `requestEmergencyLimitChange()` runs raw SQL against `users`, `emergency_requests` and `fraud_flags` to build its facts.
+- **Duplication.** `monthStart`, `nextMonthStart` and `dayStart` live in [period.ts](../../src/lib/limits/period.ts) and use the server's time, while the wallet uses zoned versions. The PUT route has its own `toMinor` instead of the shared one. The phone's Practice simulator re-implements the limit checks and error messages.
+- **Coupling.** `accountFacts()` in [assess.ts](../../src/lib/limits/assess.ts) runs raw SQL against `users`, `emergency_requests` and `fraud_flags` to build the facts the model sees.

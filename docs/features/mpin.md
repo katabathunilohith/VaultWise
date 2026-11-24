@@ -10,7 +10,7 @@ The module's own notes are in [src/lib/mpin/README.md](../../src/lib/mpin/README
 
 For a person using Vaultwise:
 
-- Every money move out (a vault withdrawal, wallet spend, cash-out or move, any emergency tier, raising a limit, buying investments, closing the account) asks for the MPIN. The server checks it, not the app.
+- Every money move out (a vault withdrawal, wallet spend, cash-out or move, any emergency tier, raising a limit, buying investments, starting or raising a regular investment plan (SIP), setting money aside for Satellite, closing the account) asks for the MPIN. The server checks it, not the app.
 - Five wrong tries lock money moves for 1 minute. The next five lock for 5 minutes, then 30 minutes, then 24 hours (and every five after that keep the 24 hours). Reading balances still works while locked.
 - A new MPIN must be exactly 6 digits and not easy to guess: not one digit repeated, not a straight run like `123456` or `654321`, not on a list of common PINs, and not their date of birth.
 - Changing the MPIN always needs the current one. A forgotten MPIN can be reset with a texted code, but only from a trusted device, and not within 72 hours of the verified phone number being added or changed ([devices-alerts-otp.md](devices-alerts-otp.md)).
@@ -18,13 +18,13 @@ For a person using Vaultwise:
 - Accounts opened before MPINs keep their old 4-digit PIN until they choose a 6-digit one. The web Settings page shows a "Choose a 6-digit MPIN" notice for them.
 - A lock and a change each raise an alert (`mpin_locked`, `mpin_changed`).
 
-Money coming in (deposits, wallet top-ups, the simulated salary) never asks for the MPIN.
+Money coming in from the linked bank (vault deposits, a new vault's opening deposit, wallet top-ups, the simulated salary and card events, the round-up sweep) never asks for the MPIN, but it needs a verified ID, like money out (since 2026-11-24; before, vault deposits and opening deposits had no ID check).
 
 ## How it works
 
 ### Which actions need it
 
-One map in [src/lib/money-routes.ts](../../src/lib/money-routes.ts) (`MONEY_ROUTES`) lists every money action. Each entry says whether it needs the MPIN, whether it keeps the ID-check (KYC) gate, and whether the new-device cap applies (`deviceCap`, from plan 06).
+One map in [src/lib/money-routes.ts](../../src/lib/money-routes.ts) (`MONEY_ROUTES`) lists every money action. Each entry says whether it needs the MPIN, whether it has the ID-check (KYC) gate, whether the new-device cap applies (`deviceCap`, from plan 06), and whether it is money in from the linked bank (`moneyIn`).
 
 | Action | Route | MPIN | KYC gate | New-device cap |
 |---|---|---|---|---|
@@ -36,13 +36,19 @@ One map in [src/lib/money-routes.ts](../../src/lib/money-routes.ts) (`MONEY_ROUT
 | `emergency` | `POST /emergency/withdrawals` (every tier) | yes | yes | yes |
 | `limits_loosen` | `PUT /limits` when any limit goes up; `POST /limits/emergency` always | yes | no | no |
 | `invest_buy` | `POST /invest/core/buy` | yes | yes | no |
+| `invest_sip` | `POST /invest/core/sip`, setting a SIP up or moving more money (`sipNeedsMpin()`, below); lowering it and pausing it (`DELETE`) need none | yes | yes | no |
+| `satellite_opt_in` | `POST /invest/satellite/opt-in` (opting in and every later allocation from the bank) | yes | yes | no |
 | `close_account` | `POST /reset` in firebase mode | yes | no | no |
 | `mpin_change` | `POST /mpin` and `PATCH /me` with a new `pin` (checks the current MPIN) | yes | no | no |
 | `device_trust` | `POST /devices/trust` (MPIN always checked) | yes | no | no |
 | `device_revoke` | `POST /devices/{id}/revoke` (MPIN always checked) | yes | no | no |
 | `phone_change` | `POST /me/phone`, adding or replacing the verified number (MPIN always checked) | yes | no | no |
+| `wallet_top_up` | `POST /wallet/top-up` (bank → wallet) | no | yes | no |
+| `vault_deposit` | `POST /vaults/{id}/deposits`; `POST /vaults` with `initialDeposit` (bank → vault) | no | yes | no |
+| `bank_simulate` | `POST /accounts/simulate` (practice salary and card events on the linked bank) | no | yes | no |
+| `roundup_sweep` | `POST /accounts/sweep` (round-ups, bank → vault) | no | yes | no |
 
-The KYC column keeps the gates exactly as they were before MPINs.
+For money out, the KYC column keeps the plan 03 gates. The last four rows are **money in** (`moneyIn: true`, security review gap 7, added 2026-11-24): money entering from the linked bank needs a verified ID (subject to `KYC_ENFORCED`) and never the MPIN, so those routes only call `customer({ money })`, and `requireMpin()` returns `false` for them without checking anything. Moving money that is already inside the account (wallet → vault) stays `wallet_move`: MPIN and ID. `POST /invest/satellite/run` is not in the map: it records paper positions only and moves no ledger money, so it needs no MPIN (it keeps its `kyc: true` gate).
 
 ### A money route, step by step
 
@@ -60,11 +66,11 @@ flowchart TD
   M -- right --> T["The money transaction (tx)"]
 ```
 
-1. `customer({ money: "<action>" })` in [src/lib/api.ts](../../src/lib/api.ts) looks the action up with `moneyPolicy()` and applies its KYC gate.
+1. `customer({ money: "<action>" })` in [src/lib/api.ts](../../src/lib/api.ts) looks the action up with `moneyPolicy()` and applies its KYC gate (`assertKycGate()` in [src/lib/auth/session.ts](../../src/lib/auth/session.ts): 403 `kyc_required` unless the ID is verified, off with `KYC_ENFORCED=false`). A route that moves money only on some requests applies the gate after reading the body with `moneyGate(user, "<action>")` instead (`POST /vaults` with an `initialDeposit`).
 2. The route parses the body. The `pin` field is `mpinField` (an optional string of at most 12 characters, `MAX_PIN_INPUT`).
 3. Money-out routes call `assertDeviceMayMove()` ([src/lib/devices](../../src/lib/devices/service.ts)) before the MPIN.
 4. `requireMpin(user, pin, action)` in [src/lib/mpin/verify.ts](../../src/lib/mpin/verify.ts):
-   - returns at once if the map says the action needs no MPIN;
+   - returns `false` at once if the map says the action needs no MPIN (the money-in actions);
    - **throws if called inside a transaction** (`db().isTransaction`), so a wrong try's audit row can never be rolled back with the money move;
    - is **strict** when enforcement is on, or when the caller passes `always: true` (then whatever `MPIN_ENFORCED` says);
    - during a lock: a strict check refuses (423 `mpin_locked`) without checking the PIN or counting the try; a non-strict one (a money move in rollback mode) lets the move go ahead and doesn't check a PIN that was sent;
@@ -79,11 +85,28 @@ Special cases:
 |---|---|
 | `POST /emergency/withdrawals` | The route passes `pin` and `mpinEveryTier: true` to `executeEmergency()` ([src/lib/emergency.ts](../../src/lib/emergency.ts)), which calls `requireMpin()` before its `tx()`. Tier 2 passes `always: true`, so it keeps its PIN check even with `MPIN_ENFORCED=false`. `planEmergency()` reports `needsPin: true` on every tier while enforcement is on. |
 | `PUT /limits` | Compares the new values with `getLimits(user)`. Only a raise asks for the MPIN; tightening never does. |
+| `POST /invest/core/sip` | `customer({ money: "invest_sip" })` (ID gate), then `requireMpin()` only when `sipNeedsMpin(activeSip(user), { amount, frequency, startAt })` is true. A `startDate` that isn't a date is refused first (400 `bad_start_date`). `DELETE` (pause) calls `customer()` with no money action: no MPIN, no ID gate. |
+| `POST /invest/satellite/opt-in` | `customer({ money: "satellite_opt_in" })`, then `requireMpin()` every time, before `optIn()` checks the disclosures, eligibility, the cap and the bank balance. `POST /invest/satellite/run` asks for no MPIN. |
+| `POST /vaults` | With an `initialDeposit`, `moneyGate(user, "vault_deposit")` runs before anything is written; the vault, its custom rule and the opening deposit then commit in one `tx()`, so a deposit the bank can't cover leaves no empty vault (2026-11-24). Without one there is no gate: an empty vault moves no money. |
 | `POST /limits/emergency` | A multipart form: `pin` is a form field. It is checked before the upload is read and before the AI assessment. |
 | `PUT /wallet/settings` | Asks for the MPIN only when a daily limit exists and the new value is higher, or `null` (turned off). |
 | `POST /reset` | Firebase mode only: `resolveCustomer()`, then `requireMpin(..., "close_account")`, then `closeAccount()`. Prototype mode still wipes the database with no MPIN. |
 | `POST /devices/trust`, `POST /devices/{id}/revoke` | Call `requireMpin(..., { always: true })`, so the MPIN is checked, lock included, even in rollback mode. |
 | `POST /me/phone` | `customer({ money: "phone_change" })`; replacing a verified number first needs a trusted device (`assertTrustedDevice()`); then `requireMpin(..., "phone_change", { always: true })`; then, in one `tx()`, `consumeVerification(..., "phone_verify")` and `setVerifiedPhone()`. A wrong MPIN leaves the token unused. The number receives the codes that trust devices and reset the MPIN, so a stolen sign-in alone can't put its own number on the account. |
+
+### When a SIP needs the MPIN
+
+`sipNeedsMpin(current, next)` in [src/lib/invest/sip-rule.ts](../../src/lib/invest/sip-rule.ts) is pure and has no imports, so the web form imports it directly to decide whether to show the MPIN box; the server's check is the one that counts.
+
+| Change | MPIN |
+|---|---|
+| No active plan (setting one up) | yes |
+| More per month than now (`sipPerMonth()`: weekly counts as 52/12 a month, so monthly → weekly at the same amount is a raise) | yes |
+| A `startDate` before the current next debit (a past date runs up to 6 missed debits at once) | yes |
+| Lower, the same, or a later start | no |
+| Pausing (`DELETE /invest/core/sip`) | no |
+
+SIP debits the scheduler makes later (`runDueSips()`) need no PIN: they were authorised when the plan was set up or raised. The phone has its own copy (`sipNeedsMpin()` and `perMonth()` in [mobile/src/lib/invest.ts](../../mobile/src/lib/invest.ts)), held to the same answers by `tests/contract/vectors/sip-mpin.json`.
 
 ### Choosing and changing an MPIN
 
@@ -107,7 +130,7 @@ Special cases:
 | `common` | On `COMMON_MPINS` (20 entries, such as `121212`, `112233`, `147258`) |
 | `birth_date` | Equals the date of birth as `DDMMYY` (`birthDateAsPin()`). The date comes from the latest verified KYC record (`latestVerifiedRecord()`). |
 
-The phone's Practice simulator mirrors this file. Keep both in step.
+The phone's copy (`mobile/src/features/mpin/policy.ts`, used by its screens and the Practice simulator) mirrors this file and `attempts.ts`. The contract vectors in `tests/contract/vectors/mpin-policy.json` hold both copies to the same answers ([tests/contract/README.md](../../tests/contract/README.md)).
 
 ### The lock
 
@@ -151,11 +174,13 @@ A scrypt hash does not reveal the PIN's length. So `mpin_meta` records the lengt
 | [src/lib/mpin/verify.ts](../../src/lib/mpin/verify.ts) | The check | `requireMpin()`, `mpinStatus()`, `MpinError`, `waitText()` |
 | [src/lib/mpin/change.ts](../../src/lib/mpin/change.ts) | Choosing, changing and storing | `mpinField`, `assertNewMpin()`, `recordChosenMpin()`, `setMpin()`, `changeMpin()` |
 | [src/lib/mpin/index.ts](../../src/lib/mpin/index.ts) | The module's public surface | re-exports |
-| [src/lib/money-routes.ts](../../src/lib/money-routes.ts) | The one policy map | `MONEY_ROUTES`, `MONEY_ACTIONS`, `moneyPolicy()`, `MoneyAction`, `MoneyPolicy` |
-| [src/lib/api.ts](../../src/lib/api.ts) | `customer({ money })` applies the map's KYC gate | `customer()` |
+| [src/lib/money-routes.ts](../../src/lib/money-routes.ts) | The one policy map (`mpin`, `kyc`, `deviceCap`, `moneyIn`) | `MONEY_ROUTES`, `MONEY_ACTIONS`, `moneyPolicy()`, `MoneyAction`, `MoneyPolicy` |
+| [src/lib/api.ts](../../src/lib/api.ts) | `customer({ money })` applies the map's KYC gate; `moneyGate()` applies it once a route knows this request moves money | `customer()`, `moneyGate(user, action)` |
+| [src/lib/auth/session.ts](../../src/lib/auth/session.ts) | The ID-check gate on its own | `assertKycGate(user)` |
+| [src/lib/invest/sip-rule.ts](../../src/lib/invest/sip-rule.ts) | When saving a SIP needs the MPIN (pure, browser-safe) | `sipNeedsMpin()`, `sipPerMonth()`, `SipFrequency` |
 | [src/lib/emergency.ts](../../src/lib/emergency.ts) | MPIN before the emergency transaction | `executeEmergency()` (`mpinEveryTier`), `planEmergency()` (`needsPin`) |
 | [src/lib/vaults.ts](../../src/lib/vaults.ts) | B3 fix | `payoutWithdrawal()` |
-| Routes: [mpin](../../src/app/api/v1/mpin/route.ts), [mpin/reset](../../src/app/api/v1/mpin/reset/route.ts), [me](../../src/app/api/v1/me/route.ts), [me/phone](../../src/app/api/v1/me/phone/route.ts), [onboarding](../../src/app/api/v1/onboarding/route.ts), and every money route in the table above | Lines marked `// mpin` | `GET`, `POST`, `PUT`, `PATCH` |
+| Routes: [mpin](../../src/app/api/v1/mpin/route.ts), [mpin/reset](../../src/app/api/v1/mpin/reset/route.ts), [me](../../src/app/api/v1/me/route.ts), [me/phone](../../src/app/api/v1/me/phone/route.ts), [onboarding](../../src/app/api/v1/onboarding/route.ts), and every money route in the table above (the money-in ones are marked `// mpin: money in`) | Lines marked `// mpin` | `GET`, `POST`, `PUT`, `PATCH` |
 
 ### Web app
 
@@ -164,7 +189,8 @@ A scrypt hash does not reveal the PIN's length. So `mpin_meta` records the lengt
 | [src/components/mpin.tsx](../../src/components/mpin.tsx) | The MPIN box and error text | `MpinField` (password input, digits only, up to 6), `mpinReady()` (4 to 6 digits, so old PINs still work), `moneyErrorText()` (shows the server's message and clears the box on `mpin_wrong` or `mpin_locked`) |
 | [src/components/verification.tsx](../../src/components/verification.tsx) | Vault withdrawal form | sends `pin` |
 | [src/app/emergency/page.tsx](../../src/app/emergency/page.tsx) | Emergency request | sends `pin` when `plan.needsPin` |
-| [src/app/invest/core/page.tsx](../../src/app/invest/core/page.tsx) | One-off Core buy | sends `pin` |
+| [src/app/invest/core/page.tsx](../../src/app/invest/core/page.tsx) | One-off Core buy and the SIP form | sends `pin` on a buy; on a SIP it shows the MPIN box and sends `pin` only when `sipNeedsMpin()` (imported from `src/lib/invest/sip-rule.ts`) says so |
+| [src/app/invest/satellite/page.tsx](../../src/app/invest/satellite/page.tsx) | Satellite opt-in (`OptIn`) | always sends `pin`; errors through `moneyErrorText()` |
 | [src/components/limits-panel.tsx](../../src/components/limits-panel.tsx) | Raising a limit | sends `pin` in the JSON body or the form |
 | [src/app/settings/page.tsx](../../src/app/settings/page.tsx) | MPIN card (change, upgrade notice) and Close account | `POST /api/v1/mpin`; `POST /api/v1/reset` with `{ pin }` |
 | [src/components/devices-alerts.tsx](../../src/components/devices-alerts.tsx) | Adding or changing the phone number, trusting this browser, signing a device out | `POST /me/phone` with `{ verificationToken, pin }`; `POST /devices/trust` with `{ verificationToken, pin }`; `POST /devices/{id}/revoke` with `{ pin }` |
@@ -181,7 +207,7 @@ A scrypt hash does not reveal the PIN's length. So `mpin_meta` records the lengt
 | PATCH | `/api/v1/me` | customer write | `{ pin, currentPin }` (plus the other profile fields) | `{ ok: true }`, same rules as `POST /mpin` |
 | GET | `/api/v1/me` | signed in | | adds `mpin: { upgradeDue, lockedUntil, enforced }`. `lockedUntil` is ms, or null (always null in rollback mode). `enforced` is always sent: true unless `MPIN_ENFORCED=false`. The phone copies a typed MPIN into its unlock PIN only when it is true, since in rollback mode a money move may go through with a wrong PIN. |
 
-Every money route in the table above accepts `pin` in its JSON body (`POST /limits/emergency`: a form field).
+Every money route in the table above with MPIN "yes" accepts `pin` in its JSON body (`POST /limits/emergency`: a form field). `POST /invest/core/sip` takes `{ amount, frequency, startDate?, pin }`; `POST /invest/satellite/opt-in` takes `{ amount, acknowledged, pin }`. The money-in routes take no `pin`.
 
 ### Errors
 
@@ -193,6 +219,8 @@ Extra fields are sent next to `error` and `code` (`errorResponse()` spreads `Mpi
 | `mpin_wrong` | 403 | `triesLeft` | Wrong PIN. The message says how many tries are left. In rollback mode only the `always` checks answer it. |
 | `mpin_locked` | 423 | `lockedUntil` (ms since epoch) | Locked now, or this wrong try started a lock. The message says how long. In rollback mode only the `always` checks answer it. |
 | `mpin_weak` | 400 | `reason`: `length`, `repeated`, `sequence`, `common` or `birth_date` | Choosing a weak PIN |
+| `kyc_required` | 403 | | A money action marked `kyc` (money out, investing, money in from the bank) while the ID isn't verified. Checked first, before the device cap and the MPIN. |
+| `bad_start_date` | 400 | | `POST /invest/core/sip` with a `startDate` that isn't a date (checked before the MPIN) |
 | `device_untrusted` | 403 | `trustableAt` | Reset (or replacing the phone number) from an untrusted device, or a money-out move over the new-device cap (checked before the MPIN) |
 | `phone_recently_changed` | 403 | `allowedAt` (ms) | Reset within 72 hours of the verified number being added or changed |
 | `verification_invalid` | 400 | | Reset with a token that is unknown, used, expired or for another purpose |
@@ -233,7 +261,10 @@ Turn enforcement on only after the phone build that sends the MPIN is out, or ol
 
 | File | What it covers |
 |---|---|
-| [tests/mpin.test.ts](../../tests/mpin.test.ts) | Policy refusals and the date-of-birth rule; lock escalation and reset; refusal inside a transaction; every action in the map refuses without, with a wrong, and while locked; tightening needs no MPIN; old 4-digit PINs work; change and weak-PIN errors; rollback mode (money moves skip the check, a PIN sent during a lock isn't checked, `/me` reports `lockedUntil: null` and `enforced: false`, the `always` checks keep the lock and `triesLeft`, the alert's wording); B1 audit row kept; B3 payout statuses; sign-up and closing an account in firebase mode; `triesLeft` and `lockedUntil` in the JSON |
+| [tests/mpin.test.ts](../../tests/mpin.test.ts) | Policy refusals and the date-of-birth rule; lock escalation and reset; refusal inside a transaction; every action in the map needs the MPIN except money in, and each one that does (`invest_sip` set-up and `satellite_opt_in` included) refuses without, with a wrong, and while locked; tightening needs no MPIN; old 4-digit PINs work; change and weak-PIN errors; rollback mode (money moves skip the check, a PIN sent during a lock isn't checked, `/me` reports `lockedUntil: null` and `enforced: false`, the `always` checks keep the lock and `triesLeft`, the alert's wording); B1 audit row kept; B3 payout statuses; sign-up and closing an account in firebase mode; `triesLeft` and `lockedUntil` in the JSON |
+| [tests/invest-money.test.ts](../../tests/invest-money.test.ts) | `sipNeedsMpin()`; `POST /invest/core/sip` needs the MPIN to set up, raise, turn weekly or bring the next debit forward, not to lower or pause, and refuses a bad `startDate`; `POST /invest/satellite/opt-in` needs it before any money moves; `/satellite/run` needs none; `kyc_required` comes before the MPIN |
+| [tests/money-in.test.ts](../../tests/money-in.test.ts) | The four money-in actions: ID gate on, MPIN off, `requireMpin()` returns false; each route refused without a verified ID (moving nothing) and working with one and no MPIN; `KYC_ENFORCED=false`; a vault with no opening deposit needs no ID; wallet → vault stays `wallet_move`; `POST /vaults` with a deposit the bank can't cover leaves no vault |
+| [tests/contract/](../../tests/contract/README.md) | `mpin-policy.json`, `money-actions.json` (fails when `MONEY_ROUTES` gains an action with no vector) and `sip-mpin.json`, run against the server here and against the phone's copies by Jest |
 | [tests/otp.test.ts](../../tests/otp.test.ts) | Reset with a texted code: policy first, then token, lock cleared, audit and alert; refused from a new device and for 72 hours after a number change; adding a number needs the MPIN, wrong tries count toward the lock |
 | [tests/emergency.test.ts](../../tests/emergency.test.ts) | Tier 1 from the Health vault; Tier 2 PIN |
 | [tests/auth.test.ts](../../tests/auth.test.ts) | Changing the PIN needs the current one in both modes |
@@ -287,17 +318,19 @@ The phone asks for the MPIN just before each money move, sends it in the request
 | Emergency money, every tier | `features/emergency/request/RequestFlow.tsx` | `withMpin` after the hold; the old Tier 2 PIN step is gone | `emergency` |
 | Raise a limit | `features/account/settings/limits/LimitEditor.tsx` | `MpinPanel` | `limits_loosen` |
 | One-off Core buy | `features/invest/core/LumpSumModal.tsx` | `MpinPanel` | `invest_buy` |
+| Start a Core plan, or change it to move more money | `features/invest/core/PlanModal.tsx` | an `mpin` step with `MpinPanel` when `sipNeedsMpin()` ([lib/invest.ts](../../mobile/src/lib/invest.ts)) says so, then `api.setSip(..., pin)`; a no-PIN save the server answers `mpin_required` opens the step. Lowering or stopping asks nothing | `invest_sip` |
+| Turn on the Satellite sleeve ("Turn on Practice"), or "Set aside more" | `features/invest/practice/AllocateModal.tsx`, opened from `PracticeView.tsx` | every risk statement confirmed, the amount, a review, then `MpinPanel`, every time; `api.satelliteOptIn(amount, acknowledged, pin)` | `satellite_opt_in` |
 | Close a signed-in account | `features/account/settings/delete/DeleteAccountScreen.tsx` | `withMpin`, `api.reset(pin)` | `close_account` |
 | Change MPIN | `features/account/settings/security/SecurityFlow.tsx` | current MPIN, then `changeMpin()` | `mpin_change` |
 | Trust this phone, sign out a device | `features/devices/TrustDeviceScreen.tsx` (`MpinPanel`), `DevicesScreen.tsx` (`withMpin`) | | `device_trust`, `device_revoke` |
 | Add or change the phone number | `features/phone-verify/PhoneVerifyScreen.tsx` (`MpinPanel`, a prop from `app/settings/verify-phone.tsx`) | after the code; a wrong MPIN keeps the token | `phone_change` |
 | Pay with Vaultwise | `features/pay/checkout/useCheckoutFlow.ts`, `PinStep.tsx` | its own 6-digit pad; answers read with `readMpinError()` | none yet: the phone's simulator confirms it |
 
-Not wired on the phone: `POST /limits/emergency` (the emergency limit request is on the web app only), and the actions the server map doesn't cover (SIP set-up, Satellite).
+Not wired on the phone: `POST /limits/emergency` (the emergency limit request is on the web app only). The Core plan and Satellite flows came with the server rule on 2026-11-24.
 
 ### Practice
 
-[lib/api/demo/mpin.ts](../../mobile/src/lib/api/demo/mpin.ts) mirrors the server: `requirePracticeMpin()` runs in every simulated money move out (`demo/vaults.ts` withdraw and limit raises, `wallet.ts`, `emergency.ts`, `invest.ts`, and the Practice checkouts, where `settle.ts` passes it to `practiceCheckouts()` in `pay-sim.ts`), with the same codes, extra fields and lock steps (5 wrong tries: 1 minute, then 5, 30 minutes and 24 hours). A live dry-run checkout moves nothing and takes only `246810`. `changePracticeMpin()` and `resetPracticeMpin()` apply the same policy; in `demo/devices.ts`, keeping a phone number checks the MPIN as `phone_change`, and a reset within 72 hours of a number change answers `phone_recently_changed`. The MPIN starts as `246810` (`PRACTICE_PIN`). Its state is the `mpin` Practice slice, saved in secure storage (`sensitive: true`, chunked). A Practice MPIN is never copied into the unlock PIN, and the payments shortcut is off in Practice. "Start Practice over" clears the wrong-try count and keeps the MPIN; Delete account and sign-out put `246810` back. See [practice-mode.md](practice-mode.md).
+[lib/api/demo/mpin.ts](../../mobile/src/lib/api/demo/mpin.ts) mirrors the server: `requirePracticeMpin()` runs in every simulated money move out (`demo/vaults.ts` withdraw and limit raises, `wallet.ts`, `emergency.ts`, `invest.ts` (a Core buy, a plan that moves more money by `sipNeedsMpin()`, every Satellite allocation), and the Practice checkouts, where `settle.ts` passes it to `practiceCheckouts()` in `pay-sim.ts`), with the same codes, extra fields and lock steps (5 wrong tries: 1 minute, then 5, 30 minutes and 24 hours). A live dry-run checkout moves nothing and takes only `246810`. `changePracticeMpin()` and `resetPracticeMpin()` apply the same policy; in `demo/devices.ts`, keeping a phone number checks the MPIN as `phone_change`, and a reset within 72 hours of a number change answers `phone_recently_changed`. Every Practice money move checks in the server's order: a verified ID (`assertPracticeIdVerified()` in `demo/identity.ts`, 403 `kyc_required`, money in from the bank included), then the new-phone cap, then the MPIN. The MPIN starts as `246810` (`PRACTICE_PIN`). Its state is the `mpin` Practice slice, saved in secure storage (`sensitive: true`, chunked). A Practice MPIN is never copied into the unlock PIN, and the payments shortcut is off in Practice. "Start Practice over" clears the wrong-try count and keeps the MPIN; Delete account and sign-out put `246810` back. See [practice-mode.md](practice-mode.md).
 
 ### Phone switch and limits
 
@@ -305,7 +338,7 @@ Not wired on the phone: `POST /limits/emergency` (the emergency limit request is
 - Turning app lock on with no PIN on the phone keeps the MPIN typed twice, unchecked, because no endpoint only checks an MPIN. The next MPIN a server with `mpin.enforced: true` accepts on a live money move replaces it if it differs; in rollback mode or Practice it stays until changed in Settings → Security.
 - The date-of-birth rule is only checked by the server; the phone shows its `mpin_weak` answer.
 - In the embedded `MpinPanel` (Core buy, limit raise), `device_untrusted` and "Forgot your MPIN?" say where to go instead of opening the flow.
-- No phone tests yet; `policy.ts` and `errors.ts` are pure and ready for a test runner.
+- Tests (Jest, `cd mobile && npm test`): `features/mpin/__tests__/policy.test.ts` and `errors.test.ts`; `contract-mpin-policy.test.ts` holds `policy.ts` to the server's vectors; `lib/__tests__/contract-sip-mpin.test.ts` holds `lib/invest.ts`; `lib/api/demo/__tests__/contract-money-actions.test.ts` calls every Practice money move without the MPIN, unverified, and over the cap on a new phone, and expects `mpin_required`, `kyc_required` and `device_untrusted` exactly where the server's table says.
 
 ### Adding a phone money flow
 
@@ -316,8 +349,8 @@ Not wired on the phone: `POST /limits/emergency` (the emergency limit request is
 
 ## How to change it safely
 
-- **Add a money route:** add a line to `MONEY_ROUTES`, call `customer({ money: "<action>" })`, and call `requireMpin(user, b.pin, "<action>")` **before** any `tx()`. If it moves money out, set `deviceCap: true` and call `assertDeviceMayMove()` first. Then add the route to the "every money route" cases in `tests/mpin.test.ts`; the test checks that every action in the map is covered.
-- **Change the policy:** edit `policy.ts` and the matching phone simulator code in the same pull request. Existing PINs are not re-checked, so a stricter rule only applies to new ones.
+- **Add a money route:** add a line to `MONEY_ROUTES`, call `customer({ money: "<action>" })`, and call `requireMpin(user, b.pin, "<action>")` **before** any `tx()`. If it moves money out, set `deviceCap: true` and call `assertDeviceMayMove()` first. Money in from the bank is `{ mpin: false, kyc: true, moneyIn: true }` and needs only `customer({ money })`. Then add the route to the "every money route" cases in `tests/mpin.test.ts` (or the money-in list in `tests/money-in.test.ts`), and an entry to `tests/contract/vectors/money-actions.json`: the server's suites fail on an action they don't cover, and the phone's contract test then expects the Practice move to behave the same.
+- **Change the policy:** edit `policy.ts`, the phone's `features/mpin/policy.ts` and `tests/contract/vectors/mpin-policy.json` in the same pull request; both suites must pass. Existing PINs are not re-checked, so a stricter rule only applies to new ones.
 - **Change lock lengths:** edit `LOCK_STEPS_MS` or `TRIES_PER_LOCK` in `config.ts` and the lock test.
 - **Never** call `requireMpin()` inside `tx()`. It throws on purpose.
 - **Roll back** with `MPIN_ENFORCED=false`. Nothing needs migrating either way.
@@ -328,12 +361,12 @@ Not wired on the phone: `POST /limits/emergency` (the emergency limit request is
 - In rollback mode money moves still go through with a wrong or missing MPIN, so rollback mode is only for the time before the phone build that sends the MPIN is out. (Before the 22 November 2026 security review, the `always` checks in rollback mode had no lock and the `mpin_locked` alert said money moves were locked; both are fixed, see [security.md](../security.md#security-review-2026-11-22).)
 - `upgradeDue` is true for every account the server hasn't seen since the module shipped, even one that already has a 6-digit PIN. Typing it once clears it.
 - The date-of-birth rule needs a full `YYYY-MM-DD` date. The KYC steps flow stores only the year of birth, so it never applies to those accounts.
-- Setting up a recurring SIP (`POST /invest/core/sip`), opting in to Satellite and the round-up sweep don't ask for the MPIN. The contract lists only `invest_buy`.
-- The policy is copied into the phone simulator, so the two can drift.
+- The policy and the SIP rule are copied on the phone. The contract tests catch drift, but only for the cases in the vectors.
+- Fixed 2026-11-24: setting up a SIP and opting in to Satellite used to move money with no MPIN, and vault deposits had no ID check. The round-up sweep is money in: the ID gate and no MPIN, by design.
 
 ## Maintainability notes
 
 - **Open/closed:** a new money route is one line in the map plus two calls. `requireMpin()` and `customer()` don't change.
 - **Single responsibility:** the policy is pure and tested alone; storage (`attempts.ts`, `meta.ts`) is separate from the check (`verify.ts`).
 - **Schema in code:** both tables are created on first use with their own `WeakSet`, like the other removable modules ([maintainability review](../maintainability.md), O3).
-- **Two places check `money`:** `PUT /limits` and `PUT /wallet/settings` call `customer()` without `money`, because they only need the MPIN for some bodies. Their map entries have `kyc: false`, so the gate is the same.
+- **Routes that decide per body:** `PUT /limits` and `PUT /wallet/settings` call `customer()` without `money`, because they only need the MPIN for some bodies; their map entries have `kyc: false`, so the gate is the same. `POST /invest/core/sip` calls `customer({ money: "invest_sip" })` (the ID gate always) and `requireMpin()` only when `sipNeedsMpin()` says so. `POST /vaults` calls `moneyGate()` only when there is an opening deposit.

@@ -12,7 +12,9 @@ with `isPracticeMode()` / `usePracticeMode()` from
 `012a9fc` (2026-11-22) and updated for the Practice save
 ([plan 01](../plans/01-practice-data-saved.md)): Practice data is now saved on the device and
 survives a restart. Updated again for the phone side of plans 03, 04, 06 and 07: the MPIN, the
-sensitive slices, devices, alerts, texted codes and the ID check steps.
+sensitive slices, devices, alerts, texted codes and the ID check steps; and on 2026-11-24 for the
+external review: the ID gate on every money move, the MPIN for Core plans and Satellite
+allocations, the emergency Tier 2 order, the payday window, and the phone's first tests.
 
 ## What it does
 
@@ -23,7 +25,7 @@ sensitive slices, devices, alerts, texted codes and the ID check steps.
   overview, an emergency history, investments and activity.
 - Simulates what changes: creating and editing vaults, deposits, withdrawals with proof, the
   six-stage proof check, appeals, emergency money with the Tier 2 safety pause, limits, Core
-  investing, the wallet, ID checks (the photo check and the PAN, DigiLocker and bank steps) and
+  investing and Satellite allocations, the wallet, ID checks (the photo check and the PAN, DigiLocker and bank steps) and
   account recovery, Pay with Vaultwise checkouts, the MPIN and its lock, registered devices and the
   new-device cap, texted codes, and the alerts inbox.
 - Mirrors the server's rules where the UI depends on them (see [Rules it mirrors](#rules-it-mirrors)).
@@ -31,6 +33,10 @@ sensitive slices, devices, alerts, texted codes and the ID check steps.
   (`features/ai-consent/ask.ts`), push is never registered and no text is sent.
 - Checks the Practice MPIN `246810` (or the one the person changed it to) on every money move out,
   with the server's lock.
+- Applies the server's ID gate to every money move, money in from the bank included, in the
+  server's order: a verified ID first (403 `kyc_required`), then the new-phone cap, then the MPIN
+  (`assertPracticeIdVerified()` in `identity.ts`; since 2026-11-24, before which only the wallet's
+  moves checked it).
 
 ## How it works
 
@@ -85,11 +91,11 @@ All simulator files are in [`mobile/src/lib/api/demo/`](../../mobile/src/lib/api
 | [`alerts.ts`](../../mobile/src/lib/api/demo/alerts.ts) | The alerts inbox, mirroring `GET /alerts` and `POST /alerts/read`. The `alerts` slice. Push calls do nothing. | `alertsDemo`, `practiceAlert` |
 | [`vaults.ts`](../../mobile/src/lib/api/demo/vaults.ts) | Vault list and detail (with a balance series), create, update, deposit from the bank, withdraw, cancel, upload a bill, limits and limit changes. | `vaultsApi` |
 | [`proofs.ts`](../../mobile/src/lib/api/demo/proofs.ts) | The proof pipeline: six timed stages, outcome from the file name, settle, appeal. Seeds the snapshot vault's three past proofs. | `submitWithdrawalProof`, `submitReceiptProof`, `settleProofs`, `proofById`, `appealProof`, `resetProofs` |
-| [`emergency.ts`](../../mobile/src/lib/api/demo/emergency.ts) | Emergency overview, plan preview with guardrails, request, receipt upload, Tier 2 release. | `emergencyApi`, `refreshEmergency` |
-| [`invest.ts`](../../mobile/src/lib/api/demo/invest.ts) | Core investing: the snapshot plus this session's plan change and buys. Portfolio and Satellite are static. | `investApi` |
-| [`wallet.ts`](../../mobile/src/lib/api/demo/wallet.ts) | Wallet view (payday, safe to spend today, daily limit), top-up, move to a vault, pay someone, cash out, settings. | `walletDemo` |
+| [`emergency.ts`](../../mobile/src/lib/api/demo/emergency.ts) | Emergency overview, plan preview with guardrails, request, receipt upload, Tier 2 release. The cascade is a pure function. | `emergencyApi`, `refreshEmergency`, `planCascade` |
+| [`invest.ts`](../../mobile/src/lib/api/demo/invest.ts) | Core investing and the Satellite sleeve: the snapshot plus this session's plan change, buys and Satellite allocations (`S.invest.satellite`), which also show in the portfolio and the Satellite overview's eligibility and equity. | `investApi` |
+| [`wallet.ts`](../../mobile/src/lib/api/demo/wallet.ts) | Wallet view (payday, safe to spend today, daily limit), top-up, move to a vault, pay someone, cash out, settings. The numbers are pure functions. | `walletDemo`, `paydayFrom`, `limitState`, `safeToSpend` |
 | [`wallet-state.ts`](../../mobile/src/lib/api/demo/wallet-state.ts) | The wallet's starting state: the last four paydays and everyday spending since, dated relative to now. Imports nothing from `state.ts`. | `freshWallet`, `WalletState` |
-| [`identity.ts`](../../mobile/src/lib/api/demo/identity.ts) | ID check (photo and steps), Find my account, password reset, recovery request, and the read-only rule. | `identityDemo`, `withIdentity`, `assertPracticeCanMove`, `PRACTICE_REVIEW_MS` |
+| [`identity.ts`](../../mobile/src/lib/api/demo/identity.ts) | ID check (photo and steps), Find my account, password reset, recovery request, the read-only rule, and the money moves' ID gate. | `identityDemo`, `withIdentity`, `assertPracticeCanMove`, `assertPracticeIdVerified`, `PRACTICE_REVIEW_MS` |
 | [`identity-state.ts`](../../mobile/src/lib/api/demo/identity-state.ts) | The starting identity: verified passport ending 4821, no recovery request, all three steps to do, no open tries. | `freshIdentity`, `freshSteps`, `freshStep`, `DemoIdentity`, `DemoStep`, `DemoOpenTry` |
 | [`settle.ts`](../../mobile/src/lib/api/demo/settle.ts) | The ledger Pay with Vaultwise uses in Practice, the Practice checkouts, and `settleDue`. | `checkouts`, `settleDue` |
 | [`../pay-sim.ts`](../../mobile/src/lib/api/pay-sim.ts) | Sample merchant checkouts, shared by Practice (`practiceCheckouts`, money moves) and live sessions (`payDryRun`, nothing moves). | `practiceCheckouts`, `payDryRun`, `PayLedger` |
@@ -99,31 +105,36 @@ All simulator files are in [`mobile/src/lib/api/demo/`](../../mobile/src/lib/api
 
 ## Rules it mirrors
 
-"Checked" means the matching server code was found; "comment" means the simulator's comment says
-so but the server side was not checked line by line.
+"Contract" means a shared vector file in [`tests/contract/vectors/`](../../tests/contract/README.md)
+runs against both copies, so they can't drift unnoticed; "checked" means the matching server code
+was found; "comment" means the simulator's comment says so but the server side was not checked line
+by line.
 
 | Rule | Practice code | Server code | Checked |
 |---|---|---|---|
 | One bill per withdrawal; a second upload is refused (409). | `vaults.ts` `uploadProof` | `src/app/api/v1/vaults/[id]/proofs/route.ts` | checked |
 | Only a request still waiting for proof can be cancelled (409). | `vaults.ts` `cancelWithdrawal` | `src/lib/vaults.ts` | checked |
-| Single-withdrawal and daily-withdrawal limits, with the same "past your daily limit" message. | `vaults.ts` `withdraw` | `src/lib/limits.ts` | checked |
+| Single-withdrawal and daily-withdrawal limits, with the same "past your daily limit" message. | `vaults.ts` `withdraw` | `src/lib/limits/usage.ts` `assertWithinWithdrawalLimits` | checked |
 | "Today" starts at local midnight and skips denied, cancelled and expired requests. | `state.ts` `withdrawnToday` | not checked | comment |
-| A limit can't go above the market maximum (400), and loosening a limit is allowed once (409 after that). | `vaults.ts` `setLimits` | `src/lib/limits.ts` (once per calendar month) | checked |
+| A limit can't go above the market maximum (400), and loosening a limit is allowed once (409 after that). | `vaults.ts` `setLimits` | `src/lib/limits/change.ts` `changeLimits` (once per calendar month) | checked |
 | The emergency cap is the lower of the market cap and the personal monthly limit, and a new limit applies at once. | `state.ts` `applyEmergencyCap` | `src/lib/emergency.ts` | checked |
-| Emergency money: Tier 1 (Health) vaults first, then Tier 2 vaults, after the PIN and a `tier2HoldSeconds` pause (90 s in the fixture). Weekly request limit (3). Attestation required. | `emergency.ts` | `src/lib/emergency.ts` | checked |
-| Only a declined check can be appealed, once; the money is held again meanwhile. | `proofs.ts` `appealProof` | `src/lib/verification/pipeline.ts` `appeal` | checked (409 rule) |
+| Emergency money: Tier 1 (Health) vaults first, then Tier 2 vaults in the server's category order (emergency, custom, housing, education, retirement; oldest vault first within a category), after the MPIN and a `tier2HoldSeconds` pause (90 s in the fixture). Weekly request limit (3). Attestation required. Before 2026-11-24 Practice took Tier 2 vaults largest first. | `emergency.ts` `planCascade`, `TIER2_ORDER` | `src/lib/emergency.ts` `planEmergency`, `TIER2_ORDER` | contract (`emergency-tiers.json`) |
+| The preview asks for the MPIN on every tier (`needsPin: true`, as the server says while `MPIN_ENFORCED` is on). Before 2026-11-24 it said so only for Tier 2. | `emergency.ts` `plan` | `src/lib/emergency.ts` `planEmergency` | checked |
+| Only a declined check can be appealed, once; the money is held again meanwhile. | `proofs.ts` `appealProof` | `src/lib/verification/review.ts` `appeal` | checked (409 rule) |
 | A custom vault with its own rule sends every bill to a person. | `proofs.ts` `outcomeFor`, `lib/categories.ts` `covers` | not checked | comment |
-| Wallet payday: last income plus the median gap between incomes; 30 days with no income. | `wallet.ts` `payday` | `src/lib/wallet/plan.ts` | checked |
-| Wallet daily limit: lower or turn on any time; raise or turn off once per 30 days. | `wallet.ts` `walletSettings` | `src/lib/wallet/plan.ts`, `moves.ts` | checked |
-| Wallet money moves need a verified ID (`kyc_required`). | `wallet.ts` `assertCanMove` | not checked | comment |
+| Wallet payday: last income plus the median gap between the last 7 paydays (credits on one day count once); 30 days with no income. Before 2026-11-24 Practice used every income. | `wallet.ts` `paydayFrom` | `src/lib/wallet/plan.ts` `paydayEstimate` | contract (`wallet-maths.json`) |
+| Wallet daily limit: lower or turn on any time; raise or turn off once per 30 days. Safe to spend: wallet less auto-saves due before payday, over the days to payday, capped by the limit left. | `wallet.ts` `walletSettings`, `limitState`, `safeToSpend` | `src/lib/wallet/plan.ts`, `moves.ts` | contract (`wallet-maths.json`) |
+| Money moves need a verified ID (403 `kyc_required`), checked first: withdraw, emergency, Core buys and plans, Satellite allocations, every wallet move (top-up included), vault deposits and a new vault's opening deposit, simulate and sweep. | `identity.ts` `assertPracticeIdVerified` (the wallet's `assertCanMove`) | `src/lib/money-routes.ts` (`kyc`), `src/lib/api.ts` | contract (`money-actions.json`) |
 | Auto-save dates step weekly, biweekly or monthly. | `wallet.ts` `nextRun` | `src/lib/vaults.ts` `nextRun` | checked |
 | Sample checkout prices are scaled per currency. | `pay-sim.ts` `CURRENCY_SCALE` | `src/lib/shared.ts` `CURRENCY_SCALE` (same values) | checked |
-| ID number formats per market. | `lib/api/identity-ids.ts` | `src/lib/kyc/ids.ts` | comment |
+| ID number formats per market. | `lib/api/identity-ids.ts` | `src/lib/kyc/ids.ts` | contract (`id-numbers.json`) |
 | No money moves while a recovery request waits for a person (403 `recovery_restricted`). | `identity.ts` `assertPracticeCanMove` | not checked | comment |
 | A Core buy is paid from the bank and refused when the bank is short. | `invest.ts` `buyCore` | not checked | comment |
-| MPIN policy: 6 digits, no repeated digit, no straight run (with 9 to 0 wrapping), not one of 20 common PINs. | `features/mpin/policy.ts` `checkNewMpin` (shared with screens) | `src/lib/mpin/policy.ts` | checked (list and order) |
+| A Core plan needs the MPIN to start, or for a change that moves more money (`invest_sip`); lowering or stopping it doesn't. | `invest.ts` `setSip`, `lib/invest.ts` `sipNeedsMpin` | `src/lib/invest/sip-rule.ts` | contract (`sip-mpin.json`) |
+| A Satellite allocation needs the MPIN every time (`satellite_opt_in`), then every disclosure, eligibility, the cap (a share of the Core holdings) and the bank balance. | `invest.ts` `satelliteOptIn` | `src/app/api/v1/invest/satellite/opt-in/route.ts`, `src/lib/invest/satellite.ts` `optIn` | checked |
+| MPIN policy: 6 digits, no repeated digit, no straight run (with 9 to 0 wrapping), not one of 20 common PINs. | `features/mpin/policy.ts` `checkNewMpin` (shared with screens) | `src/lib/mpin/policy.ts` | contract (`mpin-policy.json`) |
 | MPIN lock: every 5th wrong try locks for 1 minute, then 5, 30 minutes, then 24 hours; 401 `mpin_required`, 403 `mpin_wrong` with `triesLeft`, 423 `mpin_locked` with `lockedUntil`. | `mpin.ts` `requirePracticeMpin` | `src/lib/mpin/attempts.ts`, `verify.ts` | checked |
-| New-device cap: USD 50 scaled by currency and rounded to a whole unit, per move out, checked before the MPIN, for 24 hours after first seen, unless trusted; 403 `device_untrusted` with `trustableAt`. Trusted means trusted with a code and the MPIN, or 24 hours after first seen, never when signed out; a device first seen after a sign-out never trusts itself. | `devices.ts` `assertPracticeDeviceCap`, `practiceTrusted`, `untrustedCapFor` | `src/lib/devices/rules.ts` (`isTrusted`, `untrustedMoveCap`), `service.ts` | checked |
+| New-device cap: USD 50 scaled by currency and rounded to a whole unit, per move out, checked before the MPIN, for 24 hours after first seen, unless trusted; 403 `device_untrusted` with `trustableAt`. Trusted means trusted with a code and the MPIN, or 24 hours after first seen, never when signed out; a device first seen after a sign-out never trusts itself. | `devices.ts` `assertPracticeDeviceCap`, `practiceTrusted`, `untrustedCapFor` | `src/lib/devices/rules.ts` (`isTrusted`, `untrustedMoveCap`), `service.ts` | contract (`untrusted-cap.json`, `device-trust.json`) |
 | Codes: 6 digits, 5 minutes, 3 tries, 5 sends an hour, newer code replaces older, single-use 10-minute tokens; an untrusted phone can't change the number or reset the MPIN. | `devices.ts` `devicesDemo` | `src/lib/otp/service.ts`, `src/lib/otp/config.ts` | checked |
 | Phone number: keeping one needs the MPIN (`phone_change`; a wrong MPIN keeps the token); a number added or changed in the last 72 hours can't reset the MPIN (403 `phone_recently_changed` with `allowedAt`). Checks in the server's order: a trusted phone and the hold, then the number, then the send limits. | `devices.ts` | `src/app/api/v1/me/phone/route.ts`, `src/lib/otp/phone.ts` | comment |
 | Trusting checks the MPIN, then the token; signing out checks the MPIN first and records the account's last sign-out. | `devices.ts` | `src/app/api/v1/devices/**`, `src/lib/devices/service.ts` | comment |
@@ -192,8 +203,10 @@ is added.
 - The simulator's MPIN starts as `PRACTICE_PIN` (`"246810"`, which passes the MPIN policy; the old
   `1234` is gone). `requirePracticeMpin()` checks it on every money move out: withdraw, limit
   raises, wallet spend, cash out, move and daily-limit raise or turn-off, emergency (every tier),
-  Core buy, checkout confirm, trusting this phone and signing a device out. Wrong tries lock money
-  moves like the server ([mpin.md](mpin.md#on-the-phone)).
+  Core buy, starting a Core plan or changing it to move more money, every Satellite allocation,
+  checkout confirm, trusting this phone and signing a device out. Wrong tries lock money moves like
+  the server ([mpin.md](mpin.md#on-the-phone)). Money in from the bank (deposits, top-ups, simulate,
+  sweep) needs a verified ID and no MPIN, as on the server.
 - Change MPIN in Practice changes the simulator's MPIN (with the same policy) and the phone's
   unlock PIN. `/me` reports `mpin.practiceDefault` while it is still `246810`; MPIN screens show
   "Practice MPIN: 246810" only then. An MPIN typed for a Practice money move never becomes the
@@ -266,7 +279,7 @@ it. Slices load in the order they registered.
 
 | Slice | Registered in | Holds | Stored |
 |---|---|---|---|
-| `state` | `state.ts` | `S`: vaults, histories, withdrawals, limits, emergency, wallet, identity (with the ID steps), activity. The person's name and email are replaced by the sample ones, and names typed on vault members by blanks. | Bulk: `vw.bulk.practice` (AsyncStorage on phones, localStorage on the web) |
+| `state` | `state.ts` | `S`: vaults, histories, withdrawals, limits, emergency, investing (the plan, buys and Satellite allocations), wallet, identity (with the ID steps), activity. The person's name and email are replaced by the sample ones, and names typed on vault members by blanks. | Bulk: `vw.bulk.practice` (AsyncStorage on phones, localStorage on the web) |
 | `person` | `state.ts` (after `state`, so it loads over it) | The typed name and email, and names typed on vault members | Secure: `vw.practice.person` |
 | `proofs` | `proofs.ts` | Proof checks | Bulk |
 | `checkouts` | `settle.ts` | Pay with Vaultwise checkouts | Bulk |
@@ -312,14 +325,27 @@ it. Slices load in the order they registered.
 
 ## Tests
 
-There are no automated tests for the simulator. `mobile/package.json` has no test script and no
-test files exist under `mobile/`. Two things guard it today:
+Jest with `jest-expo` (`cd mobile && npm test`, since 2026-11-24). Tests sit in a `__tests__` folder
+next to the code, named `<what>.test.ts`; [`mobile/src/test/`](../../mobile/src/test) holds the setup
+(`setup.ts`: in-memory AsyncStorage and secure store, so the Practice save runs for real) and helpers
+(`practice.ts`: `settle()` runs a Practice call to the end under fake timers; `contract.ts` reads the
+shared vectors). See [mobile/README.md](../../mobile/README.md#checks).
 
-- `satisfies Api` at the end of `demo/index.ts`: `npm run typecheck` fails if a method is missing
-  or its signature drifts from the live client.
-- The server's own tests in `tests/` (for example `emergency.test.ts`, `limits.test.ts`,
-  `vaults.test.ts`, `wallet.test.ts`, `kyc.test.ts`, `recovery.test.ts`) cover the server rules the
-  simulator copies. They do not run the simulator.
+| File (in `lib/api/demo/__tests__/` unless said) | What it covers |
+|---|---|
+| `persist.test.ts` | Restoring a save (none, good, secure part from another version, a sensitive slice moved out of an older bulk save); `savingAfterEachCall` keeps each result and saves soon after |
+| `devices.test.ts` | The untrusted-phone cap per currency; trust after 24 hours, never after a sign-out; trusting with the number, a code and the MPIN in the server's order; no MPIN reset from an untrusted phone |
+| `invest.test.ts` | Core plan MPIN rule (raise, weekly, stop and restart, bad amount before the MPIN, ID first); Satellite allocations (the cap from Core holdings, the MPIN before its own checks, the money moving from the bank, ID first) |
+| `contract-money-actions.test.ts` | Calls every Practice money move without the MPIN, unverified, and over the cap on a new phone, and expects `mpin_required`, `kyc_required` and `device_untrusted` exactly where the server's `MONEY_ROUTES` says, in its order. Practice's Delete account is the one exemption. |
+| `contract-emergency-tiers.test.ts`, `contract-wallet-maths.test.ts`, `contract-devices.test.ts` | `planCascade`; `paydayFrom`, `limitState`, `safeToSpend`; the cap and trust rules, against the server's vectors |
+| `features/mpin/__tests__/`, `lib/__tests__/`, `lib/api/__tests__/`, `features/protection/__tests__/` | The MPIN policy and errors, `lib/invest.ts`, ID numbers and API errors, the protection module (each with its contract file where the rule lives twice) |
+| `src/test/__tests__/contract-coverage.test.ts` | Fails on a vector file in `tests/contract/vectors/` with no phone runner |
+
+The contract vectors in [`tests/contract/vectors/`](../../tests/contract/README.md) are the same files
+the server's `npx vitest run tests/contract` reads: change a rule, change its vector, and both suites
+must pass. `satisfies Api` at the end of `demo/index.ts` still makes `npm run typecheck` fail if a
+method is missing or its signature drifts from the live client. Not covered yet: the emergency
+guardrails (cap, requests per week, cooling-off), proof outcomes, checkouts, and the screens.
 
 ## Known limits
 
@@ -332,8 +358,9 @@ test files exist under `mobile/`. Two things guard it today:
   back, because neither rolls over with the calendar.
 - `assertPracticeCanMove` (the read-only recovery rule) is not called by `updateVault`,
   `cancelWithdrawal`, `setLimits`, `cancelSip`, `appeal` or `emergencyReceipt`.
-- Portfolio, Satellite, accounts, insight and badges are static. `simulate` and `sweep` do nothing.
-  No scheduled saves or Core plan buys ever run.
+- Accounts, insight and badges are static; the portfolio and the Satellite overview change only
+  with this session's Satellite allocations (the paper engine never runs). `simulate` and `sweep`
+  check the ID gate and then do nothing. No scheduled saves or Core plan buys ever run.
 - The assistant answers from four keyword patterns, or says it is in demo mode.
 - The Practice `/me` is always onboarded, so Welcome and onboarding never open on Practice data.
 - `currency` in `state.ts` is read once from `me.json` when the module loads.
@@ -366,5 +393,8 @@ test files exist under `mobile/`. Two things guard it today:
   product-wide "no real money" label (`PracticeBadge`), and the Invest tab's paper-trading view
   (`features/invest/practice`). UI copy still says "Demo data" on Data source, while PIN screens now
   say "Practice MPIN".
-- **Pure functions make good first tests.** `outcomeFor`, `payday`, the emergency `plan`, `stepFor`
-  in tab-swipe, `startPayment`, `requirePracticeMpin` and `assertPracticeDeviceCap` need no device.
+- **Pure functions are what the tests reach.** `paydayFrom`, `limitState`, `safeToSpend` and
+  `planCascade` were pulled out so the contract tests could call them. Next candidates: `outcomeFor`,
+  `stepFor` in tab-swipe and `startPayment`.
+- **A rule that lives twice gets a vector.** When Practice copies a server rule, add it to
+  `tests/contract/vectors/` with both runners ([tests/contract/README.md](../../tests/contract/README.md)).

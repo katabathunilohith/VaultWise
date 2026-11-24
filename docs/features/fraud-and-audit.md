@@ -1,6 +1,6 @@
 # Fraud signals and the audit log
 
-> A rule-based risk score and open/resolve fraud flags for the ops team, plus an append-only, SHA-256 hash-chained log of every state change that anyone can re-verify from the first row.
+> A rule-based risk score and open/resolve fraud flags for the ops team, plus an append-only, SHA-256 hash-chained log of every state change that anyone can re-verify from the first row, with copies of its head kept outside the database.
 
 **Status:** built (server and web ops console; the phone reads only the customer's own audit rows) · **Switch:** always on (who may read ops data depends on `FIREBASE_PROJECT_ID` and `ADMIN_EMAILS`)
 
@@ -13,6 +13,7 @@
 - Chains each audit row to the one before it with SHA-256, so editing any old row breaks every hash after it.
 - Blocks `UPDATE` and `DELETE` on the log with database triggers.
 - Re-hashes the whole chain on demand and shows the result in the ops console.
+- Writes **audit anchors**, copies of the chain's head, to a file outside the database and to the server log, at every start and once a day. `npm run audit:verify` checks the chain against them, so a chain someone rebuilt after an anchor no longer passes (security review gap 15, 2026-11-24).
 
 ## How it works
 
@@ -42,14 +43,14 @@ Flags never block anything by themselves. Open flags feed back in two places: 5 
 
 | Source | Trigger | Severity | Score | Code |
 | --- | --- | --- | --- | --- |
-| `emergency` | Request blocked by the 7-day velocity limit | medium | 70 | [emergency.ts:275](../../src/lib/emergency.ts) |
-| `emergency` | Released or held request with risk score 60+ | medium, high at 80+ | the risk score | [emergency.ts:343](../../src/lib/emergency.ts) |
-| `emergency` | Requested receipt passed its due date (tick) | low | 40 | [emergency.ts:402](../../src/lib/emergency.ts) |
-| `emergency` | Post-hoc receipt denied by the model or a reviewer | medium | 65 | [pipeline.ts:805](../../src/lib/verification/pipeline.ts) |
-| `proof_verification` | Each forensic finding: exact or content duplicate, editing software, totals mismatch, ELA inconsistency, capture time before document date, strong tamper evidence | from the finding | high 85, medium 60, low 35 | [pipeline.ts:753](../../src/lib/verification/pipeline.ts) |
-| `limits` | Emergency limit request denied with scam risk 0.6+ | high | scam risk × 100 | [limits.ts:545](../../src/lib/limits.ts) |
-| `limits` | Request text tried to instruct the AI assessor | medium | 60 | [limits.ts:554](../../src/lib/limits.ts) |
-| `limits` | Scam risk 0.6+ but not denied | medium | scam risk × 100 | [limits.ts:563](../../src/lib/limits.ts) |
+| `emergency` | Request blocked by the 7-day velocity limit | medium | 70 | [emergency.ts](../../src/lib/emergency.ts) `executeEmergency()` |
+| `emergency` | Released or held request with risk score 60+ | medium, high at 80+ | the risk score | [emergency.ts](../../src/lib/emergency.ts) `executeEmergency()` |
+| `emergency` | Requested receipt passed its due date (tick) | low | 40 | [emergency.ts](../../src/lib/emergency.ts) `settleEmergencies()` |
+| `emergency` | Post-hoc receipt denied by the model or a reviewer | medium | 65 | [persistence.ts](../../src/lib/verification/persistence.ts) `applyOutcome()` |
+| `proof_verification` | Each finding the stages add to the run: exact or content duplicate, editing software, totals mismatch, ELA inconsistency, capture time before document date, strong tamper evidence | from the finding | high 85, medium 60, low 35 | collected by the stages in [stages/](../../src/lib/verification/stages/), raised by `recordOutcome()` in [persistence.ts](../../src/lib/verification/persistence.ts) |
+| `limits` | Emergency limit request denied with scam risk 0.6+ | high | scam risk × 100 | [limits/emergency-request.ts](../../src/lib/limits/emergency-request.ts) `flagRisk()` |
+| `limits` | Request text tried to instruct the AI assessor | medium | 60 | [limits/emergency-request.ts](../../src/lib/limits/emergency-request.ts) `flagRisk()` |
+| `limits` | Scam risk 0.6+ but not denied | medium | scam risk × 100 | [limits/emergency-request.ts](../../src/lib/limits/emergency-request.ts) `flagRisk()` |
 
 The proof findings are explained in [proof-verification.md](proof-verification.md).
 
@@ -62,7 +63,7 @@ The proof findings are explained in [proof-verification.md](proof-verification.m
 3. `hash = sha256(prev_hash + canonical)` in hex.
 4. Insert the row with `prev_hash` and `hash`.
 
-`verifyAuditChain()` reads every row in `id` order, recomputes each hash from the previous one and returns `{ ok, checked, brokenAt, headHash }`. `brokenAt` is the id of the first row whose `prev_hash` or `hash` does not match.
+`verifyAuditChain()` reads every row in `id` order and hands them to `walkAuditRows()`, which recomputes each hash from the previous one and returns `{ ok, checked, brokenAt, headHash }`. `brokenAt` is the id of the first row whose `prev_hash` or `hash` does not match. `walkAuditRows()` is pure (no database), so the offline checker below walks a copy with exactly the same rule.
 
 ```mermaid
 flowchart LR
@@ -72,7 +73,26 @@ flowchart LR
   R3 --> V{{"verifyAuditChain: recompute from genesis"}}
 ```
 
-`audit()` uses the same SQLite connection as the caller. Inside `tx()` the row commits or rolls back with the rest of the change, so the log never claims a change that did not happen. The flip side: a row written just before a thrown error is lost (see Known limits).
+`audit()` uses the same SQLite connection as the caller. Inside `tx()` the row commits or rolls back with the rest of the change, so the log never claims a change that did not happen. The flip side: a row written just before a thrown error is lost, so failure records are written outside the transaction (the MPIN check, for example, refuses to run inside one).
+
+### Audit anchors
+
+The chain shows an edit to any row, but someone who can rewrite the database file could drop the triggers and recompute every hash. An **anchor** is an earlier copy of the chain's head kept outside the database, so a rebuilt chain no longer matches it. Module: [src/lib/audit-anchors/](../../src/lib/audit-anchors/README.md) (security review gap 15, built 2026-11-24).
+
+1. **An anchor** is one JSON line, `{ "ts": <ms>, "lastId": <newest audit row id>, "headHash": <its hash>, "count": <rows> }`, from `auditHead()` in [audit.ts](../../src/lib/audit.ts) (`lastId` 0, `headHash` = `GENESIS` and `count` 0 while the log is empty). `anchorAuditChain()` appends it to the anchors file (`AUDIT_ANCHOR_FILE`, default `<VAULTWISE_DATA_DIR>/audit-anchors.jsonl`) and prints the same line to stdout as `[vaultwise] audit_anchor {...}`, so systemd's journal keeps a second copy. The nightly backup keeps a third.
+2. **When.** Once at every server start (`register()` in [src/instrumentation.ts](../../src/instrumentation.ts) → `anchorAuditOnStartup()`), and once a day from the lazy scheduler (`anchorAuditIfDue(now)` in `tick()`, [scheduler.ts](../../src/lib/scheduler.ts): due when the newest anchor is 24 hours old, `ANCHOR_EVERY_MS`, or there is none). Neither ever throws: a failure is logged as `[vaultwise] audit_anchor_failed` and the request or start-up goes on.
+3. **Checking.** `npm run audit:verify` ([scripts/audit-verify.mjs](../../scripts/audit-verify.mjs) → `auditVerify()` in [cli.ts](../../src/lib/audit-anchors/cli.ts)) opens the database read-only, re-walks every hash with `walkAuditRows()`, then checks every anchor with `checkAnchors()`: the anchored row still exists with the same hash, there are exactly `count` rows up to it, and anchors never go backwards. `--db <file>` and `--anchors <file>` check another copy (a backup, or lines copied from the journal: anything before `audit_anchor ` on a line is ignored). Exit 0 = intact; 1 = any mismatch, an unreadable line, a missing file or a file with no anchors; 2 = it couldn't run (bad option, no database). It needs Node 22.18 or later (it runs the app's TypeScript with Node's type stripping).
+4. **Backups.** `deploy/backup.sh` copies the anchors file **before** the database, so every anchor in the copy names a row the database copy also has, then checks the newest anchor's hash against the copied database and fails the run (keeping the backup) on a mismatch. After a restore, put back the anchors file from the same backup (`deploy/restore.md`).
+
+```mermaid
+flowchart LR
+  A["audit_log head<br/>(auditHead)"] -->|start-up, then daily| F["audit-anchors.jsonl"]
+  A -->|same line| J["systemd journal"]
+  F -->|nightly, before the DB| B["backup folder / S3"]
+  F & J & B --> V{{"npm run audit:verify<br/>walkAuditRows + checkAnchors"}}
+```
+
+Anchors don't stop someone with root on the server from editing every copy on that server; the journal, an S3 copy and a check run on another machine against a downloaded backup are what make that hard.
 
 ### What gets audited
 
@@ -80,14 +100,14 @@ Action names are `<area>.<event>`. Every ledger journal is audited as `ledger.<k
 
 | Area | Actions | Written by |
 | --- | --- | --- |
-| Emergency | `emergency.attested`, `emergency.blocked`, `emergency.pin_failed` (rolled back, see below) | [emergency.ts](../../src/lib/emergency.ts) |
+| Emergency | `emergency.attested`, `emergency.blocked` (a wrong MPIN is audited by the MPIN module as `mpin.failed`) | [emergency.ts](../../src/lib/emergency.ts) |
 | Fraud | `fraud.flag_raised`, `fraud.flag_resolved`, `fraud.flag_dismissed` | [fraud.ts](../../src/lib/fraud.ts) |
 | Ledger | `ledger.<kind>` (for example `ledger.emergency`, `ledger.withdrawal`, `ledger.income`) with memo and legs | [ledger.ts](../../src/lib/ledger.ts) |
 | Vaults | `vault.created`, `vault.updated`, `contribution.missed`, `withdrawal.requested`, `withdrawal.cancelled`, `withdrawal.expired` | [vaults.ts](../../src/lib/vaults.ts), [vaults/[id]/route.ts](../../src/app/api/v1/vaults/[id]/route.ts) |
-| Proofs | `proof.uploaded`, `verification.<auto_approved\|auto_denied\|human_review>`, `verification.error`, `verification.reviewed.<approved\|denied>`, `verification.appealed` | [pipeline.ts](../../src/lib/verification/pipeline.ts) |
-| Limits | `limits.<kind>`, `limits.emergency_<decision>`, `limits.emergency_expired`, `limits.reviewed_<decision>` | [limits.ts](../../src/lib/limits.ts) |
+| Proofs | `proof.uploaded`, `verification.<auto_approved\|auto_denied\|human_review>`, `verification.error`, `verification.reviewed.<approved\|denied>`, `verification.appealed` | [verification/proofs.ts](../../src/lib/verification/proofs.ts), [persistence.ts](../../src/lib/verification/persistence.ts), [review.ts](../../src/lib/verification/review.ts) |
+| Limits | `limits.<kind>`, `limits.emergency_<decision>`, `limits.emergency_expired`, `limits.reviewed_<decision>` (stamped with the decision time since 2026-11-24) | [limits/](../../src/lib/limits/README.md) `change.ts`, `emergency-request.ts`, `expiry.ts`, `review.ts` |
 | Investing | `invest.risk_profiled`, `invest.core_buy`, `invest.sip_configured`, `invest.sip_paused`, `invest.sip_missed`, `satellite.*`, `strategy.gate_passed`, `strategy.gate_failed` | [invest/](../../src/lib/invest/) |
-| Wallet | `wallet.topped_up`, `wallet.moved_to_vault`, `wallet.spent`, `wallet.cashed_out`, `wallet.settings_changed`, `contribution.missed` | [wallet/moves.ts](../../src/lib/wallet/moves.ts) |
+| Wallet | `wallet.topped_up`, `wallet.moved_to_vault`, `wallet.spent`, `wallet.cashed_out` (each beside the ledger's own `ledger.<kind>` row), `wallet.settings_changed`, `contribution.missed` | [wallet/moves.ts](../../src/lib/wallet/moves.ts) |
 | Account and privacy | `user.onboarded`, `user.updated`, `privacy.data_exported`, `demo.seeded` | [users.ts](../../src/lib/users.ts), [me/](../../src/app/api/v1/me/), [seed.ts](../../src/lib/seed.ts) |
 | Identity | `kyc.*`, `identity.bound`, `user.closed`, `recovery.*`, `notice.*` | See [identity.md](identity.md) |
 
@@ -124,7 +144,11 @@ The customer's own trail is [src/app/activity/page.tsx](../../src/app/activity/p
 | File | What it holds | Key exports |
 | --- | --- | --- |
 | [src/lib/fraud.ts](../../src/lib/fraud.ts) | Flags and the emergency risk score | `raiseFlag()` open a flag and audit it; `listFlags()` by status or latest 200; `resolveFlag()` close with a reason; `emergencyRiskScore()` 0-100 with features; type `FraudFlag` |
-| [src/lib/audit.ts](../../src/lib/audit.ts) | Hash-chained log | `audit()` append a row; `verifyAuditChain()` re-hash from genesis; types `AuditRow`, `ActorType` |
+| [src/lib/audit.ts](../../src/lib/audit.ts) | Hash-chained log | `audit()` append a row; `verifyAuditChain()` re-hash from genesis; `walkAuditRows()` the pure walk (shared with the checker); `auditHead()` last id, hash and count; `GENESIS`; types `AuditRow`, `ActorType` |
+| [src/lib/audit-anchors/](../../src/lib/audit-anchors/README.md) | Anchors outside the database and their checker | `anchorFile()`, `ANCHOR_EVERY_MS`, `LOG_MARKER` (config.ts); `anchorAuditChain()`, `anchorAuditIfDue()`, `anchorAuditOnStartup()`, `lastAnchorAt()` (anchor.ts); `parseAnchors()`, `checkAnchors()` pure (check.ts); `auditVerify()` (cli.ts) |
+| [scripts/audit-verify.mjs](../../scripts/audit-verify.mjs) | `npm run audit:verify` entry point | runs `cli.ts` with Node's type stripping and a resolve hook for `@/` imports |
+| [src/instrumentation.ts](../../src/instrumentation.ts), [instrumentation-node.ts](../../src/instrumentation-node.ts) | Start-up | one anchor per start (`anchorAuditAtStartup()`) |
+| [deploy/backup.sh](../../deploy/backup.sh) | Nightly backup | copies the anchors before the database; checks the newest anchor against the copy |
 | [src/lib/db.ts](../../src/lib/db.ts) | Tables and triggers | `audit_log`, `fraud_flags`, `audit_no_update`, `audit_no_delete`; `tx()` nested transactions; `destroyDatabase()` |
 | [src/lib/api.ts](../../src/lib/api.ts) | Route access helpers | `admin()` ops gate; `REVIEWER` default reviewer name |
 | [src/app/api/v1/audit/[userId]/route.ts](../../src/app/api/v1/audit/[userId]/route.ts) | Ops audit query | `GET` with `limit` and `action` prefix |
@@ -171,6 +195,8 @@ There is no route that lists flags alone; the overview carries them. See [docs/r
 
 **`fraud_flags`**: `id` (`flg_…`), `user_id`, `source`, `ref_id` (an `emg_`, `prf_` or limit-change id), `severity` (`low`, `medium`, `high`), `score`, `description`, `status` (`open`, `resolved`, `dismissed`), `resolution`, `created_at`, `resolved_at`.
 
+**Anchors file** (not a table): `audit-anchors.jsonl`, one `{ ts, lastId, headHash, count }` JSON line per anchor, created with mode 0640, appended only. It holds no personal data.
+
 Risk-score inputs: `emergency_requests`, `ledger_entries` joined to `accounts` (kind `vault`), `users.created_at`, `fraud_flags`.
 
 **Phone:** no storage keys; the Activity query key is `["activity"]`.
@@ -183,14 +209,15 @@ Risk-score inputs: `emergency_requests`, `ledger_entries` joined to `accounts` (
 | Requests in the last 72 hours (including blocked) | 12 each, up to 25 |
 | Amount vs average positive vault ledger entry | `3 × log2(amount ÷ average)`, 0 to 15; 5 if there are no vault credits |
 | Account tenure | 15 under 14 days, 6 under 60 days, else 0 |
-| `requested` or `rejected` receipts past due | 15 each, up to 25 |
+| Receipts still owed (`requested`, `overdue` or `rejected`, `RECEIPT_STILL_OWED`) past due | 15 each, up to 25 |
 | Open flags for the user | 5 each, up to 15 |
 
 The weights are hand-set; the code comment says production would fit them on labelled outcomes.
 
 | Rule | Value |
 | --- | --- |
-| Hash | SHA-256 over `prev_hash` + canonical JSON; genesis is 64 zeros |
+| Hash | SHA-256 over `prev_hash` + canonical JSON; genesis is 64 zeros (`GENESIS`) |
+| Audit anchors | One per server start and one a day (`ANCHOR_EVERY_MS` = 24 hours); appended, never rewritten |
 | Flag list in the overview | Latest 200, any status; `listFlags(status)` returns all of that status |
 | Ops console global log | Last 60 rows |
 | Resolution text | 3 to 300 characters after trimming |
@@ -201,7 +228,8 @@ The weights are hand-set; the code comment says production would fit them on lab
 | --- | --- |
 | `FIREBASE_PROJECT_ID` | Unset: prototype mode, ops routes open to anyone who can reach the server. Set: sign-in required |
 | `ADMIN_EMAILS` | Comma list of verified emails allowed on ops routes in firebase mode |
-| `VAULTWISE_DATA_DIR` | Folder of the SQLite file that holds the log and flags |
+| `VAULTWISE_DATA_DIR` | Folder of the SQLite file that holds the log and flags, and of the default anchors file |
+| `AUDIT_ANCHOR_FILE` | Where anchors are appended (default `<VAULTWISE_DATA_DIR>/audit-anchors.jsonl`). On the server it must stay inside the service's `ReadWritePaths`, and `deploy/backup.sh` needs the same value |
 
 Risk weights and thresholds are code constants in [fraud.ts](../../src/lib/fraud.ts) and [emergency.ts](../../src/lib/emergency.ts).
 
@@ -212,26 +240,28 @@ Risk weights and thresholds are code constants in [fraud.ts](../../src/lib/fraud
 | [tests/ledger.test.ts](../../tests/ledger.test.ts) ("hash-chained audit log") | An intact chain verifies; a row edited after dropping the trigger is detected with `brokenAt` set |
 | [tests/scheduler.test.ts](../../tests/scheduler.test.ts) | Overdue receipt raises one `emergency` flag, not a duplicate on the next tick |
 | [tests/limits.test.ts](../../tests/limits.test.ts) | Scam-shaped limit request raises a `high` `limits` flag |
+| [tests/audit-anchors.test.ts](../../tests/audit-anchors.test.ts) | An anchor is appended and printed; due once a day, read back from the file after a restart; runs from `tick()`; never breaks the caller when the file can't be written; `checkAnchors()` catches a changed hash, a missing row, a wrong count and anchors going backwards; `npm run audit:verify` passes an intact chain from a read-only copy, fails a chain rebuilt after an anchor, an edited chain, an unreadable or missing anchors file, and says when it can't run |
+| [tests/deploy.test.ts](../../tests/deploy.test.ts) | `backup.sh` copies the anchors before the database |
 | [scripts/e2e.mjs](../../scripts/e2e.mjs) | Chain intact after the full run; head hash unchanged across a server restart; export includes the audit log |
 
 [tests/fraud.test.ts](../../tests/fraud.test.ts) covers closing a flag once, recording its user and refusing unknown or closed flags; [tests/emergency.test.ts](../../tests/emergency.test.ts) checks an overdue receipt still scores. Not covered: `listFlags()`, the other risk-score feature values, the audit and flag routes, and the `UPDATE`/`DELETE` triggers on `audit_log` directly.
 
 ## Known limits and open issues
 
-- **Failure records roll back.** `emergency.pin_failed` is written inside the emergency transaction and then a 403 is thrown, so the row is lost. A probe confirmed zero rows.
-- **Tamper-evident, not tamper-proof.** The hash has no secret key and the head hash is not published or signed anywhere. Someone who can write the database file can drop the triggers and recompute every hash.
+- **Failure records must be written outside a transaction.** A row written inside `tx()` just before a thrown error is lost. The old `emergency.pin_failed` row had that bug (maintainability B1); the MPIN check now refuses to run inside a transaction.
+- **Tamper-evident, not tamper-proof.** The hash has no secret key. Someone who can write the database file can drop the triggers and recompute every hash; since 2026-11-24 the anchors catch that for any change older than the newest anchor (up to a day, or since the last start), but not edits made since then, and not someone with root who also edits every anchor copy on the server. The head is not signed or published off the server, except through the backup's optional S3 copy.
 - **Prototype reset wipes the log.** `POST /api/v1/reset` deletes the database file in prototype mode. Firebase mode closes the account and keeps the data.
 - **Customers see flag details.** `fraud.flag_raised` rows carry the user id, so `/activity` and the export show the customer the severity, score and description of flags about them. Not confirmed whether this is intended.
 - **Flags use wall-clock time.** `raiseFlag()` uses `Date.now()`, not the caller's `now`, so flags raised in simulated time (tests, seed) get today's date.
 - **Full re-hash on every read.** `verifyAuditChain()` reads the whole table. The ops page triggers it twice on load (overview and `audit/all`) and again every 20 seconds.
 - **Single-writer assumption.** `audit()` reads the head and inserts in two statements. With the synchronous `node:sqlite` driver nothing interleaves inside one process; several processes writing one file could fork the chain. Not confirmed how production would run.
-- **Audit route input.** `limit` is not validated: `-1` means no limit in SQLite. The `action` prefix is used in `LIKE` without escaping `%` or `_`.
+- **Audit route input.** The `action` prefix is used in `LIKE` without escaping `%` or `_`. (`limit` is checked by `limitParam()` since 22 November.)
 
 ## Maintainability notes
 
 - **Good seams.** `audit()` is one small function with a stable signature used by more than 60 call sites in `src/`. `verifyAuditChain()` is pure apart from the read, which makes the tamper test simple. `raiseFlag()` hides the table from callers.
 - **DIP / testing.** `raiseFlag()` reads the clock directly; `resolveFlag()` takes an optional `now`. Passing `ts` to `raiseFlag()` too would make flag times testable.
 - **SRP.** `emergencyRiskScore()` lives in the general fraud module but is emergency-specific and runs six queries. Splitting feature extraction from weighting would let other areas reuse the scoring shape.
-- **Coupling.** Receipt status names (`requested`, `overdue`, `rejected`) are matched as raw strings in [fraud.ts](../../src/lib/fraud.ts), [emergency.ts](../../src/lib/emergency.ts) and [pipeline.ts](../../src/lib/verification/pipeline.ts); the overdue bug comes from that.
-- **Duplication.** The open-flag count query is repeated in [limits.ts](../../src/lib/limits.ts). The audit row type is declared again inline in the audit route and the activity route instead of reusing `AuditRow`.
+- **Coupling.** The risk score reads the receipts still owed from one constant, `RECEIPT_STILL_OWED` in [shared.ts](../../src/lib/shared.ts) (the fix for the overdue bug, B2), but other receipt status names are still raw strings in [emergency.ts](../../src/lib/emergency.ts) and [verification/persistence.ts](../../src/lib/verification/persistence.ts).
+- **Duplication.** The open-flag count query is repeated in `accountFacts()` ([limits/assess.ts](../../src/lib/limits/assess.ts)). The audit row type is declared again inline in the audit route and the activity route instead of reusing `AuditRow`.
 - **OCP.** Flag `source` values are free strings. A small union type would let the console add per-source links (it only links `prf_` today).

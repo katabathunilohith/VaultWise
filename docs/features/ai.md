@@ -68,9 +68,9 @@ An `AiError` that reaches a route becomes HTTP 503 with "AI is unavailable right
 
 | Use | Code | Model and settings | Consent check | Fallback |
 |---|---|---|---|---|
-| Bills and receipts | `runPipeline()` extract stage in [pipeline.ts](../../src/lib/verification/pipeline.ts) | vision, temp 0, 900 tokens, 60 s | `proofs.ai_allowed` (captured at upload) | Stage skipped or failed → `human_review`. See [proof-verification.md](proof-verification.md) |
+| Bills and receipts | `runAiRead()`, the extract stage, in [stages/ai-read.ts](../../src/lib/verification/stages/ai-read.ts) (run by `runPipeline()`; `setBillReader()` swaps the model in tests and the evaluation) | vision, temp 0, 900 tokens, 60 s | `proofs.ai_allowed` (captured at upload) | Stage skipped or failed → `human_review`. See [proof-verification.md](proof-verification.md) |
 | ID cards (KYC, recovery) | `visionExtractor()` in [kyc/extract.ts](../../src/lib/kyc/extract.ts), called by `analyseId()` in [kyc/analyse.ts](../../src/lib/kyc/analyse.ts) | vision, temp 0, 400 tokens, 45 s | `aiConsented()` | `clean = false`, a person reads the card. See [src/lib/kyc/README.md](../../src/lib/kyc/README.md) |
-| Emergency limit requests | `requestEmergencyLimitChange()` in [limits.ts](../../src/lib/limits.ts) | vision if a document is attached, else text; temp 0, 700 tokens, 45 s | `aiConsented()` | `decideLimitRequest(null)` → `in_review` (or `denied` on strong scam phrases) |
+| Emergency limit requests | `requestEmergencyLimitChange()` in [limits/emergency-request.ts](../../src/lib/limits/emergency-request.ts), which asks the model through `assessWithModel()` ([limits/assess.ts](../../src/lib/limits/assess.ts)) | vision if a document is attached, else text; temp 0, 700 tokens, 45 s | `aiConsented()` | `decideLimitRequest(null)` → `in_review` (or `denied` on strong scam phrases) |
 | Weekly insight | `weeklyInsight()` in [engagement.ts](../../src/lib/engagement.ts) | text, temp 0.6, 400 tokens, 30 s | `aiConsented()` | Rule-based headline, body and tip (`source: "rules"`) |
 | Assistant | `POST` in [api/v1/assistant/route.ts](../../src/app/api/v1/assistant/route.ts) | text, streamed, temp 0.4, 700 tokens | `aiConsented()`, checked first: 403 `ai_consent_required` without a yes | 503 without a key |
 
@@ -141,7 +141,7 @@ The person is asked "Can an AI read what you send?" before the first bill, recei
 | [src/lib/engagement.ts](../../src/lib/engagement.ts) | Snapshot, weekly insight, nudges, badges | `snapshot()` assistant context · `weeklyInsight()` cached tip |
 | [src/lib/kyc/extract.ts](../../src/lib/kyc/extract.ts) | ID card reader | `visionExtractor()` · `IdExtractor` |
 | [src/lib/kyc/analyse.ts](../../src/lib/kyc/analyse.ts) | ID checks around the reader | `analyseId()` · `setIdExtractor()` test seam |
-| [src/lib/limits.ts](../../src/lib/limits.ts) | Emergency limit assessment | `requestEmergencyLimitChange()` · `decideLimitRequest()` policy · `screenText()` deterministic screen |
+| [src/lib/limits/](../../src/lib/limits/README.md) | Emergency limit assessment | `requestEmergencyLimitChange()` (`emergency-request.ts`) · `assessWithModel()` prompt and model call (`assess.ts`) · `decideLimitRequest()` policy (`policy.ts`) · `screenText()` deterministic screen (`screen.ts`) |
 | [src/app/api/v1/assistant/route.ts](../../src/app/api/v1/assistant/route.ts) | Assistant prompt and stream | `POST` |
 | [src/app/api/v1/insight/route.ts](../../src/app/api/v1/insight/route.ts) | Weekly insight | `GET` |
 | [src/app/api/v1/me/route.ts](../../src/app/api/v1/me/route.ts) | Tells clients if AI is on | `GET` → `aiEnabled` |
@@ -189,7 +189,7 @@ Bill, ID and limit endpoints are documented with their features.
 | `proofs` | `ai_allowed`, `extracted` (model JSON) |
 | `ai_cache` | `key` (`insight:{userId}:{day}`), `created_at`, `payload` |
 | `limit_changes` | `assessment` (scores, `aiError`, screen), `model` |
-| `audit_log` | model actor names, e.g. `vw-proof@1.4` or the limit model name |
+| `audit_log` | model actor names, e.g. `vw-proof@1.5` or the limit model name |
 
 Phone storage keys: see the consent section above.
 

@@ -50,6 +50,8 @@ Routes in `src/app/api/v1/<name>/` call `customer()` or `admin()`, validate with
 | Clear your module's data on Delete account | `onDeviceReset()` | `mobile/src/lib/storage.ts` |
 | Ask the person something before an action | an imperative `ensureX()` that opens a sheet route | `mobile/src/features/ai-consent/ask.ts` |
 | Swap an external provider | an interface plus a registry | `src/lib/kyc/types.ts`, `src/lib/kyc/service.ts` |
+| Swap an outside service in tests (no network) | a `setX()` override that `null` resets | `setPriceProvider()` (`src/lib/invest/prices.ts`), `setBillReader()` (`src/lib/verification/stages/ai-read.ts`), `setIdExtractor()` (`src/lib/kyc/analyse.ts`) |
+| Make a route a money move (MPIN, ID gate, device cap) | one line in the money map | `MONEY_ROUTES` in `src/lib/money-routes.ts` |
 | Read request headers deep in the server | `requestHeaders()` | `src/lib/auth/context.ts` |
 | Check whether the phone is in Practice | `isPracticeMode()`, `usePracticeMode()` | `mobile/src/lib/api/practice.ts` |
 
@@ -64,9 +66,21 @@ Features never import the Practice simulator (`mobile/src/lib/api/demo`) directl
 5. **Seams, not edits.** Prefer registering (slices, observers, providers) over editing shared files. Where you must touch a shared file, add the fewest lines and mark them `// <name>`.
 6. **Server first.** Put the rule on the server; mirror it in the simulator only if Practice needs it, and say so in a comment.
 7. **Data**: own tables, created on first use or added through `migrate()` in `db.ts`. Clear phone storage through `onDeviceReset`.
-8. **Tests**: server logic in `tests/<name>.test.ts`; keep phone logic in pure functions so it's testable once the phone gets a test runner.
+8. **Tests**: server logic in `tests/<name>.test.ts`, phone logic in a `__tests__` folder next to it; keep logic in pure functions so it's easy to test. A rule that exists on both sides gets a contract vector ([Tests](#tests) below).
 9. **README** with the switch and a removal table.
 10. **Docs**: a page in `docs/features/` using the template below, plus any new routes, tables, env vars or commands in `docs/reference/`.
+
+## Tests
+
+| Side | Runner | Where tests go | Command |
+|---|---|---|---|
+| Server and web | Vitest (`vitest.config.mts`, setup `tests/setup.ts`) | `tests/<name>.test.ts`; shared helpers in `tests/helpers/` (for example `fakePrices()`) | `npm test` (root) |
+| Phone | Jest with jest-expo (`mobile/jest.config.js`, setup `mobile/src/test/setup.ts`) | A `__tests__` folder next to the code, `<what>.test.ts`; never under `mobile/src/app/` (every file there is a screen). Helpers in `mobile/src/test/` | `npm test` (`mobile/`) |
+| Both: contract tests | Each side's runner | One vector file per rule in `tests/contract/vectors/<rule>.json`; the server's runner `tests/contract/<rule>.test.ts`, the phone's `mobile/src/**/__tests__/contract-<rule>.test.ts` | Part of `npm test` on each side |
+
+- Server tests never use the network: `tests/setup.ts` gives each run its own data folder, removes the Groq key, installs a fake price provider and makes `fetch` fail. Swap an outside service with its `setX()` seam, not by calling it.
+- Phone tests import the module under test, not screens. The Practice simulator is tested through its functions (`mobile/src/test/practice.ts` runs calls under fake timers).
+- **Contract vectors.** When the server and the phone (often the Practice simulator) both implement a rule, write its cases once in `tests/contract/vectors/<rule>.json` (`why`, `input`, `expected`) and run them against both copies. Change the rule, change the vector, and both suites must pass. Register a new vector file in both coverage lists (`tests/contract/vectors.test.ts` and `mobile/src/test/__tests__/contract-coverage.test.ts`), which fail on a vector file with no runner. Format and the rules covered: [tests/contract/README.md](../../tests/contract/README.md).
 
 ## Feature doc template
 
@@ -88,7 +102,7 @@ Features never import the Practice simulator (`mobile/src/lib/api/demo`) directl
 
 ## Signs a module is going wrong
 
-- A file over about 400 lines holding several jobs (see `src/lib/limits.ts` and `src/lib/verification/pipeline.ts` in the [maintainability review](../maintainability.md)).
-- Two copies of the same rule on the server and phone that have started to differ.
+- A file over about 400 lines holding several jobs (`src/lib/invest/satellite.ts` today, S4 in the [maintainability review](../maintainability.md)). `src/lib/limits.ts`, `src/lib/recovery/service.ts` and the 530-line `runPipeline()` were split on 24 November 2026; their READMEs (`src/lib/limits/`, `src/lib/recovery/`, `src/lib/verification/`) show the shape to aim for: one job per file and a barrel that keeps the imports the same.
+- Two copies of the same rule on the server and phone with no contract vector holding them together.
 - The phone parsing human sentences from the server instead of reading a field.
 - A shared file growing a new `if (featureX)` branch for every feature: use a registry instead.
