@@ -27,7 +27,11 @@ export type CustomRule = z.infer<typeof CustomRuleSchema>;
 
 const ready = new WeakSet<DatabaseSync>();
 
-/** Creates the table on first use, per database (a reset replaces the database). */
+/**
+ * Creates the table on first use, per database (a reset replaces the database). Inside a transaction (POST /vaults
+ * saves the rule with the vault and its opening deposit) it isn't remembered as made, because a rollback would undo
+ * the CREATE too.
+ */
 function ensureTable() {
   const d = db();
   if (ready.has(d)) return;
@@ -37,7 +41,7 @@ function ensureTable() {
     proof TEXT NOT NULL,
     created_at INTEGER NOT NULL
   )`);
-  ready.add(d);
+  if (!d.isTransaction) ready.add(d);
 }
 
 export function saveCustomRule(vaultId: string, rule: CustomRule, at = Date.now()) {

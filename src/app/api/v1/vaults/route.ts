@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { body, customer, handle, json, minor } from "@/lib/api";
+import { body, customer, handle, json, minor, moneyGate } from "@/lib/api";
 import { createVault, deposit, listVaults } from "@/lib/vaults";
 import { CustomRuleSchema, saveCustomRule } from "@/lib/custom-rules";
+import { tx } from "@/lib/db";
 
 export const GET = handle(async () => {
   // identity: open to a sign-in with provisional recovery access (read-only summary).
@@ -37,21 +38,28 @@ const Create = z.object({
 export const POST = handle(async (req: Request) => {
   const user = await customer({ tick: false });
   const b = await body(req, Create);
-  const id = createVault(user, {
-    name: b.name,
-    category: b.category,
-    // custom-rules: a vault with its own rule keeps the "custom" template (a person confirms).
-    template: b.category === "custom" && !b.customRule ? b.template : undefined,
-    target: minor(b.target),
-    targetDate: b.targetDate ?? null,
-    ruleType: b.ruleType,
-    ruleAmount: b.ruleType === "fixed" && b.ruleAmount ? minor(b.ruleAmount) : null,
-    rulePercent: b.ruleType === "percent_income" ? (b.rulePercent ?? 5) : null,
-    ruleFrequency: b.ruleType === "fixed" ? (b.ruleFrequency ?? "monthly") : null,
-    isJoint: b.isJoint,
-    members: b.members,
+  // mpin: an opening deposit comes from the bank (money in), so it takes `vault_deposit`'s ID gate, before the vault exists.
+  if (b.initialDeposit) moneyGate(user, "vault_deposit");
+  // The vault, its own rule and the opening deposit commit together: a deposit that fails (the bank can't cover it)
+  // leaves no empty vault behind.
+  const id = tx(() => {
+    const vaultId = createVault(user, {
+      name: b.name,
+      category: b.category,
+      // custom-rules: a vault with its own rule keeps the "custom" template (a person confirms).
+      template: b.category === "custom" && !b.customRule ? b.template : undefined,
+      target: minor(b.target),
+      targetDate: b.targetDate ?? null,
+      ruleType: b.ruleType,
+      ruleAmount: b.ruleType === "fixed" && b.ruleAmount ? minor(b.ruleAmount) : null,
+      rulePercent: b.ruleType === "percent_income" ? (b.rulePercent ?? 5) : null,
+      ruleFrequency: b.ruleType === "fixed" ? (b.ruleFrequency ?? "monthly") : null,
+      isJoint: b.isJoint,
+      members: b.members,
+    });
+    if (b.category === "custom" && b.customRule) saveCustomRule(vaultId, b.customRule); // custom-rules
+    if (b.initialDeposit) deposit(user, vaultId, minor(b.initialDeposit), { memo: "Opening contribution" });
+    return vaultId;
   });
-  if (b.category === "custom" && b.customRule) saveCustomRule(id, b.customRule); // custom-rules
-  if (b.initialDeposit) deposit(user, id, minor(b.initialDeposit), { memo: "Opening contribution" });
   return json({ id }, { status: 201 });
 });

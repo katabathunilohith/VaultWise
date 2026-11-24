@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { all, get } from "@/lib/db";
+import { all, db, get, run } from "@/lib/db";
 import { accountHistory, balanceOf, LedgerError, reconcile, transfer, userAccount, worldAccount } from "@/lib/ledger";
 import { tick } from "@/lib/scheduler";
 import { createUser, type User } from "@/lib/users";
@@ -295,6 +295,34 @@ describe("auto-saves from the wallet", () => {
     expect(JSON.parse(missed!.details)).toMatchObject({ amount: 25_00, source: "wallet" });
     expect(getVaultRow(fresh(), short).next_run_at).toBeGreaterThan(Date.now());
     expect(reconcile().ok).toBe(true);
+  });
+
+  it("never pays a wallet auto-save twice when something unexpected fails part-way through", () => {
+    const fresh = newCustomer("Wallet Crash", 500_00);
+    topUp(fresh(), 300_00);
+    updateWalletSettings(fresh(), { autoSaveSource: "wallet" });
+    const id = createVault(fresh(), { name: "Car", category: "emergency", target: 5_000_00, ruleType: "fixed", ruleAmount: 50_00, ruleFrequency: "weekly" });
+    // Three weekly runs are due.
+    run("UPDATE vaults SET next_run_at = ? WHERE id = ?", Date.now() - 15 * DAY_MS, id);
+    const paid = () => get<{ n: number }>("SELECT COUNT(*) AS n FROM journals WHERE ref_id = ? AND kind = 'contribution_rule'", id)!.n;
+    // The second run hits an unexpected database error, not a funding problem.
+    db().exec(
+      `CREATE TEMP TRIGGER fail_second_wallet_run BEFORE INSERT ON journals
+       WHEN NEW.ref_id = '${id}' AND (SELECT COUNT(*) FROM journals WHERE ref_id = '${id}' AND kind = 'contribution_rule') >= 1
+       BEGIN SELECT RAISE(ABORT, 'disk unavailable'); END`,
+    );
+    try {
+      expect(() => runDueWalletContributions(fresh())).toThrow(/disk unavailable/);
+    } finally {
+      db().exec("DROP TRIGGER fail_second_wallet_run");
+    }
+    expect(paid()).toBe(1);
+    // The next tick carries on from where it stopped: two more runs, not three.
+    expect(runDueWalletContributions(fresh()).map((r) => r.status)).toEqual(["ok", "ok"]);
+    expect(paid()).toBe(3);
+    expect(vaultBalance(fresh(), id)).toBe(150_00);
+    expect(walletOf(fresh())).toBe(150_00);
+    expect(getVaultRow(fresh(), id).next_run_at).toBeGreaterThan(Date.now());
   });
 });
 

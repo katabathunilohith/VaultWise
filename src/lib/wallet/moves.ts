@@ -11,8 +11,11 @@ import { ensureWalletTables, recordPayment, saveWalletSettings, walletSettings, 
 import { alertLimitLoosened, alertMoneyOut } from "../alerts"; // alerts
 
 /**
- * Money in and out of the wallet. Every move is one ledger journal plus one audit entry, in one
- * transaction. The wallet account is non-negative, so the ledger refuses any overdraft.
+ * Money in and out of the wallet. Every move the person makes is one ledger journal and two audit rows, in one
+ * transaction: the ledger's own `ledger.<kind>` row (post() in lib/ledger.ts writes one for every journal) and
+ * the wallet's row saying what the person did (`wallet.topped_up`, `wallet.moved_to_vault`, `wallet.spent`,
+ * `wallet.cashed_out`). A scheduled auto-save from the wallet writes only the ledger's row. The wallet account
+ * is non-negative, so the ledger refuses any overdraft.
  *
  * Journal kinds: wallet_top_up (bank → wallet), deposit (wallet → vault, the same kind a bank
  * deposit uses so vault history reads the same), contribution_rule (auto-save from the wallet),
@@ -270,6 +273,8 @@ export function autoSaveSource(user: Pick<User, "id">): AutoSaveSource {
  * Scheduler tick for fixed recurring rules when auto-saves come from the wallet. The same as
  * runDueContributions in lib/vaults.ts, drawing from the wallet: a run the wallet can't cover is
  * recorded as missed (contribution.missed) and skipped, and the schedule still moves on.
+ * Each run commits together with its move of next_run_at (B4), so if something unexpected fails
+ * part-way through, the runs already paid are never paid again on the next tick.
  */
 export function runDueWalletContributions(user: User, now = Date.now()) {
   ensureWalletTables();
@@ -283,30 +288,37 @@ export function runDueWalletContributions(user: User, now = Date.now()) {
     let at = v.next_run_at!;
     let guard = 0;
     while (at <= now && guard++ < 12) {
+      const next = nextRun(at, v.rule_frequency);
       try {
-        depositFromWallet(user, v, v.rule_amount!, {
-          kind: "contribution_rule",
-          memo: `Scheduled ${v.rule_frequency} contribution · From your wallet`,
-          ts: at,
+        tx(() => {
+          depositFromWallet(user, v, v.rule_amount!, {
+            kind: "contribution_rule",
+            memo: `Scheduled ${v.rule_frequency} contribution · From your wallet`,
+            ts: at,
+          });
+          run("UPDATE vaults SET next_run_at = ? WHERE id = ?", next, v.id);
         });
         results.push({ vaultId: v.id, status: "ok", amount: v.rule_amount! });
       } catch (e) {
         if (!(e instanceof LedgerError)) throw e;
-        audit({
-          userId: user.id,
-          actor: "scheduler",
-          actorType: "system",
-          action: "contribution.missed",
-          entityType: "vault",
-          entityId: v.id,
-          details: { amount: v.rule_amount, reason: e.message, source: "wallet" },
-          ts: at,
+        const reason = e.message;
+        tx(() => {
+          audit({
+            userId: user.id,
+            actor: "scheduler",
+            actorType: "system",
+            action: "contribution.missed",
+            entityType: "vault",
+            entityId: v.id,
+            details: { amount: v.rule_amount, reason, source: "wallet" },
+            ts: at,
+          });
+          run("UPDATE vaults SET next_run_at = ? WHERE id = ?", next, v.id);
         });
         results.push({ vaultId: v.id, status: "missed", amount: v.rule_amount! });
       }
-      at = nextRun(at, v.rule_frequency);
+      at = next;
     }
-    run("UPDATE vaults SET next_run_at = ? WHERE id = ?", at, v.id);
   }
   return results;
 }

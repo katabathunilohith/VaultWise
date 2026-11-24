@@ -12,9 +12,9 @@ const SPENDS: [string, string, number, number][] = [
   ["Greenleaf Pharmacy", "health", 6, 28],
 ];
 
-/** Simulated open-banking events for the demo: a salary credit or a few card purchases. */
+/** Simulated open-banking events for the demo: a salary credit or a few card purchases. Money in: `bank_simulate`, no MPIN. */
 export const POST = handle(async (req: Request) => {
-  const user = await customer({ tick: false, kyc: true });
+  const user = await customer({ tick: false, money: "bank_simulate" }); // mpin: money in
   const b = await body(req, z.object({ type: z.enum(["salary", "spend"]) }));
   const m = CURRENCY_SCALE[user.currency] ?? 1;
   if (b.type === "salary") {
