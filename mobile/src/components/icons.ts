@@ -107,3 +107,8 @@ export const PaletteIcon: Icon = require("phosphor-react-native/src/icons/Palett
 export const GlobeIcon: Icon = require("phosphor-react-native/src/icons/Globe").GlobeIcon;
 export const EnvelopeSimpleIcon: Icon = require("phosphor-react-native/src/icons/EnvelopeSimple").EnvelopeSimpleIcon;
 export const ChartPieSliceIcon: Icon = require("phosphor-react-native/src/icons/ChartPieSlice").ChartPieSliceIcon;
+// devices, alerts (plan 06)
+export const PhoneIcon: Icon = require("phosphor-react-native/src/icons/Phone").PhoneIcon;
+export const ShieldWarningIcon: Icon = require("phosphor-react-native/src/icons/ShieldWarning").ShieldWarningIcon;
+export const ChecksIcon: Icon = require("phosphor-react-native/src/icons/Checks").ChecksIcon;
+export const DesktopIcon: Icon = require("phosphor-react-native/src/icons/Desktop").DesktopIcon;

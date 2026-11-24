@@ -96,6 +96,15 @@ export interface RiskProfile {
   completedAt: number;
 }
 
+/** The questions without a valid answer, so callers can refuse a partial questionnaire before scoring it. */
+export function missingAnswers(answers: Record<string, number>): string[] {
+  return QUESTIONS.filter((q) => {
+    const idx = answers[q.id];
+    return idx == null || !q.options[idx];
+  }).map((q) => q.id);
+}
+
+/** Scores a complete questionnaire. Check missingAnswers() first: a missing answer throws. */
 export function scoreAnswers(answers: Record<string, number>): Omit<RiskProfile, "completedAt"> {
   let total = 0;
   for (const q of QUESTIONS) {

@@ -7,6 +7,8 @@ import { api, refreshAll, useApi } from "@/lib/client";
 import { EMERGENCY_REASONS, fmtDate, fmtMoney, timeAgo, type VaultCategory } from "@/lib/shared";
 import { CategoryIcon } from "@/components/vault-bits";
 import { DecisionBanner, PipelineStages, ProofPicker, useProof } from "@/components/verification";
+import { moneyErrorText, MpinField, mpinReady } from "@/components/mpin"; // mpin
+import { askAiConsent } from "@/components/ai-consent"; // ai-consent
 import {
   Badge,
   Button,
@@ -14,7 +16,6 @@ import {
   CardTitle,
   ErrorNote,
   Field,
-  Input,
   Modal,
   MoneyInput,
   Notice,
@@ -213,6 +214,7 @@ function ReceiptUpload({ request, currency, onClose }: { request: RequestView; c
           loading={busy}
           onClick={async () => {
             if (!file) return;
+            if (!(await askAiConsent("bill"))) return; // ai-consent
             setBusy(true);
             setErr(null);
             try {
@@ -294,8 +296,7 @@ export default function EmergencyPage() {
       toast({ tone: "good", text: r.status === "released" ? "Funds released to your linked account." : "Request accepted." });
       refreshAll();
     } catch (e) {
-      const msg = (e as Error).message;
-      setErr(msg);
+      setErr(moneyErrorText(e, () => setPin(""))); // mpin: wrong or locked → type it again
       refreshAll();
     } finally {
       setBusy(false);
@@ -312,7 +313,7 @@ export default function EmergencyPage() {
             <Siren className="size-7 text-bad" /> Emergency access
           </span>
         }
-        subtitle="For genuine emergencies: your Health vault releases instantly on your word. Only once it's empty do other vaults open — with your PIN, a reason and a short hold."
+        subtitle="For genuine emergencies: your Health vault releases instantly on your word. Only once it's empty do other vaults open — with your MPIN, a reason and a short hold."
       />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_360px]">
@@ -415,17 +416,11 @@ export default function EmergencyPage() {
                     </Field>
                   )}
                   {plan.needsPin && (
-                    <Field label="Your security PIN" hint="Tier 2 opens other vaults, so we re-confirm it's you.">
-                      <Input
-                        type="password"
-                        inputMode="numeric"
-                        value={pin}
-                        onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                        maxLength={6}
-                        className="max-w-[180px]"
-                        autoComplete="off"
-                      />
-                    </Field>
+                    <MpinField
+                      value={pin}
+                      onChange={setPin}
+                      hint={plan.tier2 > 0 ? "Tier 2 opens other vaults, so we re-confirm it's you." : "Every money move needs your MPIN."}
+                    />
                   )}
                   <label className="flex cursor-pointer items-start gap-3 text-sm">
                     <input
@@ -446,7 +441,7 @@ export default function EmergencyPage() {
                     variant="danger"
                     size="lg"
                     className="w-full"
-                    disabled={!attest || (plan.needsPin && pin.length < 4) || (plan.needsNote && note.trim().length < 10)}
+                    disabled={!attest || (plan.needsPin && !mpinReady(pin)) || (plan.needsNote && note.trim().length < 10)}
                     loading={busy}
                     onClick={submit}
                   >
@@ -463,7 +458,7 @@ export default function EmergencyPage() {
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {[
                     { icon: HeartPulse, t: "Tier 1", b: "Health vault, released instantly on your attestation. No paperwork." },
-                    { icon: KeyRound, t: "Tier 2", b: "Only when Health is empty: PIN + reason, released within minutes." },
+                    { icon: KeyRound, t: "Tier 2", b: "Only when Health is empty: MPIN + reason, released within minutes." },
                     { icon: ShieldAlert, t: "Guardrails", b: "Monthly cap, velocity limit, cooling-off on repeat use, risk review." },
                   ].map((x) => (
                     <div key={x.t} className="rounded-xl bg-surface-2 p-4">

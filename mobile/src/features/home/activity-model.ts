@@ -173,7 +173,7 @@ export function humaniseJournal(j: { id: string; kind: string; memo: string; cre
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const str = (v: unknown) => (typeof v === "string" && v ? cleanText(v) : null);
 
-/** Proof, withdrawal and emergency events from the audit trail. Everything else is left out. */
+/** Proof, withdrawal, emergency and MPIN events from the audit trail. Everything else is left out. */
 export function humaniseAudit(a: AuditEvent, currency: string): ActivityItem | null {
   const d = a.details ?? {};
   const base = { id: `audit_${a.id}`, at: a.ts, amount: null, dir: "none" as const };
@@ -213,6 +213,16 @@ export function humaniseAudit(a: AuditEvent, currency: string): ActivityItem | n
       return { ...base, title: "Emergency request stopped", detail: "It was past your safety limit", icon: WarningCircleIcon, filters: ["emergency"] };
     case "emergency.pin_failed":
       return { ...base, title: "Wrong PIN on an emergency request", detail: "Nothing moved", icon: WarningCircleIcon, filters: ["emergency"] };
+    // mpin: wrong tries, locks and changes (the server writes these for every money move)
+    case "mpin.failed":
+      return { ...base, title: "Wrong MPIN", detail: "Nothing moved", icon: WarningCircleIcon, filters: [] };
+    case "mpin.locked": {
+      const until = num(d.lockedUntil);
+      const when = until !== null ? new Date(until).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : null;
+      return { ...base, title: "Money moves locked", detail: when ? `Too many wrong MPIN tries. Locked until ${when}` : "Too many wrong MPIN tries", icon: LockKeyIcon, filters: [] };
+    }
+    case "mpin.changed":
+      return { ...base, title: "MPIN changed", detail: "It approves money moves and unlocks the app", icon: LockKeyIcon, filters: [] };
     default:
       return null;
   }

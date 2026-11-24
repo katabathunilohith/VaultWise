@@ -1,24 +1,26 @@
 import { useCallback, useRef, useState } from "react";
 import { router } from "expo-router";
 import { ModalScreen, PracticeBadge, ScreenSkeleton, useHardwareBack } from "@/components/ui";
+import { withMpin } from "@/features/mpin"; // mpin
 import { api } from "@/lib/api/client";
-import { ApiError, errorMessage } from "@/lib/api/errors";
+import { ApiError, errorMessage, mayHaveGoneThrough } from "@/lib/api/errors";
 import { useEmergency, useInvalidateMoney } from "@/lib/api/hooks";
 import type { EmergencyOverview, EmergencyPreview } from "@/lib/api/types";
 import { haptic } from "@/lib/haptics";
 import { parseAmount } from "@/lib/money";
 import { CalmError } from "../CalmError";
 import { blockedReason, NOTE_MIN } from "../copy";
+import { fmt } from "../format";
 import { go } from "../routes";
 import { AmountStep } from "./AmountStep";
-import { Blocked, CoolingOff, Released, SafetyPause, Sending } from "./Outcomes";
-import { PinStep } from "./PinStep";
+import { Blocked, CoolingOff, Released, SafetyPause, Sending, Unconfirmed } from "./Outcomes";
 import { ReasonStep } from "./ReasonStep";
 import { ReviewStep } from "./ReviewStep";
 import { usePlanPreview } from "./usePlanPreview";
 
 /**
- * Emergency request: amount → reason → review (hold to confirm) → PIN (Tier 2 only) → outcome.
+ * Emergency request: amount → reason → review (hold to confirm) → MPIN (every tier, the shared
+ * MPIN sheet in features/mpin) → outcome.
  * Calm throughout: no alarms, no per-second ticking except the last five seconds of a pause.
  */
 export function RequestFlow() {
@@ -31,15 +33,16 @@ export function RequestFlow() {
   );
 }
 
-type Step = "amount" | "reason" | "review" | "pin" | "sending" | "outcome";
+type Step = "amount" | "reason" | "review" | "sending" | "outcome";
 
 type Outcome =
   | { kind: "released"; id: string; receiptRequired: boolean }
   | { kind: "pause"; id: string; releaseAt: number; startedAt: number; receiptRequired: boolean }
   | { kind: "cooling"; id: string; releaseAt: number }
-  | { kind: "blocked"; reason: string };
+  | { kind: "blocked"; reason: string }
+  /** No answer came: it may have gone through, so it's never offered again. */
+  | { kind: "unconfirmed" };
 
-const isWrongPin = (e: unknown) => e instanceof ApiError && (e.status === 403 || /\bpin\b/i.test(e.message));
 const wantsNote = (e: unknown) => e instanceof ApiError && e.status === 400 && /description|note/i.test(e.message);
 
 function Flow({ o }: { o: EmergencyOverview }) {
@@ -57,11 +60,6 @@ function Flow({ o }: { o: EmergencyOverview }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [attest, setAttest] = useState(false);
 
-  const [pinLength, setPinLength] = useState(4);
-  const [pinErrors, setPinErrors] = useState(0);
-  const [pinResets, setPinResets] = useState(0);
-  const [pinMessage, setPinMessage] = useState<string | null>(null);
-
   const [busy, setBusy] = useState(false);
   // `busy` is state, so a handler from an older render can still see false. This can't be stale.
   const inFlight = useRef(false);
@@ -73,7 +71,7 @@ function Flow({ o }: { o: EmergencyOverview }) {
   const back = useCallback(() => {
     if (busy) return;
     setSubmitError(null);
-    setStep((s) => (s === "reason" ? "amount" : s === "review" ? "reason" : s === "pin" ? "review" : s));
+    setStep((s) => (s === "reason" ? "amount" : s === "review" ? "reason" : s));
   }, [busy]);
 
   // Android back steps back through the flow instead of closing it mid-way. While sending, it
@@ -87,15 +85,17 @@ function Flow({ o }: { o: EmergencyOverview }) {
     setStep("outcome");
   };
 
-  const submit = async (pin?: string) => {
+  const submit = async () => {
     if (!plan || !reason || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     setSubmitError(null);
-    setPinMessage(null);
-    if (!plan.needsPin) setStep("sending");
     try {
-      const r = await api.emergencyWithdraw({ amount: plan.amount / 100, reasonCode: reason, note: note.trim() || undefined, attest: true, pin });
+      // mpin: every tier needs the MPIN. The sheet stays up while it's checked; closing it sends nothing.
+      const r = await withMpin(`Get ${fmt(plan.amount, o.currency)} in emergency money`, (pin) =>
+        api.emergencyWithdraw({ amount: plan.amount / 100, reasonCode: reason, note: note.trim() || undefined, attest: true, pin }),
+      );
+      if (!r) return;
       void invalidate();
       const receiptRequired = r.receiptRequired ?? true;
       // The server re-plans at submit time; show what actually moved, not the earlier preview.
@@ -104,8 +104,8 @@ function Flow({ o }: { o: EmergencyOverview }) {
         return;
       }
       setPlan(r.plan);
-      // With a PIN step the hold committed nothing; the money commits here.
-      if (pin) haptic("irreversible.commit");
+      // The hold committed nothing (the MPIN followed it); the money commits here.
+      haptic("irreversible.commit");
       if (r.status === "processing") {
         // Count down to the server's release time, unless the phone's clock disagrees with it.
         const startedAt = Date.now();
@@ -120,11 +120,11 @@ function Flow({ o }: { o: EmergencyOverview }) {
       setStep("outcome");
     } catch (e) {
       void invalidate();
-      if (isWrongPin(e)) {
-        haptic("pin.wrong");
-        setPinErrors((n) => n + 1);
-        setPinMessage("That PIN isn't right.");
-        setStep("pin");
+      if (mayHaveGoneThrough(e)) {
+        // The money may be on its way: show that (the refresh above updates the emergency screen), never Hold to get again.
+        haptic("warning");
+        setOutcome({ kind: "unconfirmed" });
+        setStep("outcome");
       } else if (e instanceof ApiError && e.status === 422) {
         blockedOutcome(plan);
       } else if (wantsNote(e)) {
@@ -134,16 +134,8 @@ function Flow({ o }: { o: EmergencyOverview }) {
         setStep("reason");
       } else {
         haptic("error");
-        const msg = errorMessage(e);
-        if (plan.needsPin) {
-          setPinErrors(0);
-          setPinResets((n) => n + 1);
-          setPinMessage(`That didn't go through. ${msg}`);
-          setStep("pin");
-        } else {
-          setSubmitError(msg);
-          setStep("review");
-        }
+        setSubmitError(errorMessage(e));
+        setStep("review");
       }
     } finally {
       inFlight.current = false;
@@ -166,30 +158,12 @@ function Flow({ o }: { o: EmergencyOverview }) {
         return <CoolingOff o={o} plan={plan} releaseAt={outcome.releaseAt} />;
       case "blocked":
         return <Blocked reason={outcome.reason} />;
+      case "unconfirmed":
+        return <Unconfirmed />;
     }
   }
 
   if (step === "sending") return <Sending />;
-
-  if (step === "pin" && plan)
-    return (
-      <PinStep
-        o={o}
-        plan={plan}
-        length={pinLength}
-        onLength={(n) => {
-          setPinLength(n);
-          setPinErrors(0);
-          setPinMessage(null);
-        }}
-        errors={pinErrors}
-        resets={pinResets}
-        message={pinMessage}
-        busy={busy}
-        onBack={back}
-        onPin={(pin) => void submit(pin)}
-      />
-    );
 
   if (step === "review" && plan && reason)
     return (
@@ -202,12 +176,7 @@ function Flow({ o }: { o: EmergencyOverview }) {
         onAttest={setAttest}
         error={submitError}
         onBack={back}
-        onConfirm={() => {
-          if (plan.needsPin) {
-            setPinMessage(null);
-            setStep("pin");
-          } else void submit();
-        }}
+        onConfirm={() => void submit()}
       />
     );
 

@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Amount, AmountKeypad, Banner, Button, Card, Divider, ModalScreen, MoneyText, PracticeBadge, Stack, Txt } from "@/components/ui";
+import { MpinPanel } from "@/features/mpin"; // mpin
 import { api } from "@/lib/api/client";
+import { mayHaveGoneThrough } from "@/lib/api/errors";
 import { useDashboard } from "@/lib/api/hooks";
 import type { InvestCore } from "@/lib/api/types";
 import { splitByWeight } from "@/lib/invest";
 import { parseAmount } from "@/lib/money";
+import { useSensitiveScreen } from "@/lib/screen-capture"; // protection
 import { layout, space } from "@/theme";
 import { fmtMoney, fmtWeight } from "../format";
 import { useInvalidateInvest } from "../use-invest";
@@ -13,7 +16,8 @@ import { AmountDisplay } from "./AmountDisplay";
 import { FlowModal } from "./FlowModal";
 import { FlowDone, FlowError } from "./FlowParts";
 
-type Step = "amount" | "review" | "done";
+/** mpin: Buy asks for the MPIN on a step of its own (this flow is a React Native Modal, so no sheet route). */
+type Step = "amount" | "review" | "mpin" | "done";
 
 /**
  * One-off buy into the model portfolio: amount → review the split → bought. Review, Buy and
@@ -42,25 +46,21 @@ export function LumpSumModal({
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  /** The buy got no answer and may have gone through: it isn't offered again until the flow is opened afresh. */
+  const [unconfirmed, setUnconfirmed] = useState(false);
   const amount = parseAmount(text);
+  // protection: a money move with an MPIN pad inside the Invest tab (a Modal, not a route of its own),
+  // so it blocks screenshots itself (features/protection SENSITIVE_ROUTES covers routes only).
+  useSensitiveScreen(visible);
   // A lump sum is paid from the bank balance. Checked here so people never get the ledger's
   // refusal; if the balance hasn't loaded, the server still has the final say.
   const bank = dashboard.data?.totals.bank ?? null;
   const overBank = amount !== null && bank !== null && amount > bank;
 
-  const buy = async () => {
-    if (!amount || busy) return;
-    setBusy(true);
+  const buy = () => {
+    if (!amount || busy || unconfirmed) return;
     setError(null);
-    try {
-      await api.buyCore(amount / 100);
-      setStep("done");
-      void invalidate();
-    } catch (e) {
-      setError(e);
-    } finally {
-      setBusy(false);
-    }
+    setStep("mpin");
   };
 
   const back = () => {
@@ -74,8 +74,29 @@ export function LumpSumModal({
   };
 
   return (
-    <FlowModal visible={visible} onRequestClose={busy ? () => {} : step === "review" ? back : onClose}>
-      {step === "done" ? (
+    <FlowModal visible={visible} onRequestClose={busy ? () => {} : step === "review" ? back : step === "mpin" ? () => setStep("review") : onClose}>
+      {step === "mpin" && amount ? (
+        <ModalScreen title="Add lump sum" back={busy ? undefined : () => setStep("review")} hideLeading={busy} scroll={false}>
+          <MpinPanel
+            reason={`Invest ${fmtMoney(amount, currency)} in your ${bandName} mix`}
+            run={(pin) => api.buyCore(amount / 100, pin)}
+            onDone={() => {
+              setStep("done");
+              void invalidate();
+            }}
+            onError={(e) => {
+              setError(e);
+              // No answer: it may have bought, so the holdings are read again.
+              if (mayHaveGoneThrough(e)) {
+                setUnconfirmed(true);
+                void invalidate();
+              }
+              setStep("review");
+            }}
+            onBusy={setBusy}
+          />
+        </ModalScreen>
+      ) : step === "done" ? (
         <ModalScreen onClose={onClose} scroll={false} footer={<Button key="done" label="Done" onPress={onClose} armOnMount />}>
           <FlowDone
             title="Bought."
@@ -86,7 +107,13 @@ export function LumpSumModal({
         <ModalScreen
           title="Add lump sum"
           back={busy ? () => {} : back}
-          footer={<Button key="buy" label={`Buy ${fmtMoney(amount, currency)}`} onPress={buy} loading={busy} armOnMount />}
+          footer={
+            unconfirmed ? (
+              <Button key="check" label="Check your holdings" onPress={onClose} armOnMount />
+            ) : (
+              <Button key="buy" label={`Buy ${fmtMoney(amount, currency)}`} onPress={buy} loading={busy} armOnMount />
+            )
+          }
         >
           <PracticeBadge />
           <Stack gap={space.xxs}>
@@ -118,7 +145,15 @@ export function LumpSumModal({
             Paid from your bank and bought at today&apos;s prices, so the exact number of units can differ a little. In Practice mode this is
             simulated with real prices.
           </Txt>
-          {error ? <FlowError error={error} nothingChanged="Nothing was bought." onAskPerson={askPerson} /> : null}
+          {unconfirmed ? (
+            <Banner
+              tone="warning"
+              title="We couldn't confirm this buy"
+              body="Vaultwise didn't answer in time, so it may have gone through. Check your holdings before you buy again."
+            />
+          ) : error ? (
+            <FlowError error={error} nothingChanged="Nothing was bought." onAskPerson={askPerson} />
+          ) : null}
         </ModalScreen>
       ) : (
         <ModalScreen

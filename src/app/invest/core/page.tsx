@@ -6,6 +6,7 @@ import { api, refreshAll, useApi } from "@/lib/client";
 import { fmtDate, fmtMoney, fmtPct } from "@/lib/shared";
 import { InvestNav } from "@/components/invest-nav";
 import { FanChart, TwoLineChart } from "@/components/charts";
+import { moneyErrorText, MpinField, mpinReady } from "@/components/mpin"; // mpin
 import {
   Badge,
   Button,
@@ -65,6 +66,7 @@ export default function CorePage() {
   const [modal, setModal] = useState<null | "buy" | "sip">(null);
   const [amount, setAmount] = useState("");
   const [freq, setFreq] = useState<"monthly" | "weekly">("monthly");
+  const [pin, setPin] = useState(""); // mpin: a one-off buy needs the MPIN
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [histMonthly, setHistMonthly] = useState(300);
@@ -120,14 +122,15 @@ export default function CorePage() {
     setBusy(true);
     setErr(null);
     try {
-      if (kind === "buy") await api.post("/api/v1/invest/core/buy", { amount: Number(amount) });
+      if (kind === "buy") await api.post("/api/v1/invest/core/buy", { amount: Number(amount), pin });
       else await api.post("/api/v1/invest/core/sip", { amount: Number(amount), frequency: freq });
       toast({ tone: "good", text: kind === "buy" ? "Order filled across your model portfolio." : "Recurring SIP saved." });
       setModal(null);
       setAmount("");
+      setPin("");
       refreshAll();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(moneyErrorText(e, () => setPin(""))); // mpin
     } finally {
       setBusy(false);
     }
@@ -402,7 +405,7 @@ export default function CorePage() {
                 Pause SIP
               </Button>
             )}
-            <Button onClick={() => modal && act(modal)} loading={busy} disabled={!Number(amount)}>
+            <Button onClick={() => modal && act(modal)} loading={busy} disabled={!Number(amount) || (modal === "buy" && !mpinReady(pin))}>
               {modal === "buy" ? "Place order" : "Save SIP"}
             </Button>
           </>
@@ -434,6 +437,7 @@ export default function CorePage() {
               </div>
             ))}
           </div>
+          {modal === "buy" && <MpinField value={pin} onChange={setPin} />}
           {err && <ErrorNote>{err}</ErrorNote>}
         </div>
       </Modal>

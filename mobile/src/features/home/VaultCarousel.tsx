@@ -4,12 +4,13 @@ import { StyleSheet, View } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
 import { router } from "expo-router";
 import { CheckCircleIcon, PlusIcon } from "@/components/icons";
-import { Amount, Press, Txt, VaultGlyph } from "@/components/ui";
+import { Press, Txt, VaultGlyph } from "@/components/ui";
 import { categoryOf } from "@/lib/categories";
 import type { Vault } from "@/lib/api/types";
 import { money, moneyCompact, moneyWhole } from "@/lib/money";
 import { layout, radius, space, useTheme } from "@/theme";
 import { SeeAllHeader } from "./SeeAllHeader";
+import { MASK, MaskedAmount, maskedMoney, useBalancesMasked } from "@/features/protection"; // protection
 
 const CARD_W = 172;
 const CARD_H = 208;
@@ -46,6 +47,7 @@ export function VaultCarousel({ vaults, currency }: { vaults: Vault[]; currency:
 
 function VaultCard({ vault: v, currency }: { vault: Vault; currency: string }) {
   const { c, cat } = useTheme();
+  const masked = useBalancesMasked(); // protection: "Hide balances" on Home
   const meta = categoryOf(v.category);
   const fill = cat(meta.key).fill;
   const pct = Math.round(Math.min(1, v.progress) * 100);
@@ -53,9 +55,25 @@ function VaultCard({ vault: v, currency }: { vault: Vault; currency: string }) {
   const hasGoal = v.target > 0;
   const reached = hasGoal && v.progress >= 1;
   const close = hasGoal && v.progress >= 0.75;
-  const status = reached ? "Goal reached" : close ? `${moneyWhole(left, currency)} to go` : hasGoal ? `${pct}% of ${moneyCompact(v.target, currency)}` : "No goal set";
-  const goalSpoken = reached ? "Goal reached" : close ? `${money(left, currency)} to go` : hasGoal ? `${pct} percent of ${money(v.target, currency)}` : "No goal set";
-  const spoken = `${v.name}, ${meta.label} vault. ${money(v.balance, currency)} saved. ${goalSpoken}.`;
+  const status = reached
+    ? "Goal reached"
+    : close
+      ? `${masked ? maskedMoney(currency) : moneyWhole(left, currency)} to go`
+      : hasGoal
+        ? `${pct}% of ${masked ? MASK : moneyCompact(v.target, currency)}`
+        : "No goal set";
+  const goalSpoken = reached
+    ? "Goal reached"
+    : masked
+      ? hasGoal
+        ? `${pct} percent of the goal`
+        : "No goal set"
+      : close
+        ? `${money(left, currency)} to go`
+        : hasGoal
+          ? `${pct} percent of ${money(v.target, currency)}`
+          : "No goal set";
+  const spoken = `${v.name}, ${meta.label} vault. ${masked ? "Balance hidden" : `${money(v.balance, currency)} saved`}. ${goalSpoken}.`;
   return (
     <Press onPress={() => router.push(`/vaults/${v.id}`)} scaleTo={0.98} accessibilityLabel={spoken} accessibilityHint="Opens this vault" style={[styles.card, { backgroundColor: fill }]}>
       <View style={styles.top}>
@@ -71,7 +89,7 @@ function VaultCard({ vault: v, currency }: { vault: Vault; currency: string }) {
         <Txt v="labelM" color="ink" numberOfLines={1} maxFontSizeMultiplier={1.3}>
           {v.name}
         </Txt>
-        <Amount value={v.balance} currency={currency} size="m" color={c.ink} hideDecimals />
+        <MaskedAmount value={v.balance} currency={currency} size="m" color={c.ink} hideDecimals />
         <InkProgress value={v.progress} />
         <View style={styles.status}>
           {reached ? <CheckCircleIcon size={14} color={c.ink} weight="fill" /> : null}

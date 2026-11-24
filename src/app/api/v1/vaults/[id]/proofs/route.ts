@@ -5,6 +5,7 @@ import { HttpError } from "@/lib/users";
 import { getVaultRow } from "@/lib/vaults";
 import { createProof, runPipeline, validateUpload } from "@/lib/verification/pipeline";
 import { aiConsented } from "@/lib/ai-consent";
+import { assertUploadsLeft, limitUploads } from "@/lib/rate-limit"; // rate-limit
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -14,6 +15,7 @@ export const maxDuration = 90;
 export const POST = handle(async (req: Request, ctx: Ctx) => {
   const { id } = await ctx.params;
   const user = await customer({ tick: false, kyc: true });
+  assertUploadsLeft(user.id); // rate-limit: none left this hour → 429 before the file is read
   const vault = getVaultRow(user, id);
   const form = await req.formData();
   const file = form.get("file");
@@ -27,6 +29,7 @@ export const POST = handle(async (req: Request, ctx: Ctx) => {
   );
   if (!w) throw new HttpError(404, "Withdrawal not found");
   if (w.status !== "awaiting_proof") throw new HttpError(409, "This withdrawal already has a proof");
+  limitUploads(user.id); // rate-limit: counted once the withdrawal is known to take a proof
   const buffer = Buffer.from(await file.arrayBuffer());
   await validateUpload(buffer, file.type || "image/jpeg");
   const proofId = createProof(user, {

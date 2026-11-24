@@ -6,6 +6,7 @@ import { Banner, Button, Segmented, StatusPill, Txt } from "@/components/ui";
 import { applyConnection, defaultBaseUrl, type ConnectionPref, type Mode } from "@/lib/api/connection";
 import { useConnection } from "@/lib/api/hooks";
 import { haptic } from "@/lib/haptics";
+import { allowedServerAddress } from "@/features/protection"; // protection
 import { space } from "@/theme";
 import { Group } from "../controls";
 import { Page } from "../layout";
@@ -14,7 +15,7 @@ import { TextField } from "../onboarding/TextField";
 const PREFS: { value: ConnectionPref; label: string; body: string }[] = [
   { value: "auto", label: "Auto", body: "Uses the Vaultwise server when it answers, and demo data when it doesn't." },
   { value: "live", label: "Live server", body: "Always uses the server at the address below. You'll see errors if it can't be reached." },
-  { value: "demo", label: "Demo data", body: "Sample data on this phone only. Nothing is sent anywhere, and it resets when the app restarts." },
+  { value: "demo", label: "Demo data", body: "Sample data on this phone only. Nothing is sent anywhere. It's kept until you start Practice over." },
 ];
 
 export const connectionLabel = (mode: Mode) => (mode === "live" ? "Live server" : "Demo data");
@@ -53,12 +54,14 @@ export function ConnectionScreen() {
   const [result, setResult] = useState<TestResult | null>(null);
 
   const clean = normalise(url);
-  const validUrl = /^https?:\/\/[^\s/]+/i.test(clean);
+  // protection: https:// only, except in development builds (a server on the same network).
+  const address = allowedServerAddress(clean);
+  const validUrl = address.ok;
   const changed = pref !== conn.pref || (pref !== "demo" && clean !== conn.baseUrl);
 
   const test = async () => {
     if (!validUrl) {
-      setUrlError("Start the address with http:// or https://");
+      setUrlError(address.ok ? null : address.message); // protection
       haptic("error");
       return;
     }
@@ -75,7 +78,7 @@ export function ConnectionScreen() {
 
   const save = async () => {
     if (pref !== "demo" && !validUrl) {
-      setUrlError("Start the address with http:// or https://");
+      setUrlError(address.ok ? null : address.message); // protection
       haptic("error");
       return;
     }
@@ -126,7 +129,7 @@ export function ConnectionScreen() {
               setUrlError(null);
               setResult(null);
             }}
-            placeholder="http://192.168.1.20:3000"
+            placeholder={__DEV__ ? "http://192.168.1.20:3000" : "https://"} // protection
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"

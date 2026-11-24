@@ -14,8 +14,8 @@ export function releaseText(p: EmergencyPreview, o: EmergencyOverview) {
   const cur = o.currency;
   const hold = o.rules.tier2HoldSeconds;
   if (p.coolingOff) return `Because of several requests in 3 days, this reaches your bank after a ${o.rules.cooloffHours}-hour pause.`;
-  if (p.tier1 > 0 && p.tier2 > 0) return `${fmt(p.tier1, cur)} reaches your bank straight away. ${fmt(p.tier2, cur)} follows ${hold} seconds after your PIN.`;
-  if (p.tier2 > 0) return `Reaches your bank ${hold} seconds after your PIN.`;
+  if (p.tier1 > 0 && p.tier2 > 0) return `${fmt(p.tier1, cur)} reaches your bank straight away. ${fmt(p.tier2, cur)} follows ${hold} seconds after your MPIN.`;
+  if (p.tier2 > 0) return `Reaches your bank ${hold} seconds after your MPIN.`;
   return "Reaches your bank straight away.";
 }
 
@@ -48,7 +48,7 @@ export function ReviewStep({
       <Button label="Talk to a person" armOnMount onPress={leave.support} />
     </>
   ) : (
-    <HoldToConfirm label={`Hold to get ${fmt(plan.amount, cur)}`} disabled={!attest} onConfirm={onConfirm} commitHaptic={!plan.needsPin} />
+    <HoldToConfirm label={`Hold to get ${fmt(plan.amount, cur)}`} disabled={!attest} onConfirm={onConfirm} commitHaptic={false} />
   );
 
   return (

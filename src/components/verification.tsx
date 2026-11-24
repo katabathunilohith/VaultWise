@@ -6,6 +6,8 @@ import { CircleCheck, CircleX, Eye, FileImage, Gavel, Hourglass, ImageUp, Loader
 import { api, refreshAll, useApi } from "@/lib/client";
 import { CATEGORIES, fmtMoney, type VaultCategory } from "@/lib/shared";
 import { AuthedImage } from "./identity/media"; // identity
+import { moneyErrorText, MpinField, mpinReady } from "./mpin"; // mpin
+import { askAiConsent } from "./ai-consent"; // ai-consent
 import { Badge, Button, ErrorNote, Field, MoneyInput, Notice, Progress, Segmented, StatusIcon, Textarea, Input, cx, useToast } from "./ui";
 
 export interface StageView {
@@ -412,6 +414,7 @@ export function WithdrawFlow({
   const [amount, setAmount] = useState(resume ? String(resume.amount / 100) : "");
   const [payee, setPayee] = useState(resume?.payee ?? "");
   const [note, setNote] = useState("");
+  const [pin, setPin] = useState(""); // mpin
   const [file, setFile] = useState<File | null>(null);
   const [withdrawalId, setWithdrawalId] = useState<string | null>(resume?.withdrawalId ?? null);
   const [proofId, setProofId] = useState<string | null>(null);
@@ -434,12 +437,13 @@ export function WithdrawFlow({
     setErr(null);
     setBusy(true);
     try {
-      const r = await api.post<{ id: string }>(`/api/v1/vaults/${vault.id}/withdrawals`, { amount: Number(amount), payee, note: note || undefined });
+      const r = await api.post<{ id: string }>(`/api/v1/vaults/${vault.id}/withdrawals`, { amount: Number(amount), payee, note: note || undefined, pin });
       setWithdrawalId(r.id);
+      setPin("");
       setStep("proof");
       refreshAll();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(moneyErrorText(e, () => setPin(""))); // mpin
     } finally {
       setBusy(false);
     }
@@ -447,6 +451,7 @@ export function WithdrawFlow({
 
   const submitProof = async () => {
     if (!file || !withdrawalId) return;
+    if (!(await askAiConsent("bill"))) return; // ai-consent: ask once before the first bill is sent
     setErr(null);
     setBusy(true);
     try {
@@ -511,12 +516,13 @@ export function WithdrawFlow({
           <Notice tone="info" icon={<Upload className="size-4" />}>
             You&apos;ll need: {CATEGORIES[vault.template].proofHint.toLowerCase()}.
           </Notice>
+          <MpinField value={pin} onChange={setPin} />
           {err && <ErrorNote>{err}</ErrorNote>}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={createWithdrawal} loading={busy} disabled={!minor || payee.trim().length < 2}>
+            <Button onClick={createWithdrawal} loading={busy} disabled={!minor || payee.trim().length < 2 || !mpinReady(pin)}>
               Continue
             </Button>
           </div>

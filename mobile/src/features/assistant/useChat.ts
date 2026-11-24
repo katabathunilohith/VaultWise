@@ -59,6 +59,8 @@ const newId = (prefix: string) => `${prefix}${Date.now().toString(36)}${(seq++).
 function friendlyError(e: unknown) {
   if (e instanceof ApiError) {
     if (e.status === 0) return e.message;
+    // ai-consent: the server only lets the AI read questions after a yes (src/lib/ai-consent.ts).
+    if (e.code === "ai_consent_required") return "Turn on AI answers first: Settings, then Trust centre. A person can still help.";
     if (e.status === 503) return "The assistant is switched off right now. A person can still help.";
     if (e.status === 408) return "The assistant took too long to answer. Try again.";
     if (e.status === 429) return "The assistant is busy. Try again in a minute.";

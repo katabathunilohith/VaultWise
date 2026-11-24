@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CalendarClock, CircleCheck, CircleX, Gauge, Hourglass, ShieldAlert, Siren } from "lucide-react";
 import { api, refreshAll, useApi } from "@/lib/client";
+import { askAiConsent } from "./ai-consent"; // ai-consent
 import { EMERGENCY_REASONS, fmtDate, fmtMoney, LIMIT_LABELS, type LimitKey } from "@/lib/shared";
 import {
   Badge,
@@ -21,6 +22,7 @@ import {
   useToast,
   type Tone,
 } from "./ui";
+import { moneyErrorText, MpinField, mpinReady } from "./mpin"; // mpin
 
 const KEYS: LimitKey[] = ["singleWithdrawal", "dailyWithdrawal", "monthlyEmergency"];
 type Limits = Record<LimitKey, number>;
@@ -109,6 +111,7 @@ function ChangeLimits({ o, onClose }: { o: LimitsOverview; onClose: () => void }
   const [reason, setReason] = useState("medical");
   const [explanation, setExplanation] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [pin, setPin] = useState(""); // mpin: raising a limit needs the MPIN
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<EmergencyResult | null>(null);
@@ -121,6 +124,7 @@ function ChangeLimits({ o, onClose }: { o: LimitsOverview; onClose: () => void }
   const emergencyLeft = o.emergency.perMonth - o.emergency.used;
 
   const save = async () => {
+    if (needsEmergency && !(await askAiConsent("limits"))) return; // ai-consent: the request is assessed by the AI
     setBusy(true);
     setErr(null);
     try {
@@ -130,16 +134,17 @@ function ChangeLimits({ o, onClose }: { o: LimitsOverview; onClose: () => void }
         fd.append("reasonCode", reason);
         fd.append("explanation", explanation);
         if (file) fd.append("file", file);
+        fd.append("pin", pin); // mpin
         setResult(await api.upload<EmergencyResult>("/api/v1/limits/emergency", fd));
       } else {
         const body = Object.fromEntries(KEYS.filter((k) => next[k] !== o.limits[k]).map((k) => [k, next[k] / 100]));
-        await api.put("/api/v1/limits", body);
+        await api.put("/api/v1/limits", loosened.length ? { ...body, pin } : body); // mpin
         toast({ tone: "good", text: loosened.length ? "Limits updated — that was this month's raise." : "Limits lowered." });
         onClose();
       }
       refreshAll();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(moneyErrorText(e, () => setPin(""))); // mpin
     } finally {
       setBusy(false);
     }
@@ -254,6 +259,7 @@ function ChangeLimits({ o, onClose }: { o: LimitsOverview; onClose: () => void }
           </Field>
         </div>
       )}
+      {loosened.length > 0 && <MpinField value={pin} onChange={setPin} hint="Raising a limit needs your MPIN." />}
       {err && <ErrorNote>{err}</ErrorNote>}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>
@@ -265,6 +271,7 @@ function ChangeLimits({ o, onClose }: { o: LimitsOverview; onClose: () => void }
           disabled={
             (!loosened.length && !tightened.length) ||
             overMax.length > 0 ||
+            (loosened.length > 0 && !mpinReady(pin)) ||
             (needsEmergency && (explanation.trim().length < 20 || emergencyLeft <= 0))
           }
           onClick={save}

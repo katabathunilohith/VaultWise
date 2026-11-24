@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Linking, Platform } from "react-native";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import {
+  ArrowsClockwiseIcon,
   EyeIcon,
   ExportIcon,
   FileTextIcon,
@@ -18,10 +19,13 @@ import {
   TrashIcon,
   VibrateIcon,
   BellIcon,
+  DeviceMobileIcon, // devices
+  PhoneIcon, // devices
 } from "@/components/icons";
 import { Banner, ListRow, StatusPill, ToggleRow } from "@/components/ui";
 import { api } from "@/lib/api/client";
 import { useConnection, useLimits, useMe } from "@/lib/api/hooks";
+import { usePracticeMode } from "@/lib/api/practice";
 import { PRACTICE_ONLY } from "@/lib/build";
 import { useHapticLevel } from "@/lib/haptics";
 import { moneyWhole } from "@/lib/money";
@@ -31,6 +35,7 @@ import { appearanceSettingAvailable, useTheme } from "@/theme";
 import { Group } from "../controls";
 import { Page } from "../layout";
 import { biometricName, useBiometricKind, type Biometric } from "../pin-guard";
+import { phoneTrust, RESET_MPIN_ROUTE, turnOffMpinShortcut, useMpinShortcut } from "@/features/mpin"; // mpin; devices: RESET_MPIN_ROUTE, phoneTrust
 import { appearanceLabel } from "./AppearanceScreen";
 import { connectionLabel } from "./ConnectionScreen";
 import { hapticLevelLabel } from "./hapticCatalog";
@@ -41,12 +46,16 @@ import { downloadSignedInExport } from "@/features/auth/exportData"; // identity
 import { errorMessage } from "@/lib/api/errors"; // identity
 import { IdentityRow, KYC_ENABLED } from "@/features/kyc"; // identity
 import { RecoveryRow, useRecoveryPending } from "@/features/recovery"; // identity
+import { ALERTS_ENABLED, ALERTS_ROUTE, useAlerts } from "@/features/alerts"; // alerts
+import { DEVICES_ENABLED, DEVICES_ROUTE } from "@/features/devices"; // devices
+import { PHONE_VERIFY_ENABLED, VERIFY_PHONE_ROUTE } from "@/features/phone-verify"; // devices
 
 /** Profile & settings (pushed from the avatar). Groups in order of how often people need them. */
 export function SettingsHome() {
   const me = useMe();
   const { pref, cvdGains, setCvdGains } = useTheme();
   const conn = useConnection();
+  const practice = usePracticeMode();
   const limits = useLimits();
   const level = useHapticLevel();
   const notif = useNotificationPrefs();
@@ -104,6 +113,8 @@ export function SettingsHome() {
       </Group>
 
       <Group title="Notifications">
+        {/* alerts */}
+        {ALERTS_ENABLED ? <AlertsRow /> : null}
         <ListRow icon={BellIcon} title="Notifications" subtitle={notificationSummary(notif)} onPress={() => router.push("/settings/notifications")} />
       </Group>
 
@@ -137,10 +148,19 @@ export function SettingsHome() {
         <ListRow icon={ExportIcon} title="Export my data" subtitle="A copy of everything, as a file" onPress={() => void exportData()} />
         {/* identity */}
         {identity.signedIn ? <SignOutRow email={identity.email} /> : null}
+        {/* Practice data is saved on the phone, so it needs its own way back to the sample account. */}
+        {practice ? (
+          <ListRow
+            icon={ArrowsClockwiseIcon}
+            title="Start Practice over"
+            subtitle="Puts back the sample account and its pretend money"
+            onPress={() => router.push("/settings/start-over" as Href)}
+          />
+        ) : null}
         <ListRow icon={TrashIcon} title="Delete account" destructive onPress={() => router.push("/settings/delete-account")} />
       </Group>
       {exportNote === "demo" ? (
-        <Banner tone="info" title="Nothing to export in demo mode" body="Demo data lives only on this phone and resets when the app restarts. Connect to the Vaultwise server to export your account." />
+        <Banner tone="info" title="Nothing to export in demo mode" body="Practice data lives only on this phone. Connect to the Vaultwise server to export your account." />
       ) : exportNote === "signedIn" ? (
         <Banner tone="info" title="Export isn't in the app yet" body="While you're signed in, get your copy from Vaultwise on the web. Sign in there with the same email." />
       ) : exportNote && "signedInError" in exportNote ? (
@@ -152,7 +172,7 @@ export function SettingsHome() {
   );
 }
 
-/** App lock, PIN and Face ID / fingerprint. App lock needs a PIN on this phone first. */
+/** App lock, the MPIN and Face ID / fingerprint. One PIN: the MPIN approves money moves and unlocks the app. */
 function SecurityGroup() {
   const session = useSession();
   const kind = useBiometricKind();
@@ -166,22 +186,66 @@ function SecurityGroup() {
       <ToggleRow
         icon={LockKeyIcon}
         title="App lock"
-        subtitle={session.lockEnabled ? `Asks for ${bio ?? "your PIN"} when Vaultwise opens` : "Off. Turn on to ask for your PIN when Vaultwise opens."}
+        subtitle={session.lockEnabled ? `Asks for ${bio ?? "your MPIN"} when Vaultwise opens` : "Off. Turn on to ask for your MPIN when Vaultwise opens."}
         value={session.lockEnabled}
         onChange={onLock}
       />
+      {/* mpin: the server checks the current MPIN (POST /mpin); this phone's unlock PIN follows */}
       <ListRow
         icon={PasswordIcon}
-        title={session.hasDevicePin ? "Change PIN" : "Set a PIN"}
-        subtitle="Unlocks Vaultwise on this phone"
+        title="Change MPIN"
+        subtitle="Approves money moves and unlocks Vaultwise"
         onPress={() => router.push({ pathname: "/settings/security", params: { intent: "change" } })}
       />
-      <BiometricRow kind={kind} lockOn={session.lockEnabled} />
+      {/* devices: a code to the verified phone, then a new MPIN */}
+      <ListRow icon={PasswordIcon} title="Forgot your MPIN?" subtitle="Reset it with a code sent to your phone" onPress={() => router.push(RESET_MPIN_ROUTE as Href)} />
+      <BiometricRow kind={kind} lockOn={session.lockEnabled} bioOn={session.biometricUnlock} />
+      <PaymentsBiometricRow kind={kind} hasPin={session.hasDevicePin} />
+      {/* devices */}
+      {DEVICES_ENABLED ? <DevicesRow /> : null}
+      {PHONE_VERIFY_ENABLED ? <PhoneRow /> : null}
     </Group>
   );
 }
 
-function BiometricRow({ kind, lockOn }: { kind: Biometric | undefined; lockOn: boolean }) {
+/**
+ * mpin: "Use Face ID / fingerprint for payments". Turning it on needs the MPIN; turning it off needs
+ * nothing. Live only: it holds the live MPIN, so Practice shows it off and can't turn it on.
+ */
+function PaymentsBiometricRow({ kind, hasPin }: { kind: Biometric | undefined; hasPin: boolean }) {
+  const on = useMpinShortcut();
+  const practice = usePracticeMode();
+  const face = kind === "face" || (!kind && Platform.OS === "ios");
+  const name = face ? "Face ID" : "fingerprint";
+  const subtitle =
+    Platform.OS === "web"
+      ? "Not available in the web preview"
+      : practice
+        ? "Live only. Practice money moves ask for your MPIN."
+        : !kind
+          ? `Set up ${Platform.OS === "ios" ? "Face ID" : "a fingerprint"} on this phone first`
+          : !hasPin
+            ? "Approve a money move with your MPIN first"
+            : on
+              ? `Money moves ask for ${name} first. Your MPIN always works too.`
+              : "Off. Money moves ask for your MPIN.";
+  return (
+    <ToggleRow
+      icon={face ? ScanSmileyIcon : FingerprintIcon}
+      title={`Use ${name} for payments`}
+      subtitle={subtitle}
+      value={on}
+      disabled={!on && (Platform.OS === "web" || practice || !kind || !hasPin)}
+      onChange={(next) => {
+        if (next) router.push({ pathname: "/settings/security", params: { intent: "bio" } });
+        else void turnOffMpinShortcut();
+      }}
+    />
+  );
+}
+
+// protection: unlock by Face ID / fingerprint is its own choice (session.biometricUnlock), only used while app lock is on.
+function BiometricRow({ kind, lockOn, bioOn }: { kind: Biometric | undefined; lockOn: boolean; bioOn: boolean }) {
   const name = kind === "face" ? "Face ID" : kind === "finger" ? "Fingerprint" : Platform.OS === "ios" ? "Face ID" : "Fingerprint";
   const Icon = kind === "face" || (kind === undefined && Platform.OS === "ios") ? ScanSmileyIcon : FingerprintIcon;
   const subtitle =
@@ -191,9 +255,69 @@ function BiometricRow({ kind, lockOn }: { kind: Biometric | undefined; lockOn: b
         ? "Checking this phone…"
         : kind === null
           ? "Not set up on this phone. Add it in your phone's settings."
-          : lockOn
-            ? "Unlocks Vaultwise. Your PIN always works too."
-            : "Works when app lock is on";
-  const pill = kind ? (lockOn ? <StatusPill tone="success" label="On" /> : <StatusPill tone="neutral" label="Off" />) : <StatusPill tone="neutral" label="Unavailable" />;
-  return <ListRow icon={Icon} title={name} subtitle={subtitle} trailing={kind === undefined ? undefined : pill} accessibilityLabel={`${name}. ${subtitle}`} />;
+          : !lockOn
+            ? "Works when app lock is on"
+            : bioOn
+              ? "Unlocks Vaultwise. Your MPIN always works too."
+              : "Off. Tap to use it to unlock Vaultwise.";
+  const on = !!kind && lockOn && bioOn;
+  const pill = kind ? <StatusPill tone={on ? "success" : "neutral"} label={on ? "On" : "Off"} /> : <StatusPill tone="neutral" label="Unavailable" />;
+  // Off with lock on: the Security flow's "lock" step checks the biometric and turns it back on.
+  const onPress = kind && lockOn && !bioOn ? () => router.push({ pathname: "/settings/security", params: { intent: "lock" } }) : undefined;
+  return (
+    <ListRow
+      icon={Icon}
+      title={name}
+      subtitle={subtitle}
+      trailing={kind === undefined ? undefined : pill}
+      onPress={onPress}
+      accessibilityLabel={`${name}. ${subtitle}`}
+    />
+  );
+}
+
+// devices: Your devices, with this phone's trust in the subtitle.
+function DevicesRow() {
+  const me = useMe();
+  const device = me.data?.onboarded ? me.data.device : undefined;
+  const trust = phoneTrust(device);
+  const subtitle =
+    trust === "cooling"
+      ? "This phone isn't trusted yet. Trust it, or sign out others."
+      : trust === "needs_code"
+        ? "This phone needs a code to be trusted. Trust it, or sign out others."
+        : trust === "unrecognised"
+          ? "This phone couldn't be added to your account just now"
+          : "Phones signed in to your account";
+  return <ListRow icon={DeviceMobileIcon} title="Your devices" subtitle={subtitle} onPress={() => router.push(DEVICES_ROUTE as Href)} />;
+}
+
+// devices: the verified number (masked), or a prompt to add one.
+function PhoneRow() {
+  const me = useMe();
+  const phone = me.data?.onboarded ? me.data.phone : undefined;
+  const verified = !!phone?.verified;
+  return (
+    <ListRow
+      icon={PhoneIcon}
+      title="Phone number"
+      subtitle={verified ? `${phone?.number ?? "Verified"} · for codes` : "Add one for codes when you trust a phone or reset your MPIN"}
+      trailing={verified ? <StatusPill tone="success" label="Verified" /> : <StatusPill tone="warning" label="Not added" />}
+      onPress={() => router.push(VERIFY_PHONE_ROUTE as Href)}
+    />
+  );
+}
+
+// alerts: the inbox, with how many are unread.
+function AlertsRow() {
+  const alerts = useAlerts();
+  const unread = alerts.data?.unread ?? 0;
+  return (
+    <ListRow
+      icon={BellIcon}
+      title="Alerts"
+      subtitle={unread > 0 ? (unread === 1 ? "1 unread" : `${unread} unread`) : "Sign-ins, devices and money going out"}
+      onPress={() => router.push(ALERTS_ROUTE as Href)}
+    />
+  );
 }

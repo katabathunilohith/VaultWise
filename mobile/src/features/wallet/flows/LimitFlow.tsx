@@ -5,6 +5,7 @@ import { CheckCircleIcon } from "@/components/icons";
 import { AmountKeypad, Banner, Button, Card, ModalScreen, PracticeBadge, Txt, useHardwareBack, useNow } from "@/components/ui";
 import { shortDate } from "@/features/home/format";
 import { TypedAmount } from "@/features/vaults/fields";
+import { withMpin } from "@/features/mpin"; // mpin
 import { api } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import { WALLET_MAX_AMOUNT, type Wallet } from "@/lib/api/wallet-types";
@@ -67,9 +68,16 @@ export function LimitFlow({ wallet }: { wallet: Wallet }) {
     setSaving(true);
     setError(null);
     try {
-      const res = await api.walletSettings({ dailyLimit: next === null ? null : next / 100 });
+      const dailyLimit = next === null ? null : next / 100;
+      // mpin: raising or turning off the limit needs the MPIN; anything stricter applies without it.
+      const res = loosens(changeOf(current, next))
+        ? await withMpin(next === null ? "Turn off your daily limit" : `Raise your daily limit to ${amountText(next, cur)}`, (pin) =>
+            api.walletSettings({ dailyLimit, pin }),
+          )
+        : await api.walletSettings({ dailyLimit });
+      if (!res) return;
       const made = changeOf(current, next);
-      setSaved({ change: made, limit: next, nextRaiseAt: res?.wallet?.nextRaiseAt ?? (loosens(made) ? Date.now() + 30 * 86_400_000 : null) });
+      setSaved({ change: made, limit: next, nextRaiseAt: res.wallet?.nextRaiseAt ?? (loosens(made) ? Date.now() + 30 * 86_400_000 : null) });
       setStep("done");
       void refresh();
     } catch (e) {

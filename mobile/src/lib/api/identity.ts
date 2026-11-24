@@ -5,18 +5,23 @@
  * ID numbers are sent once, in the request that checks them, and never kept on the phone. Answers
  * only ever carry the last 4 characters.
  */
-import * as Crypto from "expo-crypto";
-import { getItem, setItem } from "../storage";
-import { formWith, request } from "./http";
+import { installId } from "./device"; // devices: the install id lives there now and goes with every request
+import { ApiError } from "./errors";
+import { formWith, post, request } from "./http";
 import type {
+  BankCheckStart,
   ClaimInput,
   ClaimStatus,
+  DigiLockerStart,
   FindAccountInput,
   FindAccountResult,
   IdDocType,
   IdSubmission,
   KycInput,
   KycStatus,
+  KycStepName,
+  KycSteps,
+  KycStepStatus,
   KycView,
   RecoveryClaim,
   ResetInput,
@@ -25,20 +30,11 @@ import type {
 
 /* ---------- this install's id (rate limits on the signed-out recovery routes) ---------- */
 
-const DEVICE_ID_KEY = "vw.deviceId";
-let deviceId: Promise<string> | null = null;
-
-/** A random id for this install, sent as `x-device-id` so the server can count tries per phone. */
-function installId(): Promise<string> {
-  deviceId ??= (async () => {
-    const saved = await getItem(DEVICE_ID_KEY);
-    if (saved) return saved;
-    const id = Crypto.randomUUID();
-    await setItem(DEVICE_ID_KEY, id);
-    return id;
-  })().catch(() => "unknown");
-  return deviceId;
-}
+/**
+ * devices: `x-device-id` now goes with every request (http.ts, from ./device). The recovery routes
+ * below still name it, which sends the same value.
+ */
+export { installId };
 
 /* ---------- forms ---------- */
 
@@ -67,16 +63,59 @@ const reasonsOf = (v: unknown): string[] =>
         .filter((r): r is string => !!r)
     : [];
 
+const STEP_NAMES: KycStepName[] = ["pan", "aadhaar", "bank"];
+const STEP_STATUSES: KycStepStatus[] = ["todo", "done", "review", "failed"];
+
+/** At most the last 4 letters or digits: anything longer from a server is cut, never shown whole. */
+const last4Of = (v: unknown) => {
+  const s = str(v)?.replace(/[^0-9A-Za-z]/g, "");
+  return s ? s.slice(-4).toUpperCase() : null;
+};
+
+/** The three steps, each one missing or unknown read as not done yet. */
+export function toKycSteps(raw: unknown): KycSteps {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const steps = {} as KycSteps;
+  for (const name of STEP_NAMES) {
+    const s = (r[name] && typeof r[name] === "object" ? r[name] : {}) as Record<string, unknown>;
+    const status = STEP_STATUSES.includes(s.status as KycStepStatus) ? (s.status as KycStepStatus) : "todo";
+    steps[name] = { status, last4: status === "todo" ? null : last4Of(s.last4) };
+  }
+  return steps;
+}
+
 export function toKycView(raw: unknown): KycView {
   const r = (raw ?? {}) as Record<string, unknown>;
   const status = KYC_STATUSES.includes(r.status as KycStatus) ? (r.status as KycStatus) : "not_started";
+  // kyc-checks (plan 07): servers from before it send neither field, which means the photo check.
+  const flow = r.flow === "steps" ? "steps" : "photo";
   return {
     status,
     docType: (str(r.docType) as IdDocType | null) ?? null,
     idLast4: str(r.idLast4),
     reasons: reasonsOf(r.reasons),
     updatedAt: num(r.updatedAt),
+    flow,
+    steps: flow === "steps" ? toKycSteps(r.steps) : null,
   };
+}
+
+/** Only a web page is ever opened for DigiLocker, never another scheme a bad answer might carry. */
+function toDigiLockerStart(raw: unknown): DigiLockerStart {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const url = str(r.url);
+  const requestId = str(r.requestId);
+  if (!url || !/^https?:\/\/\S+$/i.test(url) || !requestId) throw new ApiError("DigiLocker didn't start. Try again in a moment.", 502);
+  return { url, requestId };
+}
+
+/** Only a UPI payment link is ever handed to another app. */
+function toBankCheckStart(raw: unknown): BankCheckStart {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const upiLink = str(r.upiLink);
+  const requestId = str(r.requestId);
+  if (!upiLink || !/^upi:\/\/pay\?\S+$/i.test(upiLink) || !requestId) throw new ApiError("The ₹1 payment didn't start. Try again in a moment.", 502);
+  return { upiLink, requestId, expiresAt: num(r.expiresAt) };
 }
 
 /** A claim from `{ claim: {...} }`, the claim itself, or null when there is none. */
@@ -108,6 +147,25 @@ export const identityLive = {
   kyc: async (): Promise<KycView> => toKycView(await request<unknown>("/kyc")),
   /** Sends an ID to be checked. The answer is the check's outcome (or that a person will look). */
   submitKyc: async (input: KycInput): Promise<KycView> => toKycView(await request<unknown>("/kyc", { method: "POST", body: await idForm(input) })),
+  /*
+   * kyc-checks (plan 07), the "steps" flow: PAN, then Aadhaar through DigiLocker, then a bank account.
+   * Each finishing call answers the same view as GET /kyc. Errors: 400 invalid_id; 409 kyc_step_order,
+   * kyc_step_done, kyc_step_waiting (DigiLocker or the ₹1 payment isn't finished yet),
+   * kyc_request_expired, kyc_done, kyc_in_review, kyc_flow_off; 404 kyc_request_not_found;
+   * 429 rate_limited (5 tries a step a day).
+   */
+  /** Step 1. The PAN is sent once, here, and never kept on the phone. */
+  submitPan: async (pan: string): Promise<KycView> => toKycView(await post<unknown>("/kyc/pan", { pan })),
+  /** Step 2 begins: the provider's DigiLocker page, where the person allows sharing their Aadhaar. */
+  startDigiLocker: async (): Promise<DigiLockerStart> => toDigiLockerStart(await post<unknown>("/kyc/digilocker/start")),
+  /** Step 2 ends, once the person is back from DigiLocker. Fetching the Aadhaar can take a while. */
+  finishDigiLocker: async (requestId: string): Promise<KycView> =>
+    toKycView(await request<unknown>("/kyc/digilocker/finish", { method: "POST", body: JSON.stringify({ requestId }) }, { timeoutMs: 60_000 })),
+  /** Step 3 begins: a ₹1 UPI payment from the account to check (reverse penny drop). */
+  startBankCheck: async (): Promise<BankCheckStart> => toBankCheckStart(await post<unknown>("/kyc/bank/start")),
+  /** Step 3 ends, once the person has paid. */
+  finishBankCheck: async (requestId: string): Promise<KycView> =>
+    toKycView(await request<unknown>("/kyc/bank/finish", { method: "POST", body: JSON.stringify({ requestId }) }, { timeoutMs: 30_000 })),
   /** Signed out: looks for the account that verified this ID. 5 tries an hour per phone. */
   findAccount: async (input: FindAccountInput): Promise<FindAccountResult> => {
     const r = await request<FindAccountResult>("/recovery/find", {

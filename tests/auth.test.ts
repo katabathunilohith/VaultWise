@@ -49,6 +49,9 @@ const ctx = <T extends Record<string, string>>(params: T) => ({ params: Promise.
 /** Calls a route handler the way Next does: (request, context). */
 const call = (h: unknown, request?: Request, context?: unknown) => (h as (...a: unknown[]) => Promise<Response>)(request, context);
 const VAULT = { name: "Clinic fund", category: "health", target: 500 };
+/** mpin: new accounts choose a 6-digit MPIN that passes the policy. */
+const PIN = "482915";
+const NEW_PIN = "739204";
 
 beforeAll(async () => {
   const kp = await generateKeyPair("RS256");
@@ -70,7 +73,7 @@ describe("prototype mode (no FIREBASE_PROJECT_ID)", () => {
     expect(before.onboarded).toBe(false);
     expect(before.auth).toEqual({ mode: "prototype", access: "full", email: null });
 
-    const r = await call(onboard, req("/api/v1/onboarding", { body: { name: "Proto Person", country: "US", pin: "1234", demo: false, email: "proto@example.com" } }));
+    const r = await call(onboard, req("/api/v1/onboarding", { body: { name: "Proto Person", country: "US", pin: PIN, demo: false, email: "proto@example.com" } }));
     expect(r.status).toBe(200);
     const me = await (await call(getMe)).json();
     expect(me.onboarded).toBe(true);
@@ -82,14 +85,18 @@ describe("prototype mode (no FIREBASE_PROJECT_ID)", () => {
     expect(u.name).toBe("Proto Person");
     expect((await call(listVaults, req("/api/v1/vaults"))).status).toBe(200);
 
-    const again = await call(onboard, req("/api/v1/onboarding", { body: { name: "Second", country: "US", pin: "1234", demo: false } }));
+    const again = await call(onboard, req("/api/v1/onboarding", { body: { name: "Second", country: "US", pin: PIN, demo: false } }));
     expect(again.status).toBe(409);
   });
 
-  it("still changes the PIN without the current one in prototype mode", async () => {
-    const r = await call(patchMe, req("/api/v1/me", { method: "PATCH", body: { pin: "4321" } }));
+  it("changes the PIN only with the current one, in prototype mode too", async () => {
+    // mpin: PIN changes go through the MPIN module in both sign-in modes.
+    const missing = await call(patchMe, req("/api/v1/me", { method: "PATCH", body: { pin: NEW_PIN } }));
+    expect(missing.status).toBe(401);
+    expect((await missing.json()).code).toBe("mpin_required");
+    const r = await call(patchMe, req("/api/v1/me", { method: "PATCH", body: { pin: NEW_PIN, currentPin: PIN } }));
     expect(r.status).toBe(200);
-    expect(checkPin(get<User>("SELECT * FROM users ORDER BY created_at LIMIT 1")!, "4321")).toBe(true);
+    expect(checkPin(get<User>("SELECT * FROM users ORDER BY created_at LIMIT 1")!, NEW_PIN)).toBe(true);
   });
 
   it("applies the KYC gate to the first user too", async () => {
@@ -136,7 +143,7 @@ describe("firebase mode", () => {
 
   it("onboarding binds the identity to a new wallet that starts KYC pending", async () => {
     const t = await token("alice-uid", { email: "alice@example.com" });
-    const r = await call(onboard, req("/api/v1/onboarding", { token: t, body: { name: "Alice Rao", country: "IN", pin: "1234", demo: false, email: "ignored@example.com" } }));
+    const r = await call(onboard, req("/api/v1/onboarding", { token: t, body: { name: "Alice Rao", country: "IN", pin: PIN, demo: false, email: "ignored@example.com" } }));
     expect(r.status).toBe(200);
     const identity = identityByUid("alice-uid")!;
     expect(identity.status).toBe("active");
@@ -150,14 +157,14 @@ describe("firebase mode", () => {
     expect(me.kyc).toEqual({ status: "not_started" });
     expect(me.auth.access).toBe("full");
 
-    const again = await call(onboard, req("/api/v1/onboarding", { token: t, body: { name: "Alice Rao", country: "IN", pin: "1234", demo: false } }));
+    const again = await call(onboard, req("/api/v1/onboarding", { token: t, body: { name: "Alice Rao", country: "IN", pin: PIN, demo: false } }));
     expect(again.status).toBe(409);
     expect((await again.json()).code).toBe("has_wallet");
   });
 
   it("keeps wallets apart per identity", async () => {
     const bob = await token("bob-uid");
-    await call(onboard, req("/api/v1/onboarding", { token: bob, body: { name: "Bob Lee", country: "US", pin: "1234", demo: false } }));
+    await call(onboard, req("/api/v1/onboarding", { token: bob, body: { name: "Bob Lee", country: "US", pin: PIN, demo: false } }));
     await call(createVault, req("/api/v1/vaults", { token: bob, body: { ...VAULT, name: "Bob vault" } }));
     const alice = await token("alice-uid");
     const mine = await (await call(listVaults, req("/api/v1/vaults", { token: alice }))).json();
@@ -176,8 +183,13 @@ describe("firebase mode", () => {
     expect((await blocked.json()).code).toBe("kyc_required");
 
     run("UPDATE users SET kyc_status = 'verified', kyc_level = 2 WHERE id = ?", identityByUid("alice-uid")!.user_id!);
-    const allowed = await call(withdraw, req(`/api/v1/vaults/${id}/withdrawals`, { token: t, body: { amount: 10, payee: "Clinic" } }), ctx({ id }));
+    // mpin: past the ID gate, the MPIN is the next check.
+    const noPin = await call(withdraw, req(`/api/v1/vaults/${id}/withdrawals`, { token: t, body: { amount: 10, payee: "Clinic" } }), ctx({ id }));
+    expect(noPin.status).toBe(401);
+    expect((await noPin.json()).code).toBe("mpin_required");
+    const allowed = await call(withdraw, req(`/api/v1/vaults/${id}/withdrawals`, { token: t, body: { amount: 10, payee: "Clinic", pin: PIN } }), ctx({ id }));
     expect(allowed.status).not.toBe(403);
+    expect(allowed.status).not.toBe(401);
   });
 
   it("recovery access opens only the summary routes", async () => {
@@ -239,14 +251,18 @@ describe("firebase mode", () => {
   it("asks for the current PIN before changing it", async () => {
     const t = await token("alice-uid");
     const userId = identityByUid("alice-uid")!.user_id!;
-    const missing = await call(patchMe, req("/api/v1/me", { token: t, method: "PATCH", body: { pin: "5678" } }));
-    expect(missing.status).toBe(400);
-    expect((await missing.json()).code).toBe("current_pin_required");
-    const wrong = await call(patchMe, req("/api/v1/me", { token: t, method: "PATCH", body: { pin: "5678", currentPin: "0000" } }));
+    // mpin: the MPIN module's codes (the identity module answered current_pin_required / pin_mismatch before).
+    const missing = await call(patchMe, req("/api/v1/me", { token: t, method: "PATCH", body: { pin: NEW_PIN } }));
+    expect(missing.status).toBe(401);
+    expect((await missing.json()).code).toBe("mpin_required");
+    const wrong = await call(patchMe, req("/api/v1/me", { token: t, method: "PATCH", body: { pin: NEW_PIN, currentPin: "000000" } }));
     expect(wrong.status).toBe(403);
-    expect((await wrong.json()).code).toBe("pin_mismatch");
-    expect((await call(patchMe, req("/api/v1/me", { token: t, method: "PATCH", body: { pin: "5678", currentPin: "1234" } }))).status).toBe(200);
-    expect(checkPin(get<User>("SELECT * FROM users WHERE id = ?", userId)!, "5678")).toBe(true);
+    expect((await wrong.json()).code).toBe("mpin_wrong");
+    const weak = await call(patchMe, req("/api/v1/me", { token: t, method: "PATCH", body: { pin: "5678", currentPin: PIN } }));
+    expect(weak.status).toBe(400);
+    expect((await weak.json()).code).toBe("mpin_weak");
+    expect((await call(patchMe, req("/api/v1/me", { token: t, method: "PATCH", body: { pin: NEW_PIN, currentPin: PIN } }))).status).toBe(200);
+    expect(checkPin(get<User>("SELECT * FROM users WHERE id = ?", userId)!, NEW_PIN)).toBe(true);
   });
 
   it("counts the wallet in the dashboard even when the wallet is switched off", async () => {
@@ -268,10 +284,11 @@ describe("firebase mode", () => {
     vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new Error("offline")))); // synthetic market data
     try {
       const t = await token("demo-uid");
-      const r = await call(onboard, req("/api/v1/onboarding", { token: t, body: { name: "Dee Mo", country: "US", pin: "1234", demo: true } }));
+      const r = await call(onboard, req("/api/v1/onboarding", { token: t, body: { name: "Dee Mo", country: "US", pin: PIN, demo: true } }));
       expect(r.status).toBe(200);
       const user = get<User>("SELECT * FROM users WHERE id = ?", identityByUid("demo-uid")!.user_id!)!;
-      expect(user).toMatchObject({ kyc_status: "pending", kyc_level: 0 });
+      // Level 1 while waiting for an ID check: one rule for every sign-up (src/lib/kyc/levels.ts).
+      expect(user).toMatchObject({ kyc_status: "pending", kyc_level: 1 });
     } finally {
       vi.unstubAllGlobals();
     }
@@ -291,7 +308,12 @@ describe("firebase mode", () => {
   it("reset closes the caller's account and keeps everyone else's data", async () => {
     const bob = await token("bob-uid");
     const bobUser = identityByUid("bob-uid")!.user_id!;
-    const r = await call(reset, req("/api/v1/reset", { token: bob, method: "POST" }));
+    // mpin: closing the account needs the MPIN.
+    const noPin = await call(reset, req("/api/v1/reset", { token: bob, method: "POST" }));
+    expect(noPin.status).toBe(401);
+    expect((await noPin.json()).code).toBe("mpin_required");
+    expect(identityByUid("bob-uid")!.status).toBe("active");
+    const r = await call(reset, req("/api/v1/reset", { token: bob, body: { pin: PIN } }));
     expect(await r.json()).toEqual({ ok: true, closed: true });
     expect(identityByUid("bob-uid")!.status).toBe("disabled");
     expect(get<{ closed_at: number | null }>("SELECT closed_at FROM users WHERE id = ?", bobUser)!.closed_at).toBeTruthy();

@@ -10,6 +10,9 @@ import type { Millis, Minor } from "../types";
 import { WALLET_MAX_AMOUNT, WALLET_NOTE_MAX, WALLET_PAYEE_MAX, type Wallet, type WalletActivity, type WalletMoveResult, type WalletSettingsInput, type WalletSettingsResult } from "../wallet-types";
 import { clone, currency, DAY, findVault, journal, newId, recompute, record, S, toMinor, wait } from "./state";
 import { assertPracticeCanMove } from "./identity"; // identity
+import { requirePracticeMpin } from "./mpin"; // mpin
+import { practiceAlert } from "./alerts"; // alerts
+import { assertPracticeDeviceCap } from "./devices"; // devices
 
 /** Raising (or turning off) the daily limit is allowed once in this window. */
 const RAISE_WINDOW = 30 * DAY;
@@ -195,9 +198,10 @@ export const walletDemo = {
     ]);
     return done(jid);
   },
-  walletMove: async (vaultId: string, amountMajor: number): Promise<WalletMoveResult> => {
+  walletMove: async (vaultId: string, amountMajor: number, pin?: string): Promise<WalletMoveResult> => {
     await wait(450);
     assertCanMove();
+    requirePracticeMpin(pin); // mpin
     const amount = amountOf(amountMajor);
     const v = findVault(vaultId);
     if (v.status === "closed") fail(400, "That vault is closed.", "vault_closed");
@@ -211,10 +215,12 @@ export const walletDemo = {
     addMove({ kind: "move", memo, amount: -amount, counterparty: v.name, note: null }, now);
     return done(S.journals[0].id);
   },
-  walletSpend: async (amountMajor: number, payee: string, note?: string | null): Promise<WalletMoveResult> => {
+  walletSpend: async (amountMajor: number, payee: string, note?: string | null, pin?: string): Promise<WalletMoveResult> => {
     await wait(500);
     assertCanMove();
     const amount = amountOf(amountMajor);
+    assertPracticeDeviceCap(amount); // devices: before the MPIN, as on the server
+    requirePracticeMpin(pin); // mpin
     // The server's schema first (no code), then its own check on the cleaned-up name.
     const named = payee.trim();
     if (named.length < 2) fail(400, "Say who you're paying.");
@@ -233,12 +239,15 @@ export const walletDemo = {
       { account: "Wallet", kind: "wallet", amount: -amount },
       { account: to, kind: "world", amount },
     ]);
+    practiceAlert("money_out", "Payment sent", `You paid ${money(amount, currency)} from your wallet.`); // alerts; protection: no typed payee in the bulk save
     return done(jid);
   },
-  walletCashOut: async (amountMajor: number): Promise<WalletMoveResult> => {
+  walletCashOut: async (amountMajor: number, pin?: string): Promise<WalletMoveResult> => {
     await wait(450);
     assertCanMove();
     const amount = amountOf(amountMajor);
+    assertPracticeDeviceCap(amount); // devices: before the MPIN, as on the server
+    requirePracticeMpin(pin); // mpin
     const now = Date.now();
     assertWithinDailyLimit(amount, now);
     assertWalletHas(amount);
@@ -249,6 +258,7 @@ export const walletDemo = {
       { account: "Wallet", kind: "wallet", amount: -amount },
       { account: "Linked bank account", kind: "bank", amount },
     ]);
+    practiceAlert("money_out", "Moved to your bank", `${money(amount, currency)} left your wallet for your bank.`); // alerts
     return done(jid);
   },
   walletSettings: async (input: WalletSettingsInput): Promise<WalletSettingsResult> => {
@@ -265,12 +275,14 @@ export const walletDemo = {
       if (next !== null && next <= 0) fail(400, "Enter a daily limit above zero.", "bad_amount");
       const raised = w.dailyLimit !== null && (next === null || next > w.dailyLimit);
       if (raised) {
+        requirePracticeMpin(input.pin); // mpin: raising or turning off the limit
         const r = raiseState(now);
         if (!r.available) {
           const when = new Date(r.nextAt!).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
           fail(409, `You can raise or turn off your daily limit once every 30 days. You can do it again on ${when}. You can lower it any time.`, "limit_raise_locked");
         }
         w.limitRaisedAt = now;
+        practiceAlert("limit_loosened", next === null ? "Daily limit turned off" : "Daily limit raised", next === null ? "Your wallet has no daily limit now. If this wasn't you, talk to a person." : `Your wallet's daily limit is ${money(next, currency)} now. If this wasn't you, talk to a person.`); // alerts
       }
       w.dailyLimit = next;
     }

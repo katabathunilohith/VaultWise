@@ -123,7 +123,8 @@ English: "money" not "funds", "your bank" not "linked account", "payday" not "pa
 hooks from `@/lib/api/hooks` (`useDashboard`, `useVault(id)`, `useProof(id)` polls, `useCheckout(id)`
 polls…), `useInvalidateMoney()` after anything that moves money. Responses are minor units; request
 bodies are major units (the client methods take major units). Format with `@/lib/money`
-(`money`, `moneyWhole`, `moneyCompact`, `parseAmount`). Demo PIN is `1234` (`DEMO_PIN`).
+(`money`, `moneyWhole`, `moneyCompact`, `parseAmount`). Money moves out ask for the 6-digit MPIN with
+`withMpin()` / `ensureMpin()` from `@/features/mpin`; the Practice MPIN is `246810` (`PRACTICE_PIN`).
 Sample documents: `useSamples()` + `sampleSource(key)` from `@/lib/api/samples`.
 
 ## 7. Features (what competitors have, and how Vaultwise does it better)

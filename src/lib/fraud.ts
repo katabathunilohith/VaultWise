@@ -1,5 +1,7 @@
-import { all, get, newId, run } from "./db";
+import { all, get, newId, run, tx } from "./db";
 import { audit } from "./audit";
+import { RECEIPT_STILL_OWED } from "./shared";
+import { HttpError } from "./users";
 
 export interface FraudFlag {
   id: string;
@@ -54,9 +56,23 @@ export function listFlags(status?: string) {
     : all<FraudFlag>("SELECT * FROM fraud_flags ORDER BY created_at DESC LIMIT 200");
 }
 
-export function resolveFlag(id: string, status: "resolved" | "dismissed", resolution: string, reviewer: string) {
-  run("UPDATE fraud_flags SET status = ?, resolution = ?, resolved_at = ? WHERE id = ?", status, resolution, Date.now(), id);
-  audit({ actor: reviewer, actorType: "reviewer", action: `fraud.flag_${status}`, entityType: "fraud_flag", entityId: id, details: { resolution } });
+/** Closes an open flag. Refuses an unknown or already-closed flag, so a decision is never overwritten. */
+export function resolveFlag(id: string, status: "resolved" | "dismissed", resolution: string, reviewer: string, now = Date.now()) {
+  tx(() => {
+    const flag = get<FraudFlag>("SELECT * FROM fraud_flags WHERE id = ?", id);
+    if (!flag) throw new HttpError(404, "Flag not found", "flag_not_found");
+    if (flag.status !== "open") throw new HttpError(409, "This flag is already closed", "flag_closed");
+    run("UPDATE fraud_flags SET status = ?, resolution = ?, resolved_at = ? WHERE id = ? AND status = 'open'", status, resolution, now, id);
+    audit({
+      userId: flag.user_id,
+      actor: reviewer,
+      actorType: "reviewer",
+      action: `fraud.flag_${status}`,
+      entityType: "fraud_flag",
+      entityId: id,
+      details: { resolution },
+    });
+  });
 }
 
 /**
@@ -80,9 +96,11 @@ export function emergencyRiskScore(userId: string, amount: number, now = Date.no
     )?.a ?? 0;
   const user = get<{ created_at: number }>("SELECT created_at FROM users WHERE id = ?", userId);
   const tenureDays = user ? (now - user.created_at) / day : 0;
+  // "overdue" counts too: it's what the scheduler calls a requested receipt once its due date passes.
   const overdueReceipts = get<{ n: number }>(
-    "SELECT COUNT(*) AS n FROM emergency_requests WHERE user_id = ? AND receipt_status IN ('requested', 'rejected') AND receipt_due_at < ?",
+    `SELECT COUNT(*) AS n FROM emergency_requests WHERE user_id = ? AND receipt_status IN (${RECEIPT_STILL_OWED.map(() => "?").join(", ")}) AND receipt_due_at < ?`,
     userId,
+    ...RECEIPT_STILL_OWED,
     now,
   )!.n;
   const openFlags = get<{ n: number }>("SELECT COUNT(*) AS n FROM fraud_flags WHERE user_id = ? AND status = 'open'", userId)!.n;

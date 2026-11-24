@@ -4,6 +4,7 @@ import { get } from "@/lib/db";
 import { HttpError } from "@/lib/users";
 import { createProof, runPipeline, validateUpload } from "@/lib/verification/pipeline";
 import { aiConsented } from "@/lib/ai-consent";
+import { assertUploadsLeft, limitUploads } from "@/lib/rate-limit"; // rate-limit
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -13,9 +14,11 @@ export const maxDuration = 90;
 export const POST = handle(async (req: Request, ctx: Ctx) => {
   const { id } = await ctx.params;
   const user = await customer({ tick: false, kyc: true });
+  assertUploadsLeft(user.id); // rate-limit: none left this hour → 429 before the file is read
   const r = get<{ id: string; receipt_status: string; plan: string }>("SELECT * FROM emergency_requests WHERE id = ? AND user_id = ?", id, user.id);
   if (!r) throw new HttpError(404, "Emergency request not found");
   if (!["requested", "optional", "overdue", "rejected"].includes(r.receipt_status)) throw new HttpError(409, "A receipt is already being processed");
+  limitUploads(user.id); // rate-limit: counted once the request is known to take a receipt
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) throw new HttpError(400, "Attach a file");

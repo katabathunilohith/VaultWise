@@ -14,7 +14,7 @@ Three ways back in, from easiest to hardest:
 | `RECOVERY_ENABLED` | `"false"` turns off find, reset and claim (404 `recovery_off`). On by default. |
 | `FIREBASE_WEB_API_KEY` | Lets the server send reset emails (Identity Toolkit `accounts:sendOobCode`, `PASSWORD_RESET`). Unset: nothing is sent and a warning is logged; clients can still call Firebase's `sendPasswordResetEmail` directly. |
 | `IDENTITY_SECRET` | Also signs `findToken`s (see `src/lib/kyc/README.md`). Required in firebase mode. |
-| `TRUST_PROXY_HOPS` | Trusted proxies in front of the server. Only then is `x-forwarded-for` used (its right-most trusted hop). Otherwise the client IP comes from `cf-connecting-ip` or `x-real-ip`. |
+| `TRUST_PROXY_HOPS` / `TRUST_PROXY_HEADER` | Which proxy headers hold the client IP (see `src/lib/auth/README.md`). With neither set there is no IP key: the device id and the server-wide cap still apply. |
 
 Claims need firebase mode (`FIREBASE_PROJECT_ID`). In prototype mode reset answers `{ ok: true, simulated: true }`,
 `GET /claim` answers `{ claim: null }` and `POST`/`DELETE /claim` answer 400 `not_available`.
@@ -45,7 +45,7 @@ route, so rotating headers can't remove the limit and a client with no IP header
 | reset | 5 | 500 | 1 hour | IP, `x-device-id` |
 | claim | 3 | 200 | 1 day | sign-in uid, IP, `x-device-id` |
 
-The IP is `cf-connecting-ip`, else `x-real-ip`, else (only with `TRUST_PROXY_HOPS`) the right-most trusted `x-forwarded-for` hop.
+The IP comes only from headers a trusted proxy sets: with `TRUST_PROXY_HOPS` ≥ 1, `cf-connecting-ip`, else `x-real-ip`, else the right-most trusted `x-forwarded-for` hop; with `TRUST_PROXY_HEADER`, only the header it names.
 `x-device-id` is client-chosen, so it only ever adds a limit.
 
 ## Rules

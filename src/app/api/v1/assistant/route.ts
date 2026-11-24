@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { body, customer, handle } from "@/lib/api";
+import { aiConsented } from "@/lib/ai-consent";
 import { rulesFor } from "@/lib/compliance";
 import { snapshot } from "@/lib/engagement";
 import { aiEnabled, chatStream } from "@/lib/groq";
@@ -13,6 +14,9 @@ const MOBILE_NAV = `the app's tabs are Home, Vaults, Pay, Invest and Emergency; 
 
 export const POST = handle(async (req: Request) => {
   const user = await customer({ tick: false, access: "read" });
+  // ai-consent: the chat and a snapshot of the customer's money go to the AI provider, so only with a yes.
+  if (!(await aiConsented()))
+    throw new HttpError(403, "The assistant uses AI. Say yes to AI in the app first, then try again.", "ai_consent_required");
   const b = await body(req, z.object({ messages: z.array(Msg).min(1).max(30), client: z.enum(["web", "mobile"]).optional() }));
   if (!aiEnabled()) throw new HttpError(503, "The assistant needs GROQ_API_KEY in .env.local");
   const rules = rulesFor(user.jurisdiction);

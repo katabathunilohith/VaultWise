@@ -16,17 +16,24 @@ import { DEMO_SAMPLES } from "../samples";
 import type { Accounts, Activity, BadgesResponse, Dashboard, Insight, Me, OnboardingInput } from "../types";
 import { emergencyApi, refreshEmergency } from "./emergency";
 import { investApi } from "./invest";
-import { appealProof, proofById, resetProofs } from "./proofs";
+import { savingAfterEachCall, resetPracticeSlices } from "./persist";
+import { appealProof, proofById } from "./proofs";
 import { checkouts, settleDue } from "./settle";
-import { clone, PENDING_REVIEW, resetState, S, wait } from "./state";
+import { clone, PENDING_REVIEW, S, wait } from "./state";
 import { vaultsApi } from "./vaults";
 import { assertPracticeCanMove, identityDemo, withIdentity } from "./identity";
 import { walletDemo } from "./wallet";
+import { changePracticeMpin, practiceMpinStatus } from "./mpin"; // mpin
+import { alertsDemo, practiceAlert } from "./alerts"; // alerts
+import { devicesDemo, practiceSecurityMe } from "./devices"; // devices
 
-export const demo = {
+/** Every call is followed by a save on the device (./persist.ts), so Practice data survives a restart. */
+export const demo = savingAfterEachCall({
   ...walletDemo, // wallet
   ...identityDemo, // identity
-  me: async (): Promise<Me> => withIdentity(clone(S.me)), // identity: auth, kyc and recovery fields
+  ...devicesDemo, // devices: devices, phone OTP, MPIN reset
+  ...alertsDemo, // alerts
+  me: async (): Promise<Me> => withIdentity({ ...clone(S.me), mpin: practiceMpinStatus(), ...practiceSecurityMe() }), // identity: auth, kyc and recovery fields; mpin; devices: phone, device
   onboarding: async (input: OnboardingInput) => {
     await wait(900);
     S.me = { ...S.me, user: { ...S.me.user, name: input.name, email: input.email ?? null } };
@@ -61,12 +68,19 @@ export const demo = {
   },
   ...emergencyApi,
   ...investApi,
+  // mpin
+  changeMpin: async (currentPin: string, newPin: string) => {
+    await wait(500);
+    changePracticeMpin(currentPin, newPin);
+    practiceAlert("mpin_changed", "MPIN changed", "Use your new MPIN to approve money moves. If this wasn't you, talk to a person."); // alerts
+    return { ok: true as const };
+  },
   region: async () => ({ guess: { country: "IN", supported: true, source: "demo", detail: "Demo data is set in India" } }),
-  reset: async () => {
+  // mpin: Practice is like a server without sign-in, where deleting needs no MPIN (`pin` is accepted and ignored).
+  reset: async (_pin?: string) => {
     await wait(400);
-    resetState();
-    resetProofs();
-    checkouts.reset();
+    // Every part of the simulator back to the sample data: state, proofs and checkouts register themselves.
+    resetPracticeSlices();
     return { ok: true as const };
   },
   /** There's no server to export from in Practice. */
@@ -125,4 +139,4 @@ export const demo = {
     settleDue();
     return checkouts.list();
   },
-} satisfies Api;
+} satisfies Api);

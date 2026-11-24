@@ -1,12 +1,13 @@
 import { StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { CaretRightIcon, WalletIcon } from "@/components/icons";
-import { MoneyText, Press, Skeleton, Txt } from "@/components/ui";
+import { Press, Skeleton, Txt } from "@/components/ui";
 import { money } from "@/lib/money";
 import { radius, space, useTheme } from "@/theme";
 import { WALLET_ENABLED } from "./config";
 import { useWallet, walletMissing } from "./hooks";
 import { amountText, WALLET_HREF, walletRestricted } from "./model";
+import { MaskedMoneyText, maskedMoney, useBalancesMasked } from "@/features/protection"; // protection
 
 /**
  * Home's wallet card: what's in the wallet and what's safe to spend today. The whole card opens
@@ -16,6 +17,7 @@ import { amountText, WALLET_HREF, walletRestricted } from "./model";
 export function WalletCard() {
   const { c } = useTheme();
   const q = useWallet();
+  const masked = useBalancesMasked(); // protection: "Hide balances" on Home
   if (!WALLET_ENABLED) return null;
   if (q.isPending) return <Skeleton height={88} r={radius.lg} />;
   // Keep showing the last good numbers if a refresh fails.
@@ -41,11 +43,11 @@ export function WalletCard() {
   const cur = w.currency;
   const days = w.daysToPayday;
   const sub = w.enabled
-    ? `Safe to spend today ${amountText(w.safeToSpendToday, cur)} · Payday in ${days} ${days === 1 ? "day" : "days"}`
+    ? `Safe to spend today ${masked ? maskedMoney(cur) : amountText(w.safeToSpendToday, cur)} · Payday in ${days} ${days === 1 ? "day" : "days"}`
     : "The wallet is off. You can move this to your bank.";
   return (
     <Press
-      accessibilityLabel={`Wallet, ${money(w.balance, cur)}. ${sub.replace(" · ", ". ")}.`}
+      accessibilityLabel={`Wallet, ${masked ? "balance hidden" : money(w.balance, cur)}. ${sub.replace(" · ", ". ").replace(maskedMoney(cur), "hidden")}.`}
       accessibilityHint="Opens your wallet"
       onPress={() => router.push(WALLET_HREF)}
       scaleTo={0.98}
@@ -56,7 +58,7 @@ export function WalletCard() {
         <Txt v="labelM" color="textMuted">
           Wallet
         </Txt>
-        <MoneyText value={w.balance} currency={cur} v="numL" />
+        <MaskedMoneyText value={w.balance} currency={cur} v="numL" />
         <Txt v="caption" color="textMuted">
           {sub}
         </Txt>

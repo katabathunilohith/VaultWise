@@ -3,6 +3,9 @@ import { assertPracticeCanMove } from "./identity"; // identity
 import { money } from "../../money";
 import { ApiError } from "../errors";
 import type { CreateVaultInput, LimitKey, UpdateVaultInput, UploadFile, Vault, VaultDetail, WithdrawalRow } from "../types";
+import { requirePracticeMpin } from "./mpin"; // mpin
+import { practiceAlert } from "./alerts"; // alerts
+import { assertPracticeDeviceCap } from "./devices"; // devices
 import { submitWithdrawalProof } from "./proofs";
 import { settleDue } from "./settle";
 import { applyEmergencyCap, clone, currency, findVault, limitsView, newId, PERIOD, recompute, record, S, toMinor, wait, withdrawnToday } from "./state";
@@ -113,12 +116,14 @@ export const vaultsApi = {
     record("deposit", memo ?? "Added from your bank", v, amount, { account: "Linked bank account", kind: "bank" });
     return { journalId: S.journals[0].id };
   },
-  withdraw: async (vaultId: string, amountMajor: number, payee: string, note?: string) => {
+  withdraw: async (vaultId: string, amountMajor: number, payee: string, note?: string, pin?: string) => {
     assertPracticeCanMove(); // identity: read-only while a Practice recovery request waits
     await wait(350);
+    const amount = toMinor(amountMajor);
+    assertPracticeDeviceCap(amount); // devices: an untrusted phone moves small amounts only (before the MPIN, as on the server)
+    requirePracticeMpin(pin); // mpin: before anything is held
     settleDue();
     const v = findVault(vaultId);
-    const amount = toMinor(amountMajor);
     if (amount > v.available) throw new ApiError("That's more than this vault has available", 400);
     const { singleWithdrawal, dailyWithdrawal } = S.limits.limits;
     if (amount > singleWithdrawal)
@@ -148,6 +153,7 @@ export const vaultsApi = {
     S.withdrawals.set(vaultId, [row, ...(S.withdrawals.get(vaultId) ?? [])]);
     v.held += amount;
     recompute(v);
+    practiceAlert("money_out", "Withdrawal requested", `${money(amount, currency)} from ${v.name}. It's paid to the payee once the bill is checked.`); // alerts; protection: no typed payee in the bulk save
     return { id: wid, status: "awaiting_proof" };
   },
   cancelWithdrawal: async (withdrawalId: string) => {
@@ -176,7 +182,7 @@ export const vaultsApi = {
     settleDue();
     return limitsView();
   },
-  setLimits: async (major: Partial<Record<LimitKey, number>>) => {
+  setLimits: async (major: Partial<Record<LimitKey, number>>, pin?: string) => {
     await wait(400);
     const next = { ...S.limits.limits };
     let loosening = false;
@@ -186,10 +192,12 @@ export const vaultsApi = {
       if (m > next[k]) loosening = true;
       next[k] = m;
     }
+    if (loosening) requirePracticeMpin(pin); // mpin: any limit going up
     if (loosening && !S.limits.quota.available) throw new ApiError("You've already raised a limit this month", 409);
     S.limits = { ...S.limits, limits: next, quota: loosening ? { ...S.limits.quota, used: 1, available: false } : S.limits.quota };
     // A new emergency limit applies straight away, as on the server.
     applyEmergencyCap();
+    if (loosening) practiceAlert("limit_loosened", "A limit went up", "One of your withdrawal or emergency limits was raised. If this wasn't you, talk to a person."); // alerts
     return { overview: limitsView() };
   },
 };

@@ -65,6 +65,12 @@ export const EMERGENCY_REASONS: Record<string, string> = {
 };
 
 /**
+ * Emergency receipt states where a receipt is still owed. Past its due date, each one counts against
+ * the customer's risk score (fraud.ts). The scheduler moves "requested" to "overdue" at the due date.
+ */
+export const RECEIPT_STILL_OWED = ["requested", "overdue", "rejected"] as const;
+
+/**
  * Rough price-level scale per currency (1 USD-equivalent of everyday spending).
  * Drives default limits for new markets and demo amounts, so adding a currency
  * is a one-line change.

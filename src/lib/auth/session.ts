@@ -5,6 +5,8 @@ import { bearerToken, requestHeaders } from "./context";
 import { identityByUid, isClosed, type Identity } from "./identities";
 import { TokenError, verifyIdToken, type VerifiedToken } from "./verify";
 import { settleExpiredClaimFor } from "../recovery/claims"; // recovery
+import { touchDevice, type DeviceContext } from "../devices"; // devices
+import { checkRateLimit, generalLimitPerMinute } from "../rate-limit"; // rate-limit
 
 /**
  * Request-scoped identity. Prototype mode: the first user, no sign-in (exactly as before).
@@ -19,6 +21,11 @@ export interface Session {
   user: User | null;
   /** "recovery" while a recovery claim waits for a person: read-only. */
   access: "full" | "recovery";
+  /**
+   * devices: the device this request came from and what it may do; null when there is no wallet yet,
+   * and for a recovery claimant's read-only access (the claimant isn't a device of that wallet).
+   */
+  device: DeviceContext | null; // devices
 }
 
 export const SIGNED_OUT = "Sign in to continue.";
@@ -28,6 +35,22 @@ export const KYC_REQUIRED = "Verify your ID to move money.";
 export const ADMIN_ONLY = "Only the operations team can do this.";
 
 const userById = (id: string) => get<User>("SELECT * FROM users WHERE id = ?", id) ?? null;
+
+/**
+ * devices: records the calling device for this wallet; 401 device_revoked for a signed-out device, and
+ * 401 signed_out for a sign-in older than the account's last device sign-out (unless from a trusted device).
+ */
+const attachDevice = async (user: User, signedInAt: number | null = null) => touchDevice(user, await requestHeaders(), { signedInAt }); // devices
+
+/**
+ * rate-limit: the general per-minute limit per signed-in person (firebase mode; prototype mode has no
+ * sign-in, so the per-IP limit in handle() is all). Here rather than in customer() so it also covers
+ * GET /me and runs before the device is recorded. A recovery claimant is counted by its own sign-in,
+ * so it can't use up the wallet owner's limit.
+ */
+function limitPerson(key: string) {
+  checkRateLimit(`all:${key}`, generalLimitPerMinute(), 60_000);
+}
 
 /** Verifies the request's token. Throws 401 signed_out when it is missing or invalid. */
 export async function signedIn(): Promise<VerifiedToken> {
@@ -43,7 +66,8 @@ export async function signedIn(): Promise<VerifiedToken> {
 
 export async function session(): Promise<Session> {
   if (authMode() === "prototype") {
-    return { mode: "prototype", token: null, identity: null, user: currentUser() ?? null, access: "full" };
+    const user = currentUser() ?? null; // devices
+    return { mode: "prototype", token: null, identity: null, user, access: "full", device: user ? await attachDevice(user) : null }; // devices
   }
   const token = await signedIn();
   let identity = identityByUid(token.uid) ?? null;
@@ -57,12 +81,16 @@ export async function session(): Promise<Session> {
   }
   const usable = identity && identity.user_id && identity.status !== "disabled" && !isClosed(identity.user_id);
   const user = usable ? userById(identity!.user_id!) : null;
+  const access = user && identity?.status === "recovery_pending" ? "recovery" : "full";
+  if (user) limitPerson(access === "recovery" ? `uid:${token.uid}` : `user:${user.id}`); // rate-limit
   return {
     mode: "firebase",
     token,
     identity,
     user,
-    access: user && identity?.status === "recovery_pending" ? "recovery" : "full",
+    access,
+    // devices: a claimant with read-only recovery access never becomes a device of the wallet it claims.
+    device: user && access === "full" ? await attachDevice(user, token.signedInAt) : null, // devices
   };
 }
 

@@ -7,6 +7,7 @@ import { aiConsented } from "./ai-consent";
 import { HttpError, type User } from "./users";
 import { EMERGENCY_REASONS, fmtDate, fmtMoney, LIMIT_LABELS, type LimitKey } from "./shared";
 import { preprocess } from "./verification/forensics";
+import { alertLimitLoosened } from "./alerts"; // alerts
 
 /**
  * Personal limits — a commitment device. Customers may *tighten* a limit at
@@ -262,6 +263,7 @@ export function changeLimits(user: User, next: Partial<Limits>, now = Date.now()
       details: { before, after, loosened: d.loosened, tightened: d.tightened },
       ts: now,
     });
+    if (kind === "standard") alertLimitLoosened(user.id, "You raised a withdrawal limit."); // alerts
     return { id, kind, limits: after };
   });
 }
@@ -531,6 +533,7 @@ export async function requestEmergencyLimitChange(
       verdict.decision === "in_review" ? null : now,
     );
     if (verdict.decision === "approved") saveLimits(user, after, now);
+    if (verdict.decision === "approved") alertLimitLoosened(user.id, "Your emergency request to raise a limit was approved."); // alerts
     audit({
       userId: user.id,
       actor: model ?? "limits-policy",
@@ -647,5 +650,6 @@ export function reviewLimitChange(id: string, decision: "approved" | "denied", r
       entityId: id,
       details: { note, expiresAt },
     });
+    if (decision === "approved") alertLimitLoosened(user.id, "A reviewer approved your request to raise a limit."); // alerts
   });
 }

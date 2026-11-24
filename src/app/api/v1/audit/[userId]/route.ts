@@ -1,4 +1,4 @@
-import { admin, handle, json } from "@/lib/api";
+import { admin, handle, json, limitParam } from "@/lib/api";
 import { all, parseJson } from "@/lib/db";
 import { verifyAuditChain } from "@/lib/audit";
 
@@ -9,7 +9,7 @@ export const GET = handle(async (req: Request, ctx: Ctx) => {
   await admin(); // identity: ops team only when sign-in is on
   const { userId } = await ctx.params;
   const url = new URL(req.url);
-  const limit = Math.min(1000, Number(url.searchParams.get("limit") ?? 300));
+  const limit = limitParam(url, 300, 1000);
   const action = url.searchParams.get("action");
   const rows = all<{
     id: number;

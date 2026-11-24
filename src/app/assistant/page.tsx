@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Bot, Send, Sparkles, User } from "lucide-react";
 import { useMe } from "@/components/shell";
 import { withIdentity } from "@/components/identity"; // identity
+import { webDeviceHeaders } from "@/components/identity/device"; // devices
+import { AiConsentSwitch, aiConsentHeaderValue, askAiConsent, useAiConsent } from "@/components/ai-consent"; // ai-consent
 import { Button, Card, Notice, PageHeader, cx } from "@/components/ui";
 
 interface Msg {
@@ -92,6 +94,7 @@ export default function AssistantPage() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const consent = useAiConsent(); // ai-consent
   const end = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -101,6 +104,8 @@ export default function AssistantPage() {
   const send = async (text: string) => {
     const q = text.trim();
     if (!q || busy) return;
+    // ai-consent: the chat and a summary of your money go to the AI provider, so ask first; "no" sends nothing.
+    if ((await askAiConsent("assistant")) !== "yes") return;
     const next: Msg[] = [...msgs, { role: "user", content: q }];
     setMsgs([...next, { role: "assistant", content: "" }]);
     setInput("");
@@ -111,7 +116,7 @@ export default function AssistantPage() {
         "/api/v1/assistant",
         await withIdentity({
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "x-ai-consent": aiConsentHeaderValue(), ...webDeviceHeaders() }, // ai-consent, devices
           body: JSON.stringify({ messages: next.slice(-12) }),
         }),
       );
@@ -143,6 +148,12 @@ export default function AssistantPage() {
         subtitle="Ask about your vaults, verification, emergency access or investing concepts. Educational only — not financial advice."
       />
       {!aiEnabled && <Notice tone="warn">Add GROQ_API_KEY to .env.local to enable the assistant.</Notice>}
+      {/* ai-consent */}
+      {aiEnabled && consent === "no" && (
+        <Notice tone="info" title="The assistant is off">
+          You chose to keep your data away from the AI, so the assistant can&apos;t answer. Change your answer below to use it.
+        </Notice>
+      )}
       <Card className="flex min-h-0 flex-1 flex-col" pad={false}>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           {msgs.length === 0 ? (
@@ -205,18 +216,21 @@ export default function AssistantPage() {
             e.preventDefault();
             send(input);
           }}
-          className="flex gap-2 border-t border-line p-3"
+          className="flex flex-wrap items-center gap-2 border-t border-line p-3"
         >
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask anything about your savings…"
-            className="h-11 flex-1 rounded-xl border border-line-strong bg-surface px-4 text-sm focus:border-accent focus:outline-none"
+            className="h-11 min-w-0 flex-1 rounded-xl border border-line-strong bg-surface px-4 text-sm focus:border-accent focus:outline-none"
             aria-label="Message"
           />
-          <Button type="submit" size="lg" disabled={!input.trim()} loading={busy} icon={<Send className="size-4" />} className="h-11">
+          <Button type="submit" size="lg" disabled={!input.trim() || consent === "no"} loading={busy} icon={<Send className="size-4" />} className="h-11">
             Send
           </Button>
+          <div className="w-full px-1">
+            <AiConsentSwitch reason="assistant" />
+          </div>
         </form>
       </Card>
     </div>

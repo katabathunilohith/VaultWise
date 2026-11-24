@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { InlineScript } from "@/components/inline-script";
 import { Shell } from "@/components/shell";
+import { AiConsentHost } from "@/components/ai-consent";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -30,6 +31,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body>
         <Shell>{children}</Shell>
+        {/* ai-consent: asks "Can an AI read what you send?" before the first bill, ID photo or assistant message. */}
+        <AiConsentHost />
       </body>
     </html>
   );

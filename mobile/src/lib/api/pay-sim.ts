@@ -31,8 +31,9 @@ export interface PayLedger {
 /**
  * Rough price level per currency (USD = 1): the table the server sizes its own samples with
  * (src/lib/shared.ts), so a sample bill costs about the same in every wallet currency.
+ * devices: exported for the Practice untrusted-phone cap (demo/devices.ts).
  */
-const CURRENCY_SCALE: Record<string, number> = { USD: 1, EUR: 0.95, GBP: 0.8, SGD: 1.3, INR: 80, CAD: 1.35, AUD: 1.5, AED: 3.67 };
+export const CURRENCY_SCALE: Record<string, number> = { USD: 1, EUR: 0.95, GBP: 0.8, SGD: 1.3, INR: 80, CAD: 1.35, AUD: 1.5, AED: 3.67 };
 
 /** A sample bill's line items, written in USD and sized to `cur`; the total is their sum. */
 function bill(cur: string, items: [string, number][]) {
@@ -119,7 +120,28 @@ function intentStore(initialCurrency: string) {
     sizeFor(walletCurrency: string) {
       if (walletCurrency !== cur) reset(walletCurrency);
     },
+    /** A copy to save on the device (Practice). */
+    snapshot: (): SavedIntents => ({ cur, gen, list }),
+    /** Puts a saved copy back. Throws if it isn't one, so the caller can start over. */
+    restore(saved: SavedIntents) {
+      if (!saved || typeof saved.cur !== "string" || !Array.isArray(saved.list)) throw new Error("Not a saved checkout list");
+      cur = saved.cur;
+      list = saved.list;
+      // A save without a whole `gen` would give the next batch `_NaN` ids: carry on from the highest batch in the list.
+      gen = Number.isInteger(saved.gen) && saved.gen >= 0 ? saved.gen : highestBatch(list);
+    },
   };
+}
+type SavedIntents = { cur: string; gen: number; list: SimIntent[] };
+
+/** The highest batch number in the checkouts' ids (`pi_demo_citygeneral_3` → 3; the first batch has none). Pure. */
+export function highestBatch(list: readonly { id?: unknown }[]): number {
+  let high = 0;
+  for (const i of list) {
+    const m = typeof i?.id === "string" ? /_(\d+)$/.exec(i.id) : null;
+    if (m) high = Math.max(high, Number(m[1]));
+  }
+  return high;
 }
 type IntentStore = ReturnType<typeof intentStore>;
 
@@ -204,12 +226,20 @@ function findIntent(store: IntentStore, intentId: string) {
   return i;
 }
 
+/** mpin: how a confirm's MPIN is checked. Throws an ApiError when it isn't right. */
+type PinCheck = (pin: string) => void;
+
+/** A live dry run moves nothing, so it takes the Practice MPIN. */
+const practiceMpinOnly: PinCheck = (pin) => {
+  if (pin !== PRACTICE_PIN) throw new ApiError("That MPIN isn't right.", 403, "mpin_wrong");
+};
+
 /** A confirm's checks, in the server's order, then the checkout starts processing. */
-function startPayment(i: SimIntent, pin: string, findVault: () => Vault | undefined) {
+function startPayment(i: SimIntent, pin: string, findVault: () => Vault | undefined, checkPin: PinCheck) {
   // A checkout can be confirmed only while it's still waiting and its link hasn't run out.
   if (i.status !== "requires_customer") throw new ApiError("This payment has already been handled", 409);
   if (Date.now() >= i.expiresAt) throw new ApiError("This payment link has expired. Ask the merchant for a new one.", 409);
-  if (pin !== PRACTICE_PIN) throw new ApiError("That PIN isn't right", 403);
+  checkPin(pin);
   const v = findVault();
   if (!v || !covers(v, i.category)) throw new ApiError("This vault can't pay this bill. Pick another one.", 400);
   if (v.available < i.amount) throw new ApiError(`${v.name} doesn't have enough available`, 400);
@@ -222,7 +252,7 @@ function startPayment(i: SimIntent, pin: string, findVault: () => Vault | undefi
  * Practice checkouts, paid from the simulator's vaults through `ledger`. Reads are views over the
  * vaults after any payment, so balances are post-payment.
  */
-export function practiceCheckouts(ledger: PayLedger, initialCurrency: string) {
+export function practiceCheckouts(ledger: PayLedger, initialCurrency: string, checkPin: PinCheck = practiceMpinOnly) {
   const store = intentStore(initialCurrency);
   const view = (i: SimIntent) => {
     advanceIntent(i, ledger);
@@ -241,7 +271,7 @@ export function practiceCheckouts(ledger: PayLedger, initialCurrency: string) {
         const v = ledger.vaults().find((x) => x.id === vaultId);
         if (!v) throw new ApiError("Vault not found", 404);
         return v;
-      });
+      }, checkPin);
       return view(i);
     },
     /** Every sample checkout; a fresh batch once nothing is left to pay. Settle first. */
@@ -250,6 +280,8 @@ export function practiceCheckouts(ledger: PayLedger, initialCurrency: string) {
       return store.list().map(view);
     },
     reset: () => store.reset(),
+    snapshot: () => store.snapshot(),
+    restore: (saved: SavedIntents) => store.restore(saved),
   };
 }
 
@@ -276,7 +308,7 @@ export const payDryRun = {
   confirm(intentId: string, vaultId: string, pin: string, vaults: Vault[], walletCurrency: string): PaymentIntent {
     const i = findIntent(dryRunCheckouts(walletCurrency), intentId);
     advanceIntent(i, null);
-    startPayment(i, pin, () => vaults.find((x) => x.id === vaultId));
+    startPayment(i, pin, () => vaults.find((x) => x.id === vaultId), practiceMpinOnly);
     return intentView(i, payVaults(vaults, i.category), { dryRun: true });
   },
   list(vaults: Vault[], walletCurrency: string): PaymentIntent[] {

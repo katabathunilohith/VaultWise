@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import { getConnection } from "@/lib/api/connection";
 import { ApiError } from "@/lib/api/errors";
 import { authHeaders } from "@/lib/api/http";
+import { deviceHeaders } from "@/lib/api/device"; // devices
 
 /**
  * identity: Export my data while signed in. The export needs the sign-in token, which a browser
@@ -13,7 +14,7 @@ export async function downloadSignedInExport(url: string): Promise<"saved" | "un
   if (Platform.OS !== "web" || typeof document === "undefined") return "unsupported";
   let res: Response;
   try {
-    res = await fetch(url, { headers: await authHeaders(getConnection().baseUrl) });
+    res = await fetch(url, { headers: { ...(await authHeaders(getConnection().baseUrl)), ...(await deviceHeaders()) } }); // devices
   } catch (e) {
     if (e instanceof ApiError) throw e;
     throw new ApiError("Can't reach Vaultwise. Check your connection.", 0);

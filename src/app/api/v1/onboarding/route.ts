@@ -8,6 +8,7 @@ import { session } from "@/lib/auth/session"; // identity
 import { bindNewWallet } from "@/lib/auth/account"; // identity
 import { kycEnforced } from "@/lib/auth/config"; // identity
 import { pendingClaimFor, settleExpiredClaimFor } from "@/lib/recovery/claims"; // identity
+import { assertNewMpin, recordChosenMpin } from "@/lib/mpin"; // mpin
 
 const Input = z.object({
   name: z.string().trim().min(2).max(60),
@@ -15,7 +16,8 @@ const Input = z.object({
   country: z.enum(COUNTRY_CODES).optional(),
   /** Older clients sent a market code; a country is preferred. */
   jurisdiction: z.enum(MARKET_CODES).optional(),
-  pin: z.string().regex(/^\d{4,6}$/, "PIN must be 4–6 digits"),
+  /** mpin: the new account's MPIN: 6 digits that pass the policy (4–6 digits with MPIN_ENFORCED=false). */
+  pin: z.string().max(12),
   demo: z.boolean(),
 });
 
@@ -33,6 +35,7 @@ export const POST = handle(async (req: Request) => {
   if (s.token && pendingClaimFor(s.token.uid))
     throw new HttpError(409, "You asked to recover an account. Cancel that request first to open a new wallet.", "claim_pending");
   const b = await body(req, Input);
+  assertNewMpin(b.pin); // mpin
   // identity: new sign-ups (practice data included) verify an ID first when KYC is enforced.
   const kycStatus = kycEnforced() ? "pending" : "verified";
   if (!b.country && !b.jurisdiction) throw new HttpError(400, "Choose your country");
@@ -42,9 +45,11 @@ export const POST = handle(async (req: Request) => {
   if (b.demo) {
     // identity: with sign-in on, each account gets its own copy of the practice data.
     const user = await seedDemo({ id: s.mode === "firebase" ? newId("usr") : undefined, name: b.name, ...where, pin: b.pin, email, kycStatus });
+    recordChosenMpin(user.id, b.pin); // mpin
     if (s.token) bindNewWallet(s.token, user);
   } else {
     const user = createUser({ name: b.name, email, ...where, pin: b.pin, kycStatus });
+    recordChosenMpin(user.id, b.pin); // mpin
     if (s.token) bindNewWallet(s.token, user);
   }
   return json({ ok: true });

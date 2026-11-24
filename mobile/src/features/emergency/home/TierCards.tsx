@@ -34,7 +34,7 @@ export function TierCards({ o }: { o: EmergencyOverview }) {
         icon={VaultIcon}
         tint={c.text}
         title="From your other vaults"
-        body={`After your PIN and a ${o.rules.tier2HoldSeconds}-second safety pause.`}
+        body={`After your MPIN and a ${o.rules.tier2HoldSeconds}-second safety pause.`}
         amount={o.tier2Available}
         currency={o.currency}
         vaults={o.tier2Vaults}

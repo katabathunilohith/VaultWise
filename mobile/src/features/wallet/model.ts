@@ -5,7 +5,7 @@
 import type { Href } from "expo-router";
 import { ArrowDownLeftIcon, BankIcon, PaperPlaneRightIcon, PlusIcon, RepeatIcon, VaultIcon, type Icon } from "@/components/icons";
 import { dayDiff, shortDate } from "@/features/home/format";
-import { ApiError, errorMessage } from "@/lib/api/errors";
+import { ApiError, errorMessage, mayHaveGoneThrough } from "@/lib/api/errors";
 import type { Minor } from "@/lib/api/types";
 import type { Wallet, WalletActivity } from "@/lib/api/wallet-types";
 import { money, moneyWhole } from "@/lib/money";
@@ -128,7 +128,7 @@ export function recentPayees(w: Wallet | undefined, max = 6) {
  * already have made it, so the screen must not say nothing moved or offer the same move again.
  */
 export function moveUnconfirmed(e: unknown) {
-  return e instanceof ApiError && (e.status === 0 || e.status === 504);
+  return mayHaveGoneThrough(e);
 }
 
 /** True when the account is read-only while a person checks a recovery: the wallet can't be shown yet. */

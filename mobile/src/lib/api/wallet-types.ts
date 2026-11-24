@@ -63,6 +63,8 @@ export interface WalletMoveResult {
 export interface WalletSettingsInput {
   dailyLimit?: number | null;
   autoSaveSource?: AutoSaveSource;
+  /** mpin: needed to raise or turn off the daily limit. */
+  pin?: string;
 }
 
 export interface WalletSettingsResult {

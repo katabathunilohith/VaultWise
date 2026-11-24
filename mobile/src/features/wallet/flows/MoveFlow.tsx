@@ -27,6 +27,7 @@ import { KeypadFooter, TypedAmount } from "@/features/vaults/fields";
 import { milestoneLevel, progressOf } from "@/features/vaults/format";
 import { MILESTONE_TITLE, recordMilestone } from "@/features/vaults/hooks";
 import { ReleaseContract } from "@/features/vaults/ReleaseContract";
+import { withMpin } from "@/features/mpin"; // mpin
 import { api } from "@/lib/api/client";
 import { useInvalidateMoney, useVaults } from "@/lib/api/hooks";
 import type { Vault } from "@/lib/api/types";
@@ -87,11 +88,12 @@ export function MoveFlow({ wallet, vaultId }: { wallet: Wallet; vaultId?: string
     setSubmitting(true);
     setError(null);
     try {
-      const res = await api.walletMove(vault.id, minor / 100);
+      const res = await withMpin(`Move ${amountText(minor, cur)} to ${vault.name}`, (pin) => api.walletMove(vault.id, minor / 100, pin)); // mpin
+      if (!res) return;
       const after = vault.balance + minor;
       // Record the new quarter before refreshing, so the vault screen behind doesn't celebrate too.
       const crossed = await recordMilestone(vault.id, progressOf(after, vault.target), milestoneLevel(vault.progress));
-      setMoved({ vault, amount: minor, before: vault.balance, after, crossed, wallet: res?.wallet?.balance ?? wallet.balance - minor });
+      setMoved({ vault, amount: minor, before: vault.balance, after, crossed, wallet: res.wallet?.balance ?? wallet.balance - minor });
       setStep("done");
       void invalidate();
     } catch (e) {

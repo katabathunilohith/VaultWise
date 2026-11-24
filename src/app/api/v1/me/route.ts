@@ -4,14 +4,15 @@ import { run } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { COUNTRIES, countryInfo, defaultCountryFor, JURISDICTIONS, MARKET_CODES, rulesFor } from "@/lib/compliance";
 import { aiEnabled } from "@/lib/groq";
-import { checkPin, hashPin, HttpError } from "@/lib/users";
+import { HttpError } from "@/lib/users";
 import { parseJson } from "@/lib/db";
 import { session } from "@/lib/auth/session"; // identity
-import { kycSummary } from "@/lib/kyc/service"; // identity
+import { assertNameChangeAllowed, kycSummary } from "@/lib/kyc/service"; // identity
 import { pendingClaimFor } from "@/lib/recovery/claims"; // identity
-import { authMode } from "@/lib/auth/config"; // identity
 import { maskEmail } from "@/lib/kyc/ids"; // identity
-import { latestVerifiedRecord } from "@/lib/kyc/store"; // identity
+import { changeMpin, mpinField, mpinStatus } from "@/lib/mpin"; // mpin
+import { deviceStatus } from "@/lib/devices"; // devices
+import { phoneStatus } from "@/lib/otp"; // otp
 
 const markets = () => Object.values(JURISDICTIONS).map((j) => ({ code: j.code, name: j.name, currency: j.currency, flag: j.flag }));
 const countries = () => COUNTRIES.map((c) => countryInfo(c.code)!);
@@ -39,6 +40,9 @@ export const GET = handle(async () => {
     kyc: kycSummary(user),
     ...(claim ? { recovery: { claimId: claim.id, status: claim.status, createdAt: claim.created_at } } : {}),
     aiEnabled: aiEnabled(),
+    mpin: mpinStatus(user), // mpin: { upgradeDue, lockedUntil, enforced }
+    phone: phoneStatus(user.id), // otp: { number (masked), verified }
+    ...(s.device ? { device: deviceStatus(s.device) } : {}), // devices: { registered, trusted, trustableAt } for the calling device
     user: {
       id: user.id,
       name: limited ? user.name.trim().split(/\s+/)[0] : user.name,
@@ -63,12 +67,10 @@ const Patch = z.object({
   name: z.string().trim().min(2).max(60).optional(),
   email: z.string().email().optional().or(z.literal("")),
   jurisdiction: z.enum(MARKET_CODES).optional(),
-  pin: z
-    .string()
-    .regex(/^\d{4,6}$/, "PIN must be 4–6 digits")
-    .optional(),
-  /** identity: required with `pin` in firebase mode. */
-  currentPin: z.string().max(12).optional(),
+  /** mpin: a new MPIN; checked by the MPIN policy (same as POST /api/v1/mpin). */
+  pin: mpinField,
+  /** mpin: required with `pin`, in both sign-in modes. */
+  currentPin: mpinField,
 });
 
 export const PATCH = handle(async (req: Request) => {
@@ -83,17 +85,13 @@ export const PATCH = handle(async (req: Request) => {
       `Your wallet is in ${user.currency}. Moving to ${rulesFor(b.jurisdiction).name} needs re-verification and a ${rulesFor(b.jurisdiction).currency} wallet — reset the demo to try another market.`,
     );
   }
-  // identity: a verified ID was matched against this name, so it can't drift away from the ID afterwards.
-  if (b.name && b.name !== user.name && user.kyc_status === "verified" && latestVerifiedRecord(user.id))
-    throw new HttpError(403, "Your name matches your verified ID, so it can't be changed here. Contact support to change it.", "name_locked");
-  // identity: with sign-in on, a new PIN needs the current one (a stolen session alone can't reset it).
-  if (b.pin && authMode() === "firebase" && user.pin_hash) {
-    if (!b.currentPin) throw new HttpError(400, "Enter your current PIN.", "current_pin_required");
-    if (!checkPin(user, b.currentPin)) throw new HttpError(403, "That PIN isn't right.", "pin_mismatch");
-  }
+  // identity: ID checks compare documents with this name, so it is held during a check and locked after one.
+  assertNameChangeAllowed(user, b.name);
+  // mpin: a new PIN goes through the MPIN module: the current one is needed (wrong tries count toward
+  // the lock) and the new one must pass the policy. It's stored here, before the other fields.
+  if (b.pin) changeMpin(user, b.currentPin, b.pin);
   if (b.name) run("UPDATE users SET name = ? WHERE id = ?", b.name, user.id);
   if (b.email !== undefined) run("UPDATE users SET email = ? WHERE id = ?", b.email || null, user.id);
-  if (b.pin) run("UPDATE users SET pin_hash = ? WHERE id = ?", hashPin(b.pin), user.id);
   if (b.jurisdiction && b.jurisdiction !== user.jurisdiction) {
     run("UPDATE users SET jurisdiction = ? WHERE id = ?", b.jurisdiction, user.id);
   }

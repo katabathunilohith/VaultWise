@@ -26,6 +26,7 @@ import type { JurisdictionRules } from "@/lib/compliance";
 import { cx, Skeleton, ToastProvider } from "./ui";
 import { Onboarding, type CountryOption } from "./onboarding";
 import { IdentityMain, SignedInChip, kycStatusOf, useIdentityGate, type IdentityMe } from "./identity"; // identity
+import { isPublicPage, PublicFrame } from "./legal"; // legal
 
 export interface Me extends IdentityMe /* identity: auth, kyc, recovery */ {
   onboarded: boolean;
@@ -45,6 +46,7 @@ export interface Me extends IdentityMe /* identity: auth, kyc, recovery */ {
     createdAt: number;
   };
   rules?: JurisdictionRules;
+  mpin?: { upgradeDue: boolean; lockedUntil: number | null; enforced?: boolean }; // mpin
   jurisdictions: { code: string; name: string; currency: string; flag: string }[];
   countries: CountryOption[];
 }
@@ -211,6 +213,9 @@ export function Shell({ children }: { children: ReactNode }) {
   const gate = useIdentityGate(); // identity
   const { data: me, reload, error } = useApi<Me>(gate.meUrl); // identity: no /me call until sign-in state is known
   const [mobileOpen, setMobileOpen] = useState(false);
+  const path = usePathname(); // legal
+  // legal: the privacy policy, terms and account-deletion page open for everyone, signed in or not.
+  if (isPublicPage(path)) return <PublicFrame>{children}</PublicFrame>; // legal
 
   const gated = gate.screen({ me, error, page: children }); // identity: sign-in, recovery and ops screens
   if (gated) return gated; // identity

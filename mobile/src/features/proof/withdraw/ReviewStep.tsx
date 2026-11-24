@@ -12,6 +12,10 @@ import type { FlowVault, PickedDoc, StepNav } from "./types";
 
 const TICK_MS = 380;
 
+/** The request got no answer, so it may exist: look before sending it again. */
+export const UNCONFIRMED_TEXT =
+  "Vaultwise didn't answer in time, so the request may have been made. Check this vault's withdrawals before you try again. If it's there, add the bill to it from there.";
+
 const SECONDARY: Record<PickedDoc["source"], { label: string; icon: typeof ImagesIcon }> = {
   camera: { label: "Retake", icon: ArrowCounterClockwiseIcon },
   library: { label: "Choose another", icon: ImagesIcon },
@@ -30,6 +34,8 @@ export function ReviewStep({
   maxDocAgeDays,
   submitting,
   error,
+  unconfirmed = false,
+  onCheck,
   onUse,
   onSecondary,
 }: {
@@ -40,6 +46,9 @@ export function ReviewStep({
   maxDocAgeDays: number;
   submitting: boolean;
   error: string | null;
+  /** The request got no answer and may exist: no sending again, only a way to go and look. */
+  unconfirmed?: boolean;
+  onCheck?: () => void;
   onUse: () => void;
   onSecondary: () => void;
 }) {
@@ -65,10 +74,14 @@ export function ReviewStep({
       onClose={nav.onClose}
       back={nav.onBack}
       footer={
-        <>
-          <Button label={second.label} icon={second.icon} variant="tonal" size="md" onPress={onSecondary} disabled={submitting} />
-          <Button label={isSample ? "Use this sample" : "Use photo"} armOnMount onPress={onUse} loading={submitting} accessibilityHint="Sends it to be checked" />
-        </>
+        unconfirmed ? (
+          <Button key="check" label="Check your withdrawals" armOnMount onPress={onCheck ?? nav.onClose} />
+        ) : (
+          <>
+            <Button label={second.label} icon={second.icon} variant="tonal" size="md" onPress={onSecondary} disabled={submitting} />
+            <Button label={isSample ? "Use this sample" : "Use photo"} armOnMount onPress={onUse} loading={submitting} accessibilityHint="Sends it to be checked" />
+          </>
+        )
       }
     >
       <PracticeBadge />
@@ -91,7 +104,11 @@ export function ReviewStep({
           {allTicked ? "Looks clear. The full check runs when you send it." : "Looking it over…"}
         </Txt>
       </View>
-      {error ? <Banner tone="danger" title="That didn't send" body={error} /> : null}
+      {unconfirmed ? (
+        <Banner tone="warning" title="We couldn't confirm this" body={UNCONFIRMED_TEXT} />
+      ) : error ? (
+        <Banner tone="danger" title="That didn't send" body={error} />
+      ) : null}
     </ModalScreen>
   );
 }

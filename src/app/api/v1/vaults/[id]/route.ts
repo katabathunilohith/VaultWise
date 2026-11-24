@@ -2,8 +2,8 @@ import { z } from "zod";
 import { body, customer, handle, json, minor } from "@/lib/api";
 import { all, run } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { accountHistory } from "@/lib/ledger";
-import { getVaultRow, nextRun, toView } from "@/lib/vaults";
+import { accountHistory, balanceOf } from "@/lib/ledger";
+import { balanceSeries, getVaultRow, nextRun, toView } from "@/lib/vaults";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -18,12 +18,8 @@ export const GET = handle(async (_req: Request, ctx: Ctx) => {
     id,
   );
   const history = accountHistory(v.account_id, 100);
-  // Running balance series for the chart (oldest → newest).
-  let bal = 0;
-  const series = [...history].reverse().map((h) => {
-    bal += h.amount;
-    return { t: h.created_at, balance: bal };
-  });
+  // Running balance for the chart (oldest first), correct even when the vault has more than 100 postings.
+  const series = balanceSeries(balanceOf(v.account_id), history);
   return json({ vault: toView(v, user.currency), history, series, withdrawals, currency: user.currency, userName: user.name });
 });
 

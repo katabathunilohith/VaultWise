@@ -8,6 +8,7 @@ import { invalidate, type QueryName } from "@/lib/api/keys";
 import type { Dashboard } from "@/lib/api/types";
 import { WalletCard } from "@/features/wallet"; // wallet
 import { TesterCard } from "@/features/tester"; // tester
+import { IntegrityBanner } from "@/features/protection"; // protection
 import { ComingUpCard } from "./ComingUpCard";
 import { FreshStartCard } from "./FreshStartCard";
 import { Hero } from "./Hero";
@@ -54,6 +55,8 @@ function HomeBody({ data }: { data: Dashboard }) {
     <>
       {/* tester */}
       <TesterCard />
+      {/* protection: rooted / jailbroken phone warning */}
+      <IntegrityBanner />
       <Hero saved={data.totals.saved} currency={data.currency} now={now} large={large} />
       {/* wallet */}
       <WalletCard />

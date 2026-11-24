@@ -1,10 +1,14 @@
 import { fetch as expoFetch } from "expo/fetch";
+import { getSession } from "../auth/session-state"; // ai-consent
 import { getConnection } from "./connection";
 import { demo } from "./demo";
+import { deviceHeaders, noteDeviceRevoked } from "./device"; // devices
 import { ApiError } from "./errors";
 import { authHeaders, formWith, post, request } from "./http";
 import { identityLive } from "./identity";
 import { observed } from "./observe"; // tester
+import { noteSignedOut } from "./signed-out"; // identity, devices
+import { securityLive } from "./security"; // devices, alerts, OTP
 import { walletLive } from "./wallet";
 import { payDryRun } from "./pay-sim";
 import type { PaymentIntent } from "./pay-types";
@@ -35,6 +39,8 @@ import type {
 } from "./types";
 
 export { ApiError } from "./errors";
+/** devices: Practice-only ways to try the new-phone rules (Your devices → Try it in Practice). */
+export { practiceDeviceTools } from "./demo/devices";
 
 const liveVaults = () => request<{ vaults: Vault[]; currency: string }>("/vaults");
 
@@ -60,6 +66,7 @@ const emergencyPreview = (amountMajor: number) => post<EmergencyPreview>("/emerg
 const live = {
   ...walletLive, // wallet
   ...identityLive, // identity
+  ...securityLive, // devices, alerts, OTP (plan 06)
   me: () => request<Me>("/me"),
   // Seeding demo history fetches market data on the server and can take up to about 2 minutes.
   onboarding: (input: OnboardingInput) =>
@@ -70,8 +77,9 @@ const live = {
   createVault: (input: CreateVaultInput) => post<{ id: string }>("/vaults", input),
   updateVault: (id: string, patch: UpdateVaultInput) => request<{ ok: true }>(`/vaults/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deposit: (vaultId: string, amountMajor: number, memo?: string) => post<{ journalId: string }>(`/vaults/${vaultId}/deposits`, { amount: amountMajor, memo }),
-  withdraw: (vaultId: string, amountMajor: number, payee: string, note?: string) =>
-    post<{ id: string; status: string }>(`/vaults/${vaultId}/withdrawals`, { amount: amountMajor, payee, note }),
+  /** `pin`: the MPIN (features/mpin), on every money move out. */
+  withdraw: (vaultId: string, amountMajor: number, payee: string, note?: string, pin?: string) =>
+    post<{ id: string; status: string }>(`/vaults/${vaultId}/withdrawals`, { amount: amountMajor, payee, note, pin }),
   cancelWithdrawal: (id: string) => request<{ ok: true }>(`/withdrawals/${id}`, { method: "DELETE" }),
   uploadProof: async (vaultId: string, withdrawalId: string, file: UploadFile) =>
     request<{ id: string; status: string }>(`/vaults/${vaultId}/proofs`, { method: "POST", body: await formWith(file, { withdrawalId }) }),
@@ -100,17 +108,24 @@ const live = {
   emergencyReceipt: async (id: string, file: UploadFile) =>
     request<{ id: string; status: string }>(`/emergency/${id}/receipt`, { method: "POST", body: await formWith(file) }),
   limits: () => request<LimitsOverview>("/limits"),
-  setLimits: (major: Partial<Record<LimitKey, number>>) => request<{ overview: LimitsOverview }>("/limits", { method: "PUT", body: JSON.stringify(major) }),
+  /** `pin`: the MPIN, needed when any limit goes up. */
+  setLimits: (major: Partial<Record<LimitKey, number>>, pin?: string) =>
+    request<{ overview: LimitsOverview }>("/limits", { method: "PUT", body: JSON.stringify(pin ? { ...major, pin } : major) }),
   portfolio: () => request<Portfolio>("/portfolio"),
   investCore: () => request<InvestCore>("/invest/core"),
   investSatellite: () => request<Record<string, unknown>>("/invest/satellite"),
-  buyCore: (amountMajor: number) => post<{ fills: unknown[] }>("/invest/core/buy", { amount: amountMajor }),
+  buyCore: (amountMajor: number, pin?: string) => post<{ fills: unknown[] }>("/invest/core/buy", { amount: amountMajor, pin }),
   setSip: (amountMajor: number, frequency: "weekly" | "monthly") => post<{ ok: true }>("/invest/core/sip", { amount: amountMajor, frequency }),
   cancelSip: () => request<{ ok: true }>("/invest/core/sip", { method: "DELETE" }),
+  /** mpin: change the MPIN; the server checks the current one and the policy (400 `mpin_weak` with `reason`). */
+  changeMpin: (currentPin: string, newPin: string) => post<{ ok: true }>("/mpin", { currentPin, newPin }),
   region: () => request<{ guess: { country: string | null; supported: boolean; source: string | null; detail: string | null } }>("/region"),
-  /** Wipes the server wallet (Settings → Delete account in Practice). The simulated checkouts start over with it. */
-  reset: async () => {
-    const res = await post<{ ok: true }>("/reset");
+  /**
+   * Wipes the server wallet (Settings → Delete account), or closes the account with sign-in on, which needs the
+   * MPIN in `pin`. The simulated checkouts start over with it.
+   */
+  reset: async (pin?: string) => {
+    const res = await post<{ ok: true }>("/reset", pin ? { pin } : undefined);
     payDryRun.reset();
     return res;
   },
@@ -132,10 +147,11 @@ const live = {
     signal?: AbortSignal,
   ) => {
     let res: Awaited<ReturnType<typeof expoFetch>>;
+    const sentAt = Date.now();
     try {
       res = await expoFetch(`${getConnection().baseUrl}/api/v1/assistant`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(await authHeaders(getConnection().baseUrl)) }, // identity
+        headers: { "Content-Type": "application/json", ...(await authHeaders(getConnection().baseUrl)), ...(await deviceHeaders()), "x-ai-consent": getSession().aiConsent ? "yes" : "no" }, // identity, devices, ai-consent: the assistant's own consent
         body: JSON.stringify({ messages, client: "mobile" }),
         signal,
       });
@@ -144,8 +160,11 @@ const live = {
       throw new ApiError("Can't reach Vaultwise. Check your connection.", 0);
     }
     if (!res.ok) {
-      const data = (await res.json().catch(() => null)) as { error?: string } | null;
-      throw new ApiError(data?.error ?? `Assistant unavailable (${res.status})`, res.status);
+      const data = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
+      // identity, devices: the same sign-out signals as every other request (http.ts).
+      if (res.status === 401 && data?.code === "signed_out") noteSignedOut({ message: data.error ?? null, sentAt });
+      if (res.status === 401 && data?.code === "device_revoked") noteDeviceRevoked();
+      throw new ApiError(data?.error ?? `Assistant unavailable (${res.status})`, res.status, typeof data?.code === "string" ? data.code : undefined);
     }
     const reader = res.body?.getReader();
     if (!reader) {

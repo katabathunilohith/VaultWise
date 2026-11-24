@@ -3,6 +3,7 @@ import { get, run } from "./db";
 import { countryInfo, defaultCountryFor, rulesFor } from "./compliance";
 import { userAccount } from "./ledger";
 import { audit } from "./audit";
+import { kycLevelFor } from "./kyc/levels";
 
 export interface User {
   id: string;
@@ -91,7 +92,7 @@ export function createUser(opts: {
     country.code,
     rules.currency,
     verified ? "verified" : "pending",
-    verified ? 2 : 0,
+    kycLevelFor(verified ? "verified" : "pending"),
     hashPin(opts.pin),
     createdAt,
   );

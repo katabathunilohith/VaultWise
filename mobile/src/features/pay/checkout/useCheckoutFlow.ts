@@ -10,6 +10,7 @@ import type { PaymentIntent } from "@/lib/api/pay-types";
 import { PRACTICE_PIN, usePracticeMode } from "@/lib/api/practice";
 import { haptic } from "@/lib/haptics";
 import { authenticateBiometric } from "@/lib/auth/biometrics";
+import { mpinFromBiometric, readMpinError, useMpinShortcut } from "@/features/mpin"; // mpin
 import { useCheckoutOutcomeHaptics } from "./useCheckoutOutcomeHaptics";
 import { selectedVault, vaultOptions, type PayVault } from "./vaults";
 
@@ -28,9 +29,10 @@ export type Phase =
  * (biometrics, PIN as fallback), confirm, then follow the intent while it's processed.
  *
  * Simulated checkouts (Practice, or live while the server's /pay routes don't exist) are
- * confirmed by the on-device simulator, which accepts the practice PIN — so a passed biometric
- * check stands in for it there. A real checkout needs the customer's server PIN, so it always
- * asks for it.
+ * confirmed by the on-device simulator. In Practice it checks the simulator's MPIN (with its lock),
+ * so Face ID / fingerprint works only through the MPIN shortcut (features/mpin), which hands over
+ * the saved MPIN. A live dry run moves nothing and takes the Practice MPIN, so a passed biometric
+ * check stands in for it there. A real checkout needs the customer's MPIN, so it always asks for it.
  */
 export function useCheckoutFlow(intentId: string | undefined) {
   const q = useCheckout(intentId);
@@ -49,7 +51,8 @@ export function useCheckoutFlow(intentId: string | undefined) {
   /** Used as the PIN pad's key: a bump gives a fresh pad when a typed PIN was never sent. */
   const [pinResets, setPinResets] = useState(0);
   // null until the device has answered, like when it has none.
-  const bio = useBiometricKind() ?? null;
+  const kind = useBiometricKind() ?? null;
+  const shortcut = useMpinShortcut();
 
   // A copy cached from an earlier visit can be out of date (paid since, or a Practice checkout
   // that was reset), so only data fetched since this screen opened is shown.
@@ -65,6 +68,9 @@ export function useCheckoutFlow(intentId: string | undefined) {
   const options = intent ? vaultOptions(intent, vaults.data?.vaults) : [];
   const blocked = status === "requires_customer" && !!intent && (!vault || vault.available < intent.amount);
   const practice = practiceMode || !!intent?.simulated;
+  // mpin: the biometric key, where a biometric can produce the MPIN this checkout checks: a live dry
+  // run (the Practice MPIN). In Practice the payments shortcut is off (it holds the live MPIN), so none.
+  const bio = practiceMode ? (shortcut ? kind : null) : practice ? kind : null;
   const intentKey = intent?.id ?? null;
 
   // Opening over a cached copy, or coming back from Add money (or anywhere else) — the
@@ -120,13 +126,15 @@ export function useCheckoutFlow(intentId: string | undefined) {
       setPaidHere(true);
       setPhase({ kind: "review" });
     } catch (e) {
-      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
-        if (via === "pin") {
-          // A typed PIN was rejected: haptic + dots shake together.
+      // mpin: branch on the code, never the status (a 401 here is `mpin_required`, not a sign-out).
+      const mpin = readMpinError(e);
+      if (mpin) {
+        if (via === "pin" && mpin.kind !== "required") {
+          // A typed MPIN was rejected: haptic + dots shake together.
           haptic("pin.wrong");
           setPinError((n) => n + 1);
         }
-        setPhase({ kind: "pin", message: via === "pin" ? "That PIN isn't right. Try again." : "Enter your PIN to confirm." });
+        setPhase({ kind: "pin", message: via === "pin" || mpin.kind === "locked" ? mpin.message : "Enter your MPIN to confirm." });
         return;
       }
       if (e instanceof ApiError && e.status === 409) {
@@ -142,11 +150,18 @@ export function useCheckoutFlow(intentId: string | undefined) {
     }
   };
 
-  /** Face ID / fingerprint, counted as in flight so nothing else starts a confirm meanwhile. */
-  const checkBiometric = async () => {
+  /**
+   * Face ID / fingerprint, counted as in flight so nothing else starts a confirm meanwhile. The MPIN
+   * it unlocks: the saved one in Practice, the Practice MPIN in a live dry run. Null if it didn't pass.
+   */
+  const pinFromBiometric = async (): Promise<string | null> => {
     inFlight.current = true;
     try {
-      return await authenticateBiometric("Confirm payment");
+      if (practiceMode) {
+        const r = await mpinFromBiometric("Confirm payment");
+        return r.kind === "pin" ? r.pin : null;
+      }
+      return (await authenticateBiometric("Confirm payment")) ? PRACTICE_PIN : null;
     } finally {
       inFlight.current = false;
     }
@@ -157,8 +172,9 @@ export function useCheckoutFlow(intentId: string | undefined) {
     if (!intent || !vault || blocked || expired || inFlight.current) return;
     if (practice && bio) {
       setPhase({ kind: "authenticating" });
-      if (await checkBiometric()) {
-        await submit(PRACTICE_PIN, "biometric");
+      const pin = await pinFromBiometric();
+      if (pin) {
+        await submit(pin, "biometric");
         return;
       }
     }
@@ -168,7 +184,8 @@ export function useCheckoutFlow(intentId: string | undefined) {
   /** The biometric key on the PIN pad: the PIN step stays up while it confirms. */
   const retryBiometric = async () => {
     if (!practice || !bio || phase.kind === "submitting" || inFlight.current) return;
-    if (await checkBiometric()) await submit(PRACTICE_PIN, "biometric", "pin");
+    const pin = await pinFromBiometric();
+    if (pin) await submit(pin, "biometric", "pin");
   };
 
   const leave = () => (router.canGoBack() ? router.back() : router.replace("/pay"));

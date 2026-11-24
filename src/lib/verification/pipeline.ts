@@ -146,8 +146,8 @@ export function createProof(
     vaultId?: string | null;
     withdrawalId?: string | null;
     emergencyId?: string | null;
-    /** False when the person said no to the AI reading it (lib/ai-consent.ts). Defaults to true. */
-    aiAllowed?: boolean;
+    /** True only when the person said yes to the AI reading it (lib/ai-consent.ts aiConsented()); false = a person reads it. */
+    aiAllowed: boolean; // ai-consent: required, so every caller decides
   },
 ) {
   if (!ALLOWED_MIME.includes(input.mime)) throw new HttpError(415, "Upload a photo or scan (JPEG, PNG or WebP)");
@@ -175,7 +175,7 @@ export function createProof(
       input.buffer.length,
       sha256(input.buffer),
       stored,
-      input.aiAllowed === false ? 0 : 1,
+      input.aiAllowed === true ? 1 : 0, // ai-consent: only an explicit yes
       now,
     );
     run(
@@ -851,6 +851,9 @@ export function appeal(user: User, proofId: string, note: string) {
       user.id,
     );
     if (!ver) throw new HttpError(404, "Verification not found");
+    // One appeal per check: a person has already looked again if there's an appeal note (the phone hides the button then too).
+    if (ver.appeal_note !== null)
+      throw new HttpError(409, "A person has already looked at this again. Talk to us if you still think it's wrong.", "already_appealed");
     if (ver.final_decision !== "denied") throw new HttpError(409, "Only declined verifications can be appealed");
     run("UPDATE verifications SET final_decision = 'appealed', appeal_note = ?, queued_at = ? WHERE proof_id = ?", note, Date.now(), proofId);
     const proof = get<ProofRow>("SELECT * FROM proofs WHERE id = ?", proofId)!;

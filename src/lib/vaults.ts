@@ -5,6 +5,7 @@ import { HttpError, type User } from "./users";
 import { assertWithinWithdrawalLimits } from "./limits";
 import { CATEGORIES, type VaultCategory } from "./shared";
 import { customRuleFor, type CustomRule } from "./custom-rules";
+import { alertMoneyOut } from "./alerts"; // alerts
 
 export interface VaultRow {
   id: string;
@@ -130,6 +131,19 @@ export function nextRun(from: number, frequency: string | null) {
   return d.getTime();
 }
 
+/**
+ * The running balance for a vault's chart, oldest first, over its most recent postings (`history`,
+ * newest first). It starts from what the vault held before the oldest posting shown, so a vault with
+ * more history than the window still draws its real balances.
+ */
+export function balanceSeries(currentBalance: number, history: { amount: number; created_at: number }[]) {
+  let balance = currentBalance - history.reduce((sum, h) => sum + h.amount, 0);
+  return [...history].reverse().map((h) => {
+    balance += h.amount;
+    return { t: h.created_at, balance };
+  });
+}
+
 export function createVault(
   user: User,
   input: {
@@ -248,26 +262,35 @@ export function runDueContributions(user: User, now = Date.now()) {
     let at = v.next_run_at!;
     let guard = 0;
     while (at <= now && guard++ < 12) {
+      const next = nextRun(at, v.rule_frequency);
+      // Each run and its move of next_run_at commit together, so if something unexpected fails part-way
+      // through, the runs already paid are never paid again on the next tick.
       try {
-        deposit(user, v.id, v.rule_amount!, { kind: "contribution_rule", memo: `Scheduled ${v.rule_frequency} contribution`, ts: at });
+        tx(() => {
+          deposit(user, v.id, v.rule_amount!, { kind: "contribution_rule", memo: `Scheduled ${v.rule_frequency} contribution`, ts: at });
+          run("UPDATE vaults SET next_run_at = ? WHERE id = ?", next, v.id);
+        });
         results.push({ vaultId: v.id, status: "ok", amount: v.rule_amount! });
       } catch (e) {
         if (!(e instanceof LedgerError)) throw e;
-        audit({
-          userId: user.id,
-          actor: "scheduler",
-          actorType: "system",
-          action: "contribution.missed",
-          entityType: "vault",
-          entityId: v.id,
-          details: { amount: v.rule_amount, reason: e.message },
-          ts: at,
+        const reason = e.message;
+        tx(() => {
+          audit({
+            userId: user.id,
+            actor: "scheduler",
+            actorType: "system",
+            action: "contribution.missed",
+            entityType: "vault",
+            entityId: v.id,
+            details: { amount: v.rule_amount, reason },
+            ts: at,
+          });
+          run("UPDATE vaults SET next_run_at = ? WHERE id = ?", next, v.id);
         });
         results.push({ vaultId: v.id, status: "missed", amount: v.rule_amount! });
       }
-      at = nextRun(at, v.rule_frequency);
+      at = next;
     }
-    run("UPDATE vaults SET next_run_at = ? WHERE id = ?", at, v.id);
   }
   return results;
 }
@@ -452,15 +475,21 @@ export function expireStaleWithdrawals(user: User, now = Date.now()) {
   return stale.length;
 }
 
+/** Statuses a withdrawal can be paid from: its proof is being checked, with a person, or appealed. */
+const PAYABLE_WITHDRAWAL = ["verifying", "in_review", "appealed"];
+
 /** Releases an approved, proof-gated withdrawal from the vault to the linked bank. */
 export function payoutWithdrawal(user: User, withdrawalId: string, actor: string, actorType: "model" | "reviewer") {
   return tx(() => {
+    // mpin (B3): only this customer's withdrawal, and only from a status that can be paid.
     const w = get<{ id: string; vault_id: string; amount: number; payee: string; status: string }>(
-      "SELECT * FROM withdrawals WHERE id = ?",
+      "SELECT * FROM withdrawals WHERE id = ? AND user_id = ?",
       withdrawalId,
+      user.id,
     );
     if (!w) throw new HttpError(404, "Withdrawal not found");
     if (w.status === "paid") return;
+    if (!PAYABLE_WITHDRAWAL.includes(w.status)) throw new HttpError(409, `This withdrawal can't be paid: it is ${w.status.replace(/_/g, " ")}`);
     const v = getVaultRow(user, w.vault_id);
     const bank = userAccount(user.id, "bank", user.currency);
     const journalId = transfer({
@@ -476,5 +505,6 @@ export function payoutWithdrawal(user: User, withdrawalId: string, actor: string
       actorType,
     });
     run("UPDATE withdrawals SET status = 'paid', journal_id = ?, decided_at = ? WHERE id = ?", journalId, Date.now(), w.id);
+    alertMoneyOut(user, w.amount, `paid from ${v.name} to ${w.payee}`); // alerts
   });
 }

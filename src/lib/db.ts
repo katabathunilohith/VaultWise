@@ -126,7 +126,10 @@ CREATE TABLE IF NOT EXISTS proofs (
   ela_path TEXT,
   exif TEXT,
   extracted TEXT,
-  ai_allowed INTEGER NOT NULL DEFAULT 1,
+  -- ai-consent: whether the person let the AI read this proof. Every INSERT passes it; the default is "no".
+  -- Databases made before this default changed keep DEFAULT 1 on the column (SQLite can't change a column's
+  -- default without rebuilding the table), which is safe because no INSERT relies on the default.
+  ai_allowed INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
 
@@ -362,9 +365,13 @@ function migrate(d: DatabaseSync) {
     d.exec("ALTER TABLE users ADD COLUMN country TEXT");
     d.exec("UPDATE users SET country = CASE jurisdiction WHEN 'UK' THEN 'GB' WHEN 'EU' THEN 'DE' ELSE jurisdiction END WHERE country IS NULL");
   }
-  // Whether the person let the AI read this proof (lib/ai-consent.ts).
+  // Whether the person let the AI read this proof (lib/ai-consent.ts). Older rows, from before people were asked,
+  // get "no". A column already made with DEFAULT 1 keeps it (SQLite can't change a default without rebuilding the
+  // table, which isn't worth it): every INSERT passes ai_allowed explicitly, so the default is never used.
   const proofCols = (d.prepare("PRAGMA table_info(proofs)").all() as { name: string }[]).map((c) => c.name);
-  if (!proofCols.includes("ai_allowed")) d.exec("ALTER TABLE proofs ADD COLUMN ai_allowed INTEGER NOT NULL DEFAULT 1");
+  if (!proofCols.includes("ai_allowed")) d.exec("ALTER TABLE proofs ADD COLUMN ai_allowed INTEGER NOT NULL DEFAULT 0");
+  // Sign-ups waiting for an ID check used to start at KYC level 0; the rule is 1 (src/lib/kyc/levels.ts).
+  if (userCols.includes("kyc_status")) d.exec("UPDATE users SET kyc_level = 1 WHERE kyc_status IN ('pending', 'needs_review') AND kyc_level = 0");
 }
 
 function open(): DatabaseSync {

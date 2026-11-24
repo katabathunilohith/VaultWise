@@ -51,6 +51,7 @@ async function check(sample: string, category: VaultCategory, amount = 2_000_00)
     category,
     vaultId,
     withdrawalId,
+    aiAllowed: true, // the AI check is what this test is about
   });
   await runPipeline(proofId);
   const v = get<{ status: string; decision: string; final_decision: string | null; confidence: number | null; reasons: string; stages: string }>(

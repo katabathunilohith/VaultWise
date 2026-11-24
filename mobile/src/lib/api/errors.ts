@@ -7,6 +7,8 @@ export class ApiError extends Error {
     public status: number,
     /** identity: the server's machine-readable reason (`{ error, code }`), e.g. "kyc_required". */
     public code?: string,
+    /** mpin: the error body's extra fields, e.g. `triesLeft` or `lockedUntil` (features/mpin/errors.ts). */
+    public data?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "ApiError";
@@ -24,6 +26,18 @@ const BY_CODE: Record<string, string> = {
   recovery_restricted: "Your account is being checked. Money can't move until a person confirms it's you.",
   has_wallet: "This login already has a Vaultwise account.",
   demo_taken: "The sample history is already in use on this server. Turn off \"Start with demo history\" and try again.",
+  // devices: features/mpin/errors.ts says device_untrusted with its time; these are the fallbacks.
+  device_untrusted: "This phone isn't trusted yet, so large amounts can't move from it. Trust it in Profile & settings, under Your devices.",
+  device_revoked: "This phone was signed out of Vaultwise from another device. Sign in again to use it.",
+  // devices: no usable id (this phone couldn't keep one), or the account added 5 new devices this hour or has 20 signed in.
+  device_unknown:
+    "Vaultwise couldn't add this phone to your account: lots of new devices signed in lately, or 20 are signed in already (or this phone couldn't keep its id). Try again in an hour, or sign out devices you no longer use from a phone you trust.",
+  // otp: a number added or changed in the last 72 hours can't reset the MPIN (features/phone-verify says when).
+  phone_recently_changed: "Your phone number was added or changed in the last 72 hours, so it can't reset your MPIN yet. If you didn't change it, talk to a person.",
+  phone_required: "Add and verify your phone number first. It's in Profile & settings, under Phone number.",
+  verification_invalid: "That code has expired or was already used. Ask for a new one.",
+  otp_unavailable: "Codes by text message aren't set up on this server yet.",
+  otp_send_failed: "The text with your code didn't send. Try again in a moment.",
 };
 
 /**
@@ -53,6 +67,16 @@ export const ON_HOLD = {
   title: "Available once a person confirms it's you",
   body: "Your account is being checked, usually within a day. This part opens when they're done.",
 };
+
+/**
+ * True when a call got no answer (it timed out, the connection dropped, or a 504): the server may
+ * already have done it. A money flow then never says nothing moved and never offers the same move
+ * again; it re-reads the data and sends the person to see what happened (the wallet's flows, the
+ * emergency request, withdraw, Core buy, limit changes).
+ */
+export function mayHaveGoneThrough(e: unknown) {
+  return e instanceof ApiError && (e.status === 0 || e.status === 504);
+}
 
 export function errorMessage(e: unknown, fallback = "Something went wrong. Try again.") {
   // identity: a server that wants sign-in, reached by an app that has no sign-in set up.

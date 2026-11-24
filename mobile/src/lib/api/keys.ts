@@ -30,6 +30,8 @@ export const qk = {
   wallet: () => ["wallet"] as const, // wallet
   kyc: () => ["kyc"] as const, // identity
   recovery: () => ["recovery"] as const, // identity
+  devices: () => ["devices"] as const, // devices
+  alerts: () => ["alerts"] as const, // alerts
 };
 
 /** A query's key without the mode, as `qk` builds it. */
@@ -81,4 +83,5 @@ export const MONEY_QUERIES: ReadonlySet<QueryName> = new Set<QueryName>([
   "checkout",
   "accounts",
   "wallet", // wallet
+  "alerts", // alerts: a money move adds one
 ]);

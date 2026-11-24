@@ -50,7 +50,7 @@ export function DeleteReview({ ack, onAck, demo, closing = false }: { ack: boole
         <Bullet text="Your profile, vaults and saving rules." />
         <Bullet text="Your history, proofs and the documents you sent." />
         <Bullet text="Your limits and any requests in progress. Withdrawals waiting for proof are cancelled." />
-        <Bullet text="From this phone: your PIN, app lock and choices like notifications." />
+        <Bullet text="From this phone: your MPIN, app lock and choices like notifications." />
       </View>
 
       <Txt v="bodyM" color="textMuted">
@@ -80,7 +80,7 @@ function CloseReview({ ack, onAck }: { ack: boolean; onAck: (v: boolean) => void
         <Bullet text="Your vaults and saving rules stop. Nothing moves automatically after this." />
         <Bullet text="This login can't open the account again." />
         <Bullet text="Your history and documents are kept as the law requires." />
-        <Bullet text="From this phone: your PIN, app lock and choices like notifications." />
+        <Bullet text="From this phone: your MPIN, app lock and choices like notifications." />
       </View>
       <Txt v="bodyM" color="textMuted">
         Money still in a vault? Talk to a person before you close, so it goes where you want. Want a copy of your data first? Go back and choose Export my data.

@@ -4,6 +4,8 @@ A working prototype of the **Capstone Entrepreneurship Blueprint**: a category-b
 
 > "Vaultwise" is a working brand name — change it in `src/lib/shared.ts` (`BRAND`).
 
+**Documentation:** [docs/README.md](docs/README.md) covers the architecture, every feature (with its files and functions), the API, data model and configuration, the development process, and the roadmap with implementation plans. The phone app's own guide is [mobile/README.md](mobile/README.md).
+
 ---
 
 ## Quick start

@@ -8,7 +8,7 @@ import { haptic } from "@/lib/haptics";
 import { setDevicePin } from "@/lib/auth/device-pin";
 import { space, useTheme } from "@/theme";
 import { StepScreen } from "../layout";
-import { isWeakPin } from "../pin-guard";
+import { checkNewMpin, MPIN_LENGTH, readMpinError } from "@/features/mpin"; // mpin
 import { PinLayout } from "../PinLayout";
 import { draftReady, getDraft } from "./draft";
 
@@ -33,7 +33,10 @@ async function walletExists(e: unknown) {
   return false;
 }
 
-/** Onboarding step 2: choose a PIN, type it again, then create the account on the server. */
+/**
+ * Onboarding step 2: choose the 6-digit MPIN (the policy in features/mpin), type it again, then
+ * create the account on the server. The same digits approve money moves and unlock the app.
+ */
 export function ChoosePinStep() {
   const [phase, setPhase] = useState<Phase>("choose");
   const [chooseError, setChooseError] = useState(0);
@@ -64,6 +67,9 @@ export function ChoosePinStep() {
     try {
       await api.onboarding({ name: d.name, email: d.email || undefined, country: d.country ?? "", pin, demo: d.demo });
     } catch (e) {
+      // mpin: the server refused the MPIN (its policy has the final say): choose another.
+      const weak = readMpinError(e);
+      if (weak?.kind === "weak") return reject(weak.message);
       // With demo history the server can still be finishing when the request times out.
       if (!(await walletExists(e))) {
         haptic("error");
@@ -79,13 +85,14 @@ export function ChoosePinStep() {
 
   const onPin = (pin: string) => {
     if (phase === "choose") {
-      if (isWeakPin(pin)) return reject("That PIN is easy to guess. Try a less obvious one.");
+      const check = checkNewMpin(pin);
+      if (!check.ok) return reject(check.message);
       first.current = pin;
       setHint(null);
       setPhase("confirm");
       return;
     }
-    if (pin !== first.current) return reject("Those PINs didn't match. Choose a PIN again.");
+    if (pin !== first.current) return reject("Those didn't match. Choose your MPIN again.");
     void create(pin);
   };
 
@@ -125,10 +132,14 @@ export function ChoosePinStep() {
       <StepScreen back={back} step={{ n: 2, of: 3 }} scroll={false}>
         <PinLayout
           bottomInset={false}
-          title={phase === "choose" ? "Choose a PIN" : "Type it again"}
-          body={phase === "choose" ? "4 digits. It unlocks Vaultwise and approves money moves." : "So we know it's the one you meant."}
+          title={phase === "choose" ? "Choose your MPIN" : "Type it again"}
+          body={
+            phase === "choose"
+              ? "6 digits. It approves money moves and unlocks Vaultwise. Avoid your birthday and easy runs like 123456."
+              : "So we know it's the one you meant."
+          }
           status={hint}
-          pad={<PinPad key={phase} error={phase === "choose" ? chooseError : 0} onComplete={onPin} />}
+          pad={<PinPad key={phase} length={MPIN_LENGTH} error={phase === "choose" ? chooseError : 0} onComplete={onPin} />}
         />
       </StepScreen>
     </>

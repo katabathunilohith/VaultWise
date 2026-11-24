@@ -7,19 +7,26 @@ import { haptic } from "@/lib/haptics";
 import { markUnlocked } from "@/lib/auth/app-lock";
 import { authenticateBiometric } from "@/lib/auth/biometrics";
 import { checkDevicePin } from "@/lib/auth/device-pin";
+import { useSession } from "@/lib/auth/session-state";
 import { layout, space, useTheme } from "@/theme";
-import { biometricName, useBiometricKind, usePinGuard } from "./pin-guard";
+import { biometricName, pinWord, useBiometricKind, useDevicePinLength, usePinGuard } from "./pin-guard";
 import { GuardedPinPad, PinLayout, PinStatus } from "./PinLayout";
 
 /**
  * App lock (calm core). Face ID / fingerprint is tried once each time the app comes to the
- * foreground; the PIN always works. After five wrong PINs there's a 30-second wait.
+ * foreground (protection: unless onboarding's check didn't pass); the PIN always works. Wrong
+ * PINs are slowed by the guard in ./pin-guard.ts (waits from 1 to 60 minutes, then sign-out or
+ * Start Practice over).
+ * The PIN is the 6-digit MPIN, or a 4-digit PIN from before the MPIN until it's changed.
  */
 export function UnlockScreen() {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
-  const kind = useBiometricKind();
+  const phoneKind = useBiometricKind();
+  // protection: Face ID / fingerprint unlocks only if onboarding's check passed (or was never asked).
+  const kind = useSession().biometricUnlock ? phoneKind : null;
   const guard = usePinGuard();
+  const length = useDevicePinLength();
   const tried = useRef(false);
   // Face ID and the PIN can both succeed at once; the unlock haptic plays once.
   const opened = useRef(false);
@@ -66,11 +73,12 @@ export function UnlockScreen() {
         </View>
         <PinLayout
           title="Unlock Vaultwise"
-          body={bio ? `Use ${bio} or enter your PIN.` : "Enter your PIN."}
-          status={<PinStatus guard={guard} />}
+          body={bio ? `Use ${bio} or enter your ${pinWord(length)}.` : `Enter your ${pinWord(length)}.`}
+          status={<PinStatus guard={guard} word={pinWord(length)} />}
           pad={
             <GuardedPinPad
               guard={guard}
+              length={length ?? 6}
               verify={checkDevicePin}
               onSuccess={unlock}
               biometric={kind ?? null}

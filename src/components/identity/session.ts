@@ -7,6 +7,7 @@
 import { useSyncExternalStore } from "react";
 import type { Auth } from "firebase/auth";
 import { FIREBASE_CONFIG, SIGN_IN_ON } from "./config";
+import { markWebDeviceRevoked, resetWebDeviceIfRevoked } from "./device"; // devices
 
 export type Session =
   | { status: "off" }
@@ -132,6 +133,7 @@ export async function refreshSignIn() {
 
 export async function signOutNow() {
   if (!SIGN_IN_ON) return;
+  resetWebDeviceIfRevoked(); // devices
   const auth = await loadAuth();
   const { signOut } = await import("firebase/auth");
   await signOut(auth);
@@ -173,13 +175,17 @@ const noticeListeners = new Set<() => void>();
  * (not a GET) opens the dialog.
  */
 export function reportApiError(url: string, status: number, code: string | undefined, method = "GET") {
-  codes.set(url, code ?? null);
+  // devices: this browser was signed out from another device. It reads as a sign-out, and the id starts over
+  // at the next sign-out (src/components/identity/device.ts).
+  const revoked = code === "device_revoked" && SIGN_IN_ON && status === 401;
+  if (revoked) markWebDeviceRevoked();
+  codes.set(url, revoked ? "signed_out" : (code ?? null));
   const write = method.toUpperCase() !== "GET";
-  const next =
+  const next: ApiNotice | null =
     code === "kyc_required" || (code === "recovery_restricted" && write)
       ? code
-      : code === "signed_out" && SIGN_IN_ON && status === 401
-        ? code
+      : (code === "signed_out" || revoked) && SIGN_IN_ON && status === 401
+        ? "signed_out"
         : null;
   if (!next || next === notice) return;
   notice = next;

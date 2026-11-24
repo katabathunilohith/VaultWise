@@ -3,15 +3,18 @@ import { audit } from "./audit";
 import { rulesFor } from "./compliance";
 import { emergencyRiskScore, raiseFlag } from "./fraud";
 import { transfer, userAccount } from "./ledger";
-import { checkPin, HttpError, type User } from "./users";
+import { HttpError, type User } from "./users";
 import { effectiveEmergencyCap } from "./limits";
 import { listVaults, type VaultView } from "./vaults";
 import { EMERGENCY_REASONS, fmtMoney, type VaultCategory } from "./shared";
+import { mpinEnforced, requireMpin } from "./mpin"; // mpin
+import { alertEmergency } from "./alerts"; // alerts
 
 /**
  * Tiered emergency cascade.
  *  Tier 1 — Health vault: one attestation, instant, no document.
  *  Tier 2 — only once Health is exhausted: PIN + reason code, short hold.
+ * mpin: through the API every tier needs the MPIN (while MPIN_ENFORCED is on); Tier 2 always does.
  * Guardrails (monthly cap, velocity, cooling-off on repeat use, risk flagging)
  * are part of the feature, not an afterthought.
  */
@@ -202,7 +205,7 @@ export function planEmergency(user: User, amount: number, now = Date.now()) {
     tier1,
     tier2,
     shortfall: Math.max(0, remaining),
-    needsPin: tier2 > 0,
+    needsPin: tier2 > 0 || mpinEnforced(), // mpin: the route asks every tier for the MPIN while it's enforced
     needsNote: status.friction.level >= 2,
     coolingOff: status.friction.level === 3,
     releaseEstimate:
@@ -221,12 +224,24 @@ export function planEmergency(user: User, amount: number, now = Date.now()) {
 
 export function executeEmergency(
   user: User,
-  input: { amount: number; reasonCode: string; note?: string; attest: boolean; pin?: string },
+  input: {
+    amount: number;
+    reasonCode: string;
+    note?: string;
+    attest: boolean;
+    pin?: string;
+    /** mpin: set by the API route, whose money policy asks every tier for the MPIN. Without it only Tier 2 does. */
+    mpinEveryTier?: boolean;
+  },
   now = Date.now(),
 ) {
   if (!EMERGENCY_REASONS[input.reasonCode]) throw new HttpError(400, "Choose a reason");
   if (!input.attest) throw new HttpError(400, "Confirm that this is a genuine emergency");
   const rules = rulesFor(user.jurisdiction).emergency;
+  // mpin: checked before the transaction, so a wrong try's audit row is kept (it used to be rolled back).
+  // Tier 2 has always needed the PIN, so it stays checked even with MPIN_ENFORCED off.
+  const tier2 = planEmergency(user, input.amount, now).tier2 > 0;
+  const pinVerified = tier2 || input.mpinEveryTier ? requireMpin(user, input.pin, "emergency", { always: tier2 }) : false;
 
   return tx(() => {
     const plan = planEmergency(user, input.amount, now);
@@ -237,10 +252,6 @@ export function executeEmergency(
       reason: EMERGENCY_REASONS[input.reasonCode],
     };
 
-    if (plan.needsPin && !checkPin(user, input.pin)) {
-      audit({ userId: user.id, actor: user.id, actorType: "user", action: "emergency.pin_failed", entityType: "emergency", entityId: id });
-      throw new HttpError(403, "PIN didn't match — Tier 2 access needs your PIN");
-    }
     if (plan.needsNote && (input.note ?? "").trim().length < 10) {
       throw new HttpError(400, "Repeat use this month: add a short description (10+ characters)");
     }
@@ -334,12 +345,13 @@ export function executeEmergency(
         tier,
         reason: input.reasonCode,
         attestation: "I confirm this is a genuine emergency",
-        pinVerified: plan.needsPin,
+        pinVerified,
         status,
         plan: plan.items.map((i) => ({ vault: i.vaultName, amount: i.amount, tier: i.tier })),
       },
       ts: now,
     });
+    alertEmergency(user, input.amount, status); // alerts
     if (plan.risk.score >= 60) {
       raiseFlag({
         userId: user.id,
@@ -390,6 +402,7 @@ export function settleEmergencies(user: User, now = Date.now()) {
         JSON.stringify(items),
         r.id,
       );
+      alertEmergency(user, r.amount, "released"); // alerts
     });
   }
   const overdue = all<{ id: string }>(

@@ -10,6 +10,8 @@ export interface SessionState {
   ready: boolean;
   lockEnabled: boolean;
   unlocked: boolean;
+  /** protection: Face ID / fingerprint may unlock the app (false after onboarding's check didn't pass). */
+  biometricUnlock: boolean;
   hasDevicePin: boolean;
   aiConsent: boolean;
   /** "May an AI read the bills and IDs I send?" null until asked (features/ai-consent). */
@@ -17,7 +19,7 @@ export interface SessionState {
   ageConfirmed: boolean;
 }
 
-let state: SessionState = { ready: false, lockEnabled: false, unlocked: false, hasDevicePin: false, aiConsent: false, aiChecks: null, ageConfirmed: false };
+let state: SessionState = { ready: false, lockEnabled: false, unlocked: false, biometricUnlock: true, hasDevicePin: false, aiConsent: false, aiChecks: null, ageConfirmed: false };
 const listeners = new Set<() => void>();
 
 export const getSession = () => state;
@@ -39,4 +41,4 @@ export function useSession() {
 }
 
 // Delete account: no PIN, no lock and no consents are left on the device.
-onDeviceReset(() => setSession({ lockEnabled: false, unlocked: true, hasDevicePin: false, aiConsent: false, aiChecks: null, ageConfirmed: false }));
+onDeviceReset(() => setSession({ lockEnabled: false, unlocked: true, biometricUnlock: true, hasDevicePin: false, aiConsent: false, aiChecks: null, ageConfirmed: false }));

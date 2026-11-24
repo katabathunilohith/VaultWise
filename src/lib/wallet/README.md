@@ -36,14 +36,16 @@ Money never goes from a vault to the wallet. Vaults release money only through p
 
 All amounts in requests are major units. All amounts in responses are minor units. Errors are `{ error, code? }`.
 
+Money routes opt in with `customer({ money: "<action>" })`: the policy map in `src/lib/money-routes.ts` decides the ID-check gate, and the route checks the body's `pin` (the MPIN, see `src/lib/mpin/README.md`) and, for money out, the new-device cap (`src/lib/devices`).
+
 | Route | Access | Body | Answer |
 |---|---|---|---|
 | `GET /api/v1/wallet` | `customer({ access: "read" })` | | `WalletView` (see `view.ts`) |
-| `POST /api/v1/wallet/top-up` | `customer({ tick: false, kyc: true })` | `{ amount }` | 201 `{ journalId, wallet }` |
-| `POST /api/v1/wallet/move` | `customer({ tick: false, kyc: true })` | `{ vaultId, amount }` | 201 `{ journalId, wallet }` |
-| `POST /api/v1/wallet/spend` | `customer({ tick: false, kyc: true })` | `{ amount, payee, note? }` | 201 `{ journalId, wallet }` |
-| `POST /api/v1/wallet/cash-out` | `customer({ tick: false, kyc: true })` | `{ amount }` | 201 `{ journalId, wallet }` |
-| `PUT /api/v1/wallet/settings` | `customer({ tick: false })` | `{ dailyLimit?: number \| null, autoSaveSource?: "bank" \| "wallet" }` | 200 `{ wallet }` |
+| `POST /api/v1/wallet/top-up` | `customer({ tick: false, kyc: true })` (money in, no MPIN) | `{ amount }` | 201 `{ journalId, wallet }` |
+| `POST /api/v1/wallet/move` | `customer({ tick: false, money: "wallet_move" })` | `{ vaultId, amount, pin }` | 201 `{ journalId, wallet }` |
+| `POST /api/v1/wallet/spend` | `customer({ tick: false, money: "wallet_spend" })`, new-device cap | `{ amount, payee, note?, pin }` | 201 `{ journalId, wallet }` |
+| `POST /api/v1/wallet/cash-out` | `customer({ tick: false, money: "wallet_cash_out" })`, new-device cap | `{ amount, pin }` | 201 `{ journalId, wallet }` |
+| `PUT /api/v1/wallet/settings` | `customer({ tick: false })`; raising or removing the daily limit checks the MPIN as `wallet_limit_raise` | `{ dailyLimit?: number \| null, autoSaveSource?: "bank" \| "wallet", pin? }` | 200 `{ wallet }` |
 
 Error codes from this module: `insufficient_funds`, `daily_limit`, `limit_raise_locked` (409), `bad_amount`, `bad_payee`, `vault_closed`, `wallet_off` (404).
 

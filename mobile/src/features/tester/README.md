@@ -36,7 +36,7 @@ The first deploy asks you to link a project and pick a subdomain. Open the link 
 
 ## Known limits
 
-- Practice data lives in memory, so reloading the page puts the sample account back. Ticked tasks are kept.
+- Practice data is saved in the browser, so a reload keeps it. Settings → Start Practice over puts the sample account back. Ticked tasks are kept either way.
 - These are testers using pretend money. Report them as testers, not customers.
 
 ## Remove it

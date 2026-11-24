@@ -5,6 +5,7 @@ import { generateKeyPair, SignJWT } from "jose";
 import { all, get, run } from "@/lib/db";
 import type { User } from "@/lib/users";
 import { setVerificationKey } from "@/lib/auth/verify";
+import { withRequest } from "@/lib/auth/context";
 import { identityByUid } from "@/lib/auth/identities";
 import { setIdExtractor } from "@/lib/kyc/analyse";
 import { verhoeffDigit } from "@/lib/kyc/ids";
@@ -66,7 +67,12 @@ async function claimReq(t: string, idNumber: string | null, ip: string) {
   form.set("docType", "aadhaar");
   if (idNumber) form.set("idNumber", idNumber);
   form.set("file", new File([new Uint8Array(await idImage())], "id.jpg", { type: "image/jpeg" }));
-  return new Request("http://localhost/api/v1/recovery/claim", { method: "POST", headers: { authorization: `Bearer ${t}`, "x-real-ip": ip }, body: form });
+  // The person said yes to the AI reading their ID (a missing x-ai-consent header means no).
+  return new Request("http://localhost/api/v1/recovery/claim", {
+    method: "POST",
+    headers: { authorization: `Bearer ${t}`, "x-real-ip": ip, "x-ai-consent": "yes" },
+    body: form,
+  });
 }
 
 function aadhaar(n: number) {
@@ -81,15 +87,15 @@ function cardReads(name: string, number: string) {
 
 /** Opens a wallet for `uid` (bound identity) and verifies its Aadhaar. */
 async function verifiedWallet(uid: string, email: string, name: string, number: string) {
-  const r = await call(onboard, authed("/api/v1/onboarding", await token(uid, email), { body: { name, country: "IN", pin: "1234", demo: false } }));
+  const r = await call(onboard, authed("/api/v1/onboarding", await token(uid, email), { body: { name, country: "IN", pin: "482915", demo: false } }));
   expect(r.status).toBe(200);
   const userId = identityByUid(uid)!.user_id!;
   cardReads(name, number);
-  const view = await submitKyc(get<User>("SELECT * FROM users WHERE id = ?", userId)!, {
-    docType: "aadhaar",
-    file: { buffer: await idImage(), mime: "image/jpeg" },
-    idNumber: number,
-  });
+  const file = { buffer: await idImage(), mime: "image/jpeg" };
+  // As if the person said yes to the AI reading the card (outside a request there is no consent).
+  const view = await withRequest(new Request("http://localhost/api/v1/kyc", { headers: { "x-ai-consent": "yes" } }), () =>
+    submitKyc(get<User>("SELECT * FROM users WHERE id = ?", userId)!, { docType: "aadhaar", file, idNumber: number }),
+  );
   setIdExtractor(null);
   expect(view.status).toBe("verified");
   return userId;
@@ -108,6 +114,8 @@ beforeAll(async () => {
   process.env.FIREBASE_PROJECT_ID = PROJECT;
   process.env.ADMIN_EMAILS = "ops@example.com";
   process.env.IDENTITY_SECRET = "recovery-test-secret";
+  // These tests stand for a proxy that sets X-Real-IP (deploy/Caddyfile); without it the header is ignored.
+  process.env.TRUST_PROXY_HEADER = "x-real-ip";
   ops = await token("ops-uid", "ops@example.com");
   ownerId = await verifiedWallet("owner-uid", "shaik@outlook.com", "Shaik Aayan Javed", OWNER);
 });
@@ -124,6 +132,7 @@ afterAll(() => {
   delete process.env.FIREBASE_PROJECT_ID;
   delete process.env.ADMIN_EMAILS;
   delete process.env.IDENTITY_SECRET;
+  delete process.env.TRUST_PROXY_HEADER;
 });
 
 describe("find my account", () => {
@@ -252,7 +261,7 @@ describe("recovery claims", () => {
     const again = await call(claim, await claimReq(t, number, "10.2.0.1"));
     expect(again.status).toBe(409);
     expect((await again.json()).code).toBe("claim_pending");
-    const open = await call(onboard, authed("/api/v1/onboarding", t, { body: { name: "Gita", country: "IN", pin: "1234", demo: false } }));
+    const open = await call(onboard, authed("/api/v1/onboarding", t, { body: { name: "Gita", country: "IN", pin: "482915", demo: false } }));
     expect((await open.json()).code).toBe("claim_pending");
 
     await call(adminDecide, authed(`/api/v1/admin/recovery/${c.id}`, ops, { body: { decision: "approved", note: "Checked by phone" } }), ctx(c.id));

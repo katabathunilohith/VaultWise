@@ -11,6 +11,8 @@ automated check plus a person. **It is not official KYC.** Read "Official KYC in
 | `KYC_PROVIDER` | `practice` (default). `external` is the slot for an official provider (not implemented). |
 | `IDENTITY_SECRET` | HMAC key for ID numbers. Required in firebase mode and in production (500 `server_config` until set). Prototype mode and tests: a fixed dev key and a console warning. Use a long random value from a secret manager. Changing it breaks matching for older records (recovery, duplicate checks). |
 | `GROQ_API_KEY` / `GROQ_VISION_MODEL` | The practice provider reads the card with the vision model. Without it every check goes to a person. |
+| `KYC_FLOW` | `photo` (default): the ID photo check below. `steps`: India accounts check their PAN, Aadhaar (DigiLocker) and a bank account instead; see [checks/README.md](checks/README.md). |
+| `KYC_CHECKS_PROVIDER` | For the steps flow: `test` (default, deterministic) or `setu`. Setu keys and the other switches are in [checks/README.md](checks/README.md). |
 
 Switch off: `KYC_ENFORCED=false`. Seeded demo users, tests and `createUser()` default to `verified`, as before.
 
@@ -58,8 +60,9 @@ so Practice sample cards go to a person.
 
 | Route | Body | Answer |
 |---|---|---|
-| `GET /api/v1/kyc` | | `{ status: "not_started" \| "pending" \| "needs_review" \| "verified" \| "rejected", docType, idLast4, reasons: string[], updatedAt }` |
-| `POST /api/v1/kyc` | multipart `docType`, `file`, `idNumber?` | 201, same shape. Errors: 400 `invalid_id`, `doc_type_not_accepted`, `file_required`; 409 `kyc_done`, `kyc_in_review`; 429 `rate_limited` (5 a day); 413/415 bad file. |
+| `GET /api/v1/kyc` | | `{ status: "not_started" \| "pending" \| "needs_review" \| "verified" \| "rejected", docType, idLast4, reasons: string[], updatedAt }`. In the steps flow it adds `flow: "steps"` and `steps: { pan, aadhaar, bank }` (each `{ status: "todo" \| "done" \| "review" \| "failed", last4? }`); in the photo flow neither is sent. |
+| `POST /api/v1/kyc/pan`, `/kyc/digilocker/start`, `/kyc/digilocker/finish`, `/kyc/bank/start`, `/kyc/bank/finish` | | The steps flow; see [checks/README.md](checks/README.md). |
+| `POST /api/v1/kyc` | multipart `docType`, `file`, `idNumber?` | 201, same shape. Errors: 400 `invalid_id`, `doc_type_not_accepted`, `file_required`; 409 `kyc_done`, `kyc_in_review`, `kyc_flow_steps` (this account uses the steps flow, `assertPhotoFlow()`); 429 `rate_limited` (5 a day); 413/415 bad file. |
 | `GET /api/v1/admin/kyc` | | `{ queue: [...], recent: [...] }` (checks, reasons, masked number, name on card) |
 | `POST /api/v1/admin/kyc/[id]` | `{ decision: "verified" \| "rejected", note }` | `{ ok: true, status }`. A rejection's note is shown to the customer. 409 `already_decided`. |
 | `GET /api/v1/admin/kyc/[id]/file` | | the ID photo (admins only) |
@@ -83,6 +86,15 @@ works through a partner bank or PPI issuer and uses its KYC, usually through a l
 Get legal advice for the exact obligations of your licence and partner. Keep this module's rules either way:
 never store a full number, mask everywhere, and let a person decide anything unclear.
 
+## The steps flow (`checks/`)
+
+With `KYC_FLOW=steps`, an India account verifies with three checks through a licensed provider's test mode
+instead of a photo: PAN (name match), Aadhaar through DigiLocker, and a bank account by reverse penny drop. All three
+done sets `kyc_status = verified` through `setUserKyc()`; a name that doesn't match sends the whole check, once
+every step is finished, to the same review queue as a photo check (`kyc_records`, `needs_review`, no photo).
+It stores PAN last 4 + HMAC, the Aadhaar name, year of birth and last 4, and the bank's IFSC, last 4 and holder name
+(`src/lib/bank`). Details, the test provider's answers and the Setu adapter: [checks/README.md](checks/README.md).
+
 ## Plugging in an official provider
 
 1. Implement `KycProvider` (types.ts) in `providers/external.ts`:
@@ -104,6 +116,7 @@ never store a full number, mask everywhere, and let a person decide anything unc
 - `src/app/api/v1/me/route.ts`: `kyc: { status, docType?, idLast4? }`.
 - `src/lib/auth/session.ts`: the `kyc: true` gate. Routes: `src/app/api/v1/kyc`, `src/app/api/v1/admin/kyc/**`.
 - `src/lib/recovery` reuses `analyse.ts`, `ids.ts`, `secret.ts` and `verifiedHolder()`.
+- Steps flow (marked `// kyc-checks`): `checks/view.ts` is read by `kycView()` in `service.ts`; routes under `src/app/api/v1/kyc/`; `src/lib/bank`; the web `/verify` page (`src/components/identity/kyc.tsx`, `kyc-steps.tsx`).
 
 ## Remove
 

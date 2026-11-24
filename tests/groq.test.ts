@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { withRequest } from "@/lib/auth/context";
 import { get } from "@/lib/db";
 import { AiError, chatJson, describeAiError } from "@/lib/groq";
 import { requestEmergencyLimitChange } from "@/lib/limits";
@@ -63,11 +64,15 @@ describe("Groq failures", () => {
   it("an emergency limit request still gets a decision, with a clean reason, when the AI is out of quota", async () => {
     groqReplies({ status: 429, message: DAILY, retryAfter: "896" });
     const u = createUser({ name: "Quota Test", country: "US", pin: "1357" });
-    const r = await requestEmergencyLimitChange(get<User>("SELECT * FROM users WHERE id = ?", u.id)!, {
-      limits: { singleWithdrawal: 9_000_00 },
-      reasonCode: "medical",
-      explanation: "My son needs surgery on Friday and the hospital deposit is $8,500.",
-    });
+    // The person said yes to the AI (without the header the AI isn't asked at all).
+    const consenting = new Request("http://localhost/api/v1/limits/emergency", { headers: { "x-ai-consent": "yes" } });
+    const r = await withRequest(consenting, () =>
+      requestEmergencyLimitChange(get<User>("SELECT * FROM users WHERE id = ?", u.id)!, {
+        limits: { singleWithdrawal: 9_000_00 },
+        reasonCode: "medical",
+        explanation: "My son needs surgery on Friday and the hospital deposit is $8,500.",
+      }),
+    );
     expect(r.decision).toBe("in_review");
     const row = get<{ assessment: string }>("SELECT assessment FROM limit_changes WHERE id = ?", r.id)!;
     expect(JSON.parse(row.assessment).aiError).toBe("the AI provider's daily usage limit has been reached");

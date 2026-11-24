@@ -11,6 +11,7 @@ import detailFx from "@/data/fixtures/vault-detail.json";
 import vaultsFx from "@/data/fixtures/vaults.json";
 import type { PlanFrequency } from "../../invest";
 import { ApiError } from "../errors";
+import { registerPracticeSlice } from "./persist";
 import type { Activity, Dashboard, EmergencyOverview, JournalLine, LimitsOverview, MeOnboarded, Millis, Minor, Vault, VaultDetail, WithdrawalRow } from "../types";
 import { freshWallet, type WalletState } from "./wallet-state"; // wallet
 import { freshIdentity, type DemoIdentity } from "./identity-state"; // identity
@@ -75,6 +76,70 @@ export const currency = S.me.user.currency;
 export function resetState() {
   Object.assign(S, fresh());
 }
+
+/** The state as saved on the device: the two Maps become lists of [vaultId, rows] pairs. */
+type SavedState = Omit<State, "histories" | "withdrawals"> & {
+  histories: [string, JournalLine[]][];
+  withdrawals: [string, WithdrawalRow[]][];
+};
+
+/* protection (baseline N5): names and the email the person typed never go into the bulk save. */
+
+/** The sample person, and the vault members the sample data already has. */
+const FX_USER = (meFx as unknown as MeOnboarded).user;
+const FX_MEMBER_IDS = new Set((vaultsFx as { vaults: Vault[] }).vaults.flatMap((v) => v.members.map((m) => m.id)));
+/** A member someone typed in (the owner of a vault made in Practice, or a co-saver). */
+const typedMember = (id: string) => !FX_MEMBER_IDS.has(id);
+
+/** What the Practice person typed: their name and email, and the names on vaults they made. */
+interface PracticePerson {
+  name: string;
+  email: string | null;
+  members: Record<string, string>;
+}
+
+registerPracticeSlice<SavedState>({
+  key: "state",
+  // protection: the sample name and email, and blank typed member names, stand in for the real ones
+  // (kept by the sensitive "person" slice below).
+  save: () => ({
+    ...S,
+    me: { ...S.me, user: { ...S.me.user, name: FX_USER.name, email: FX_USER.email } },
+    vaults: S.vaults.map((v) => ({ ...v, members: v.members.map((m) => (typedMember(m.id) ? { ...m, name: "" } : m)) })),
+    histories: [...S.histories],
+    withdrawals: [...S.withdrawals],
+  }),
+  load: (saved) => {
+    if (!saved?.me || !Array.isArray(saved.vaults) || !Array.isArray(saved.histories)) throw new Error("Not a Practice state");
+    // Laid over a fresh state, so a field added in a newer version starts from the sample data.
+    Object.assign(S, fresh(), saved, { histories: new Map(saved.histories), withdrawals: new Map(saved.withdrawals) });
+    // protection: until "person" fills them in (it can be missing, e.g. after a backup restore).
+    S.vaults = S.vaults.map((v) => ({
+      ...v,
+      members: v.members.map((m) => (m.name ? m : { ...m, name: m.role === "owner" ? S.me.user.name : "Co-saver" })),
+    }));
+  },
+  reset: resetState,
+});
+
+// protection: registered after "state", so it loads over it.
+registerPracticeSlice<PracticePerson>({
+  key: "person",
+  sensitive: true,
+  save: () => ({
+    name: S.me.user.name,
+    email: S.me.user.email,
+    members: Object.fromEntries(S.vaults.flatMap((v) => v.members.filter((m) => typedMember(m.id)).map((m) => [m.id, m.name]))),
+  }),
+  load: (saved) => {
+    if (typeof saved?.name !== "string") throw new Error("Not a Practice person");
+    S.me = { ...S.me, user: { ...S.me.user, name: saved.name, email: typeof saved.email === "string" ? saved.email : null } };
+    const names = saved.members && typeof saved.members === "object" ? saved.members : {};
+    S.vaults = S.vaults.map((v) => ({ ...v, members: v.members.map((m) => (typeof names[m.id] === "string" ? { ...m, name: names[m.id] } : m)) }));
+  },
+  // "state" puts the sample person back.
+  reset: () => undefined,
+});
 
 export function recompute(v: Vault) {
   v.available = Math.max(0, v.balance - v.held);

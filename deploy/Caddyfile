@@ -1,0 +1,26 @@
+# Caddy: HTTPS in front of the Vaultwise server (Next.js on 127.0.0.1:3000).
+# Install as /etc/caddy/Caddyfile, replace vaultwise.example.com with your domain, then: sudo systemctl reload caddy
+# Caddy gets and renews a free Let's Encrypt certificate by itself once the domain's A record points at this
+# server and ports 80 and 443 are open. Plain http:// requests are redirected to https:// automatically.
+
+vaultwise.example.com {
+	# Compress responses.
+	encode zstd gzip
+
+	# The app refuses photos over 10 MB; refuse anything far larger here, before it reaches Node.
+	request_body {
+		max_size 25MB
+	}
+
+	reverse_proxy 127.0.0.1:3000 {
+		# With TRUST_PROXY_HOPS=1 in /etc/vaultwise.env the app trusts this one proxy and reads the visitor's
+		# address for rate limits from Cf-Connecting-Ip, then X-Real-IP, then X-Forwarded-For
+		# (clientIp() in src/lib/auth/context.ts); without it the app ignores all three. So set X-Real-IP to
+		# the real connecting address, so a visitor can't fake it, and drop a forged Cloudflare header.
+		header_up X-Real-IP {remote_host}
+		header_up -Cf-Connecting-Ip
+	}
+
+	# Security headers (HSTS, CSP and the rest) come from the app itself (next.config.ts).
+	header -Server
+}

@@ -30,6 +30,18 @@
       },
       "autoIncrement": true
     },
+    "tester-live": {
+      "channel": "tester-live",
+      "distribution": "internal",
+      "environment": "preview",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://YOUR-DOMAIN"
+      },
+      "autoIncrement": true
+    },
     "production": {
       "channel": "production",
       "autoIncrement": true,

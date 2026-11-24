@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
 import type { Auth, Persistence, User as FirebaseUser } from "firebase/auth";
-import { getItem, onDeviceReset, removeItem, setItem } from "../storage";
+import { PROTECTION } from "@/features/protection/config"; // protection
+import { getItem, getSecureChunked, onDeviceReset, removeItem, removeSecureChunked, secureKeyFor, setItem, setSecureChunked } from "../storage";
 
 /**
  * identity: Firebase Auth (email and password), the sign-in session the API sends with every
@@ -9,8 +10,10 @@ import { getItem, onDeviceReset, removeItem, setItem } from "../storage";
  * Without them (or with sign-in switched off in features/auth/config.ts) Firebase is never loaded,
  * nobody signs in, and the app runs as the single-account prototype exactly as before.
  *
- * The session survives restarts: AsyncStorage on phones, the browser's local storage on the web.
- * The SDK refreshes the ID token by itself; getIdToken() always returns a current one.
+ * The session survives restarts: the Keychain / Keystore on phones (protection, plan 04: split into
+ * chunks by lib/storage.ts; older builds kept it in AsyncStorage, moved over once), the browser's
+ * local storage on the web. The SDK refreshes the ID token by itself; getIdToken() always returns a
+ * current one.
  *
  * A login is tied to the Vaultwise server it was made or used on (the Data source address). Its
  * token only ever goes to that address, never to another one typed in later.
@@ -143,7 +146,7 @@ function createAuth(): Auth {
     // The React Native build of firebase/auth has getReactNativePersistence; its published types
     // (the web ones) don't list it, so it's looked up rather than imported.
     const rn = (fa as unknown as { getReactNativePersistence?: (storage: unknown) => Persistence }).getReactNativePersistence;
-    if (rn) persistence = rn(require("@react-native-async-storage/async-storage").default);
+    if (rn) persistence = rn(PROTECTION.secureSession ? secureSessionStorage() : asyncStorage()); // protection
     else {
       console.warn("[auth] getReactNativePersistence is missing: the sign-in won't survive a restart.");
       persistence = fa.inMemoryPersistence;
@@ -155,6 +158,65 @@ function createAuth(): Auth {
     // Already initialised (fast refresh).
     return fa.getAuth(app);
   }
+}
+
+/* ---------- protection: the saved session in the Keychain / Keystore ---------- */
+
+/** What getReactNativePersistence() reads and writes through. */
+interface SessionStorage {
+  getItem(key: string): Promise<string | null>;
+  setItem(key: string, value: string): Promise<void>;
+  removeItem(key: string): Promise<void>;
+}
+
+type AsyncStorageModule = SessionStorage & { getAllKeys(): Promise<readonly string[]>; multiRemove(keys: readonly string[]): Promise<void> };
+
+const asyncStorage = () => require("@react-native-async-storage/async-storage").default as AsyncStorageModule;
+
+/** Firebase's keys ("firebase:authUser:<api key>:[DEFAULT]") have characters the secure store refuses. */
+const secureSessionKey = (key: string) => secureKeyFor("vwauth.", key);
+
+/**
+ * protection (plan 04, security gap 8): the sign-in session, with its refresh token, kept in the
+ * Keychain / Keystore in chunks (lib/storage.ts) instead of unencrypted AsyncStorage. A session an
+ * older build saved in AsyncStorage is copied over once, so nobody is signed out. The AsyncStorage
+ * copy wins over one already in the Keychain: it's the newer one (an older build, or this switch
+ * turned off and on again, wrote it last). It's deleted there only once the Keychain gives the same
+ * value back, so a write that failed signs nobody out; it's tried again at the next launch.
+ */
+function secureSessionStorage(): SessionStorage {
+  let moved: Promise<void> | null = null;
+  const moveOnce = () =>
+    (moved ??= (async () => {
+      try {
+        const legacy = asyncStorage();
+        const keys = (await legacy.getAllKeys()).filter((k) => k.startsWith("firebase:"));
+        const copied: string[] = [];
+        for (const k of keys) {
+          const value = await legacy.getItem(k);
+          if (value === null) continue;
+          await setSecureChunked(secureSessionKey(k), value);
+          if ((await getSecureChunked(secureSessionKey(k))) === value) copied.push(k);
+        }
+        if (copied.length) await legacy.multiRemove(copied);
+      } catch {
+        // AsyncStorage unreadable: nothing to move.
+      }
+    })());
+  return {
+    getItem: async (key) => {
+      await moveOnce();
+      return getSecureChunked(secureSessionKey(key));
+    },
+    setItem: async (key, value) => {
+      await moveOnce();
+      await setSecureChunked(secureSessionKey(key), value);
+    },
+    removeItem: async (key) => {
+      await moveOnce();
+      await removeSecureChunked(secureSessionKey(key));
+    },
+  };
 }
 
 /** How long the saved session may take to load before the app carries on with what it has. */

@@ -8,6 +8,8 @@ import { docTypesFor, maskEmail, maskId, normaliseId, validateIdNumber, verhoeff
 import { idHash } from "@/lib/kyc/secret";
 import { compareNames } from "@/lib/kyc/names";
 import { setIdExtractor } from "@/lib/kyc/analyse";
+import { withRequest } from "@/lib/auth/context";
+import { kycLevelFor } from "@/lib/kyc/levels";
 import type { IdExtraction } from "@/lib/kyc/extract";
 import { decideKyc, kycQueue, kycView, submitKyc } from "@/lib/kyc/service";
 import { GET as getKyc } from "@/app/api/v1/kyc/route";
@@ -31,6 +33,9 @@ function user(name: string, country = "IN") {
   const u = createUser({ name, country, pin: "1234", kycStatus: "pending" });
   return () => get<User>("SELECT * FROM users WHERE id = ?", u.id)!;
 }
+
+/** Runs as a request whose person said yes to the AI reading their ID (no header means no). */
+const consenting = <T>(fn: () => Promise<T>) => withRequest(new Request("http://localhost/api/v1/kyc", { headers: { "x-ai-consent": "yes" } }), fn);
 
 const reads = (x: Partial<IdExtraction>) => async (): Promise<IdExtraction> => ({
   is_id_document: true,
@@ -165,7 +170,7 @@ describe("practice provider", () => {
     const fresh = user("Aayan Javed Shaik");
     const n = aadhaar(20);
     setIdExtractor(reads({ name: "AAYAN JAVED SHAIK", id_number: n }));
-    const view = await submitKyc(fresh(), { docType: "aadhaar", file: await idImage(), idNumber: `${n.slice(0, 4)} ${n.slice(4, 8)} ${n.slice(8)}` });
+    const view = await consenting(async () => submitKyc(fresh(), { docType: "aadhaar", file: await idImage(), idNumber: `${n.slice(0, 4)} ${n.slice(4, 8)} ${n.slice(8)}` }));
     expect(view).toMatchObject({ status: "verified", docType: "aadhaar", idLast4: n.slice(-4), reasons: [] });
     expect(fresh()).toMatchObject({ kyc_status: "verified", kyc_level: 2 });
     await expect(submitKyc(fresh(), { docType: "aadhaar", file: await idImage() })).rejects.toMatchObject({ code: "kyc_done" });
@@ -175,20 +180,20 @@ describe("practice provider", () => {
     const n = aadhaar(20); // already verified on the account above
     const other = user("Aayan Javed Shaik");
     setIdExtractor(reads({ name: "AAYAN JAVED SHAIK", id_number: n }));
-    const dup = await submitKyc(other(), { docType: "aadhaar", file: await idImage() });
+    const dup = await consenting(async () => submitKyc(other(), { docType: "aadhaar", file: await idImage() }));
     expect(dup.status).toBe("needs_review");
     expect(dup.reasons.join(" ")).toMatch(/already linked to another account/);
 
     const mismatch = user("Rahul Verma");
     const m = aadhaar(30);
     setIdExtractor(reads({ name: "PRIYA SHARMA", id_number: m }));
-    const res = await submitKyc(mismatch(), { docType: "aadhaar", file: await idImage() });
+    const res = await consenting(async () => submitKyc(mismatch(), { docType: "aadhaar", file: await idImage() }));
     expect(res.status).toBe("needs_review");
     expect(res.reasons.join(" ")).toMatch(/name on the card/);
 
     const wrongTyped = user("Neha Gupta");
     setIdExtractor(reads({ name: "NEHA GUPTA", id_number: aadhaar(40) }));
-    const typedOff = await submitKyc(wrongTyped(), { docType: "aadhaar", file: await idImage(), idNumber: aadhaar(41) });
+    const typedOff = await consenting(async () => submitKyc(wrongTyped(), { docType: "aadhaar", file: await idImage(), idNumber: aadhaar(41) }));
     expect(typedOff.status).toBe("needs_review");
     expect(typedOff.reasons.join(" ")).toMatch(/doesn't match the card/);
   });
@@ -254,5 +259,13 @@ describe("practice provider", () => {
     const res = await (getKyc as unknown as (r: Request) => Promise<Response>)(new Request("http://localhost/api/v1/kyc"));
     expect(res.status).toBe(200);
     expect(Object.keys(await res.json()).sort()).toEqual(["docType", "idLast4", "reasons", "status", "updatedAt"]);
+  });
+});
+
+describe("KYC level", () => {
+  it("uses one rule: a new sign-up waiting for an ID check is level 1, as the KYC service sets it", () => {
+    const u = createUser({ name: "Mia Rossi", country: "IN", pin: "1357", kycStatus: "pending" });
+    expect(get<{ kyc_level: number }>("SELECT kyc_level FROM users WHERE id = ?", u.id)?.kyc_level).toBe(1);
+    expect([kycLevelFor("verified"), kycLevelFor("pending"), kycLevelFor("needs_review"), kycLevelFor("rejected")]).toEqual([2, 1, 1, 0]);
   });
 });

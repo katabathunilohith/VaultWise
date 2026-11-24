@@ -298,9 +298,11 @@ async function seedProof(
     text: "",
     summary: `${o.docType.replace(/_/g, " ")} from ${o.issuer}`,
   };
+  // ai-consent: ai_allowed is always passed (the column's default is never relied on). The practice data shows
+  // the AI's reading of sample documents bundled with the app, not the person's own, so it is 1 for them.
   run(
-    `INSERT INTO proofs (id, user_id, vault_id, withdrawal_id, emergency_id, purpose, category, file_name, mime, size, sha256, phash, stored_path, ela_path, exif, extracted, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'image/jpeg', ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO proofs (id, user_id, vault_id, withdrawal_id, emergency_id, purpose, category, file_name, mime, size, sha256, phash, stored_path, ela_path, exif, extracted, ai_allowed, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'image/jpeg', ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
     id,
     user.id,
     o.vaultId ?? null,

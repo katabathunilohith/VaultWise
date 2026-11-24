@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { reportApiError, withIdentity } from "@/components/identity/session"; // identity
+import { aiConsentHeaderValue } from "@/components/ai-consent"; // ai-consent
+import { withWebDevice } from "@/components/identity/device"; // devices
 
 export class ApiError extends Error {
   constructor(
@@ -14,7 +16,11 @@ export class ApiError extends Error {
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, await withIdentity({ cache: "no-store", ...init })); // identity: adds the sign-in token when signed in
+  // ai-consent: every request says whether an AI may read what it carries ("no" until the person says yes).
+  const headers = new Headers(init?.headers);
+  headers.set("x-ai-consent", aiConsentHeaderValue());
+  withWebDevice(headers); // devices: this browser's id, with sign-in on (src/components/identity/device.ts)
+  const res = await fetch(url, await withIdentity({ cache: "no-store", ...init, headers })); // identity: adds the sign-in token when signed in
   const text = await res.text();
   let data: unknown = null;
   try {

@@ -200,6 +200,33 @@ export function Blocked({ reason }: { reason: string }) {
 }
 
 /**
+ * No answer came (a timeout or a dropped connection), so the request may have gone through. It never
+ * says nothing moved and never offers to send again: the emergency screen (refreshed) shows whether
+ * it's there.
+ */
+export function Unconfirmed() {
+  return (
+    <ModalScreen
+      onClose={go.close}
+      headerRight={<PracticeBadge compact />}
+      footer={
+        <>
+          <Button label="Talk to a person" variant="tonal" size="md" onPress={leave.support} />
+          <Button label="Check your requests" armOnMount onPress={go.close} />
+        </>
+      }
+    >
+      <OutcomeHeader
+        icon={WarningCircleIcon}
+        color="warning"
+        title="We couldn't confirm this."
+        body="Vaultwise didn't answer in time, so your request may already be on its way. Check your recent requests before you ask again."
+      />
+    </ModalScreen>
+  );
+}
+
+/**
  * Tier 1 between the hold and the answer — usually under a second. Closing here means "carry on
  * in the background", never cancel: the request has already been sent.
  */

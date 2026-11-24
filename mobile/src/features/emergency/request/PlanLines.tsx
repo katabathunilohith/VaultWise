@@ -7,7 +7,7 @@ import { layout, space } from "@/theme";
 import { fmt } from "../format";
 import { OtherVaultsGlyph } from "../OtherVaultsGlyph";
 
-/** "₹X from Health now" (Tier 1) / "₹Y from other vaults after your PIN and a short pause" (Tier 2). */
+/** "₹X from Health now" (Tier 1) / "₹Y from other vaults after your MPIN and a short pause" (Tier 2). */
 export function SplitLines({ p, currency }: { p: Pick<EmergencyPreview, "tier1" | "tier2">; currency: string }) {
   return (
     <View style={styles.list}>
@@ -20,7 +20,7 @@ export function SplitLines({ p, currency }: { p: Pick<EmergencyPreview, "tier1" 
         />
       ) : null}
       {p.tier2 > 0 ? (
-        <Line glyph={<OtherVaultsGlyph />} label="from other vaults after your PIN and a short pause" amount={p.tier2} currency={currency} />
+        <Line glyph={<OtherVaultsGlyph />} label="from other vaults after your MPIN and a short pause" amount={p.tier2} currency={currency} />
       ) : null}
     </View>
   );
@@ -63,7 +63,7 @@ export function PlanItems({
               ? "After the safety pause"
               : it.tier === 1
                 ? "Now"
-                : `After your PIN and a ${holdSeconds}-second pause`;
+                : `After your MPIN and a ${holdSeconds}-second pause`;
         return (
           <Row key={`${it.vaultId}-${it.tier}`} gap={space.sm} style={styles.line}>
             <VaultGlyph category={it.category} size={36} />

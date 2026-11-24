@@ -1,4 +1,6 @@
 import { practiceCheckouts, type PayLedger } from "../pay-sim";
+import { requirePracticeMpin } from "./mpin"; // mpin
+import { registerPracticeSlice } from "./persist";
 import { settleProofs } from "./proofs";
 import { currency, recompute, record, S } from "./state";
 
@@ -21,7 +23,9 @@ const ledger: PayLedger = {
 };
 
 /** Practice checkouts, paid from the practice vaults, whose balances move. */
-export const checkouts = practiceCheckouts(ledger, currency);
+export const checkouts = practiceCheckouts(ledger, currency, (pin) => requirePracticeMpin(pin)); // mpin: the simulator's MPIN and lock
+
+registerPracticeSlice({ key: "checkouts", save: checkouts.snapshot, load: checkouts.restore, reset: checkouts.reset });
 
 /**
  * The server runs checks and payments in the background, so a result lands whether or not anyone

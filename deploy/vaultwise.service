@@ -1,0 +1,54 @@
+# systemd unit for the Vaultwise server. Install as /etc/systemd/system/vaultwise.service, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now vaultwise
+# Logs: journalctl -u vaultwise -f
+#
+# It runs `npm start` (next start) from /opt/vaultwise as the unprivileged user "vaultwise", listening only on
+# 127.0.0.1:3000 so the internet reaches it through Caddy alone. Secrets come from /etc/vaultwise.env.
+
+[Unit]
+Description=Vaultwise server (Next.js)
+After=network-online.target
+Wants=network-online.target
+# If it keeps failing (for example the production guard refusing to start without FIREBASE_PROJECT_ID),
+# stop retrying after 5 tries in 2 minutes instead of looping forever. Fix the cause, then: sudo systemctl restart vaultwise
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=vaultwise
+Group=vaultwise
+WorkingDirectory=/opt/vaultwise
+Environment=NODE_ENV=production
+Environment=VAULTWISE_DATA_DIR=/var/lib/vaultwise
+Environment=NEXT_TELEMETRY_DISABLED=1
+# npm writes no log files (the user has no writable home); errors still go to the journal.
+Environment=npm_config_logs_max=0
+Environment=npm_config_update_notifier=false
+# Values in this file override the Environment= lines above, so keep NODE_ENV and VAULTWISE_DATA_DIR the same there.
+EnvironmentFile=/etc/vaultwise.env
+ExecStart=/usr/bin/npm start -- --hostname 127.0.0.1 --port 3000
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+# The database and uploaded photos live in /var/lib/vaultwise (created by systemd, owned by vaultwise, private).
+StateDirectory=vaultwise
+StateDirectoryMode=0750
+
+# Hardening: the app can write only to its data folder and Next.js's cache.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/vaultwise -/opt/vaultwise/.next/cache
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

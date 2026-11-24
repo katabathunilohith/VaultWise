@@ -97,8 +97,9 @@ export function Onboarding({ countries, onDone }: { countries: CountryOption[]; 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!/^\d{4,6}$/.test(pin)) return setError("Choose a 4–6 digit PIN");
-    if (pin !== pin2) return setError("PINs don't match");
+    // mpin: new accounts choose a 6-digit MPIN; the server refuses easy ones (e.g. 123456) with a reason.
+    if (!/^\d{6}$/.test(pin)) return setError("Choose a 6-digit MPIN");
+    if (pin !== pin2) return setError("MPINs don't match");
     if (!country) return setError("Choose the country where you live and bank");
     setBusy(true);
     setStep(0);
@@ -203,7 +204,7 @@ export function Onboarding({ countries, onDone }: { countries: CountryOption[]; 
                 </Notice>
               ) : null}
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Security PIN" hint="For Tier 2 emergency access" htmlFor="ob-pin">
+                <Field label="MPIN (6 digits)" hint="You'll enter it for every money move" htmlFor="ob-pin">
                   <Input
                     id="ob-pin"
                     type="password"
@@ -214,7 +215,7 @@ export function Onboarding({ countries, onDone }: { countries: CountryOption[]; 
                     autoComplete="new-password"
                   />
                 </Field>
-                <Field label="Confirm PIN" htmlFor="ob-pin2">
+                <Field label="Confirm MPIN" htmlFor="ob-pin2">
                   <Input
                     id="ob-pin2"
                     type="password"

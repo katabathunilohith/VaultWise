@@ -2,7 +2,9 @@ import { Platform } from "react-native";
 import { authReady, getIdToken } from "../auth/firebase"; // identity
 import { getSession } from "../auth/session-state";
 import { getConnection } from "./connection";
+import { deviceHeaders, noteDeviceRevoked } from "./device"; // devices
 import { ApiError } from "./errors";
+import { noteSignedOut } from "./signed-out"; // identity, devices
 import type { UploadFile } from "./types";
 
 /** HTTP to the Vaultwise API: JSON in and out, friendly errors, multipart uploads. */
@@ -36,9 +38,10 @@ function aiConsentHeader(): Record<string, string> {
 
 export async function request<T>(path: string, init: RequestInit = {}, opts: { timeoutMs?: number; acceptStatus?: number[] } = {}): Promise<T> {
   const { baseUrl } = getConnection();
-  const auth = { ...(await authHeaders(baseUrl)), ...aiConsentHeader() }; // identity, ai-consent
+  const auth = { ...(await authHeaders(baseUrl)), ...aiConsentHeader(), ...(await deviceHeaders()) }; // identity, ai-consent, devices
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? TIMEOUT_MS);
+  const sentAt = Date.now();
   let res: Response;
   try {
     res = await fetch(`${baseUrl}/api/v1${path}`, {
@@ -64,7 +67,13 @@ export async function request<T>(path: string, init: RequestInit = {}, opts: { t
   if (!res.ok && !opts.acceptStatus?.includes(res.status)) {
     const body = data as { error?: string; code?: string } | null;
     const msg = body?.error ?? `Request failed (${res.status})`;
-    throw new ApiError(msg, res.status, typeof body?.code === "string" ? body.code : undefined); // identity: code
+    let extra = body && typeof body === "object" ? (body as Record<string, unknown>) : undefined; // mpin: triesLeft, lockedUntil
+    // rate-limit: a 429 that says when to come back (Retry-After, seconds) carries it as `retryAt`, unless the body has one.
+    const retryAfter = res.status === 429 ? Number(res.headers.get("Retry-After")) : NaN;
+    if (retryAfter > 0 && extra?.retryAt === undefined) extra = { ...extra, retryAt: Date.now() + retryAfter * 1000 };
+    if (res.status === 401 && body?.code === "device_revoked") noteDeviceRevoked(); // devices: signed out from another device
+    if (res.status === 401 && body?.code === "signed_out") noteSignedOut({ message: typeof body.error === "string" ? body.error : null, sentAt }); // identity, devices
+    throw new ApiError(msg, res.status, typeof body?.code === "string" ? body.code : undefined, extra); // identity: code
   }
   return data as T;
 }

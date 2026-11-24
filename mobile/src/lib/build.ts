@@ -11,6 +11,10 @@ import * as Updates from "expo-updates";
  * Two signals, so neither alone can switch it off: EXPO_PUBLIC_PRACTICE_ONLY=1 at bundle time, and the build's
  * update channel at run time. The channel matters because an over-the-air update is bundled on a computer,
  * where the build profile's env doesn't apply.
+ *
+ * Live (not Practice) profiles: `development`, `preview`, and `tester-live` (plan 05: an internal Android APK on
+ * channel `tester-live` that talks to the online server at EXPO_PUBLIC_API_URL, with sign-in). Keep those
+ * channels out of this list.
  */
 const PRACTICE_CHANNELS = ["apk", "production"];
 
@@ -24,3 +28,9 @@ function updateChannel(): string | null {
 }
 
 export const PRACTICE_ONLY = process.env.EXPO_PUBLIC_PRACTICE_ONLY === "1" || PRACTICE_CHANNELS.includes(updateChannel() ?? "");
+
+/**
+ * The online tester build (`tester-live`): live data and sign-in, but no ID check, so testers never upload
+ * real IDs to a student project. Like PRACTICE_ONLY, it's read from the update channel at run time.
+ */
+export const TESTER_LIVE = updateChannel() === "tester-live";

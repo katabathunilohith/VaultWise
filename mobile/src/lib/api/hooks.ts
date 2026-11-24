@@ -13,16 +13,27 @@ import { AppState, Platform } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { api } from "./client";
 import { getConnection, subscribeConnection } from "./connection";
+import { ApiError } from "./errors";
 import { invalidate, MONEY_QUERIES, qk, withMode, type ApiKey } from "./keys";
 
 /**
  * Only data older than staleTime is fetched again on focus: coming back to the app, or to a tab.
  * Money moves in the background (checks finish, payouts land), so a screen shouldn't keep
  * showing what it had when it was last opened.
+ *
+ * A failed read is tried once more only when no answer came or the server failed (status 0 or 5xx).
+ * A 4xx answer is the server's decision, so asking again at once can't help; for a 429 (`rate_limited`,
+ * the per-person limit that GET /me counts toward too) it would only make things worse. The data on
+ * screen stays, and the next focus or refresh asks again.
  */
+export function shouldRetry(failureCount: number, error: unknown) {
+  if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false;
+  return failureCount < 1;
+}
+
 export const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 15_000, retry: 1, refetchOnWindowFocus: true },
+    queries: { staleTime: 15_000, retry: shouldRetry, refetchOnWindowFocus: true },
     mutations: { retry: 0 },
   },
 });
@@ -75,8 +86,15 @@ export function useApiQuery<T>(key: ApiKey, queryFn: QueryFunction<T, QueryKey>,
   return useQuery<T, DefaultError, T, QueryKey>({ ...options, queryKey: withMode(mode, key), queryFn, enabled: checked && enabled });
 }
 
+/** How long /me counts as fresh: it's read by most screens and on every focus, and counts toward the per-person rate limit. */
+const ME_STALE_MS = 30_000;
+
+/**
+ * GET /me. A 429 keeps the last answer on screen and is never read as a sign-out (only `signed_out`
+ * is, features/auth). Screens that need it current invalidate it themselves (the MPIN lock, a new phone number).
+ */
 export function useMe() {
-  return useApiQuery(qk.me(), api.me);
+  return useApiQuery(qk.me(), api.me, { staleTime: ME_STALE_MS });
 }
 
 /** The currency to show when nothing more specific is known (the Practice wallet's). */

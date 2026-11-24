@@ -10,7 +10,8 @@ one wallet per server, the first user is the customer, no sign-in. Every existin
 | `FIREBASE_PROJECT_ID` | Set: **firebase mode**. Every API call must send `Authorization: Bearer <Firebase ID token>`. Unset: prototype mode. |
 | `ADMIN_EMAILS` | Comma list. In firebase mode only these signed-in, email-verified people may call `/api/v1/admin/*` and `/api/v1/audit/*`. Prototype mode leaves admin routes open, as before. |
 | `IDENTITY_SECRET` | HMAC key for ID numbers and recovery tokens. **Required** in firebase mode and when `NODE_ENV=production` (calls that need it answer 500 `server_config`); prototype mode and tests fall back to a dev key with a warning. |
-| `TRUST_PROXY_HOPS` | How many trusted proxies append to `x-forwarded-for`. Unset/0: that header is ignored for rate limits (it is client-controlled); `cf-connecting-ip` / `x-real-ip` are used instead. |
+| `TRUST_PROXY_HOPS` | How many trusted proxies stand in front of the server. 1 or more: the rate-limit IP comes from `cf-connecting-ip`, then `x-real-ip`, then the right-most trusted `x-forwarded-for` hop (`clientIp()` in `context.ts`). Unset/0: all of them are ignored, since a client could fake them. |
+| `TRUST_PROXY_HEADER` | Optional: `cf-connecting-ip` or `x-real-ip`, the one header the proxy overwrites. Only that header is then believed (with or without `TRUST_PROXY_HOPS`). |
 | `KYC_ENFORCED` | New sign-ups start with KYC `pending` (firebase mode unless `"false"`, prototype mode only if `"true"`). `"false"` also turns off the money-out ID gate. See `src/lib/kyc/README.md`. |
 
 Switch off: unset `FIREBASE_PROJECT_ID`. Identities stay in the database but are ignored.
@@ -21,12 +22,16 @@ Switch off: unset `FIREBASE_PROJECT_ID`. Identities stay in the database but are
    request's headers. Outside a route it falls back to `await headers()` from `next/headers`.
 2. `session()` (session.ts): prototype → `currentUser()`. Firebase → `verifyIdToken()` (verify.ts, jose against
    Google's securetoken JWKS: RS256, issuer `https://securetoken.google.com/<project>`, audience `<project>`,
-   non-empty `sub`, `auth_time` not in the future) → `identities` row → wallet.
+   non-empty `sub`, `auth_time` not in the future; returns `signedInAt` from `auth_time`, else `iat`) → `identities` row → wallet.
+   With a wallet it then applies the per-person rate limit (firebase mode; a recovery claimant is counted by its own
+   uid) and records the calling device (`touchDevice()` in src/lib/devices, given `signedInAt`), except for recovery
+   access: a claimant never becomes a device of the wallet it claims. Both happen here, so `GET /me` gets them too.
 3. `customer(opts)` (lib/api.ts → `resolveCustomer`) applies the gates:
 
 | Situation | Status | Body |
 |---|---|---|
 | No token or invalid token | 401 | `{ error: "Sign in to continue.", code: "signed_out" }` |
+| A sign-in (`auth_time`) older than the account's last device sign-out, not from a trusted device (src/lib/devices) | 401 | `{ error: "A device was signed out of your account since you signed in here. Sign in again to continue.", code: "signed_out" }` |
 | Signed in, no wallet (or wallet closed, or identity disabled) | 404 | `{ error: "You don't have a wallet yet. Finish setting up first.", code: "no_wallet" }` (prototype keeps its old 401 text, now with `code: "no_wallet"`) |
 | Identity `recovery_pending` on any route that doesn't opt in with `recovery: true`, or any write | 403 | `{ code: "recovery_restricted", error: "Your account is being checked. Money can't move until a person confirms it's you." }` |
 | `kyc: true` and `kyc_status !== "verified"` | 403 | `{ code: "kyc_required", error: "Verify your ID to move money." }` |
@@ -40,7 +45,7 @@ Switch off: unset `FIREBASE_PROJECT_ID`. Identities stay in the database but are
 the account's first name and masked email only, and `/api/v1/recovery/claim` works for any signed-in person. Everything
 else, reads included (export, activity, vault detail, files, insight, assistant, KYC, wallet), answers 403 `recovery_restricted`.
 
-**PATCH /api/v1/me** (firebase mode): changing `pin` needs `currentPin` (400 `current_pin_required`, 403 `pin_mismatch`).
+**PATCH /api/v1/me**: changing `pin` needs `currentPin` in both modes, checked by the MPIN module (`changeMpin()` in `src/lib/mpin`): 401 `mpin_required`, 403 `mpin_wrong` with `triesLeft`, 423 `mpin_locked`, 400 `mpin_weak`. Changing `name` is refused while an ID check holds it (409 `name_in_check`) and after verification (403 `name_locked`); see `assertNameChangeAllowed()` in `src/lib/kyc/service.ts`.
 In any mode the `name` is locked once a real ID check verified it (403 `name_locked`); prototype users verified by the
 simulated check keep editing it, as before.
 
@@ -60,7 +65,7 @@ simulated check keep editing it, as before.
 
 ## Touch points outside this folder (marked `// identity`)
 
-- `src/lib/api.ts`: `handle()` keeps request headers; `customer()` calls `resolveCustomer`; `admin()`; `code` in error JSON.
+- `src/lib/api.ts`: `handle()` keeps request headers; `customer()` calls `resolveCustomer` (the per-person rate limit is in `session()`); `admin()`; `code` in error JSON.
 - `src/lib/users.ts`: `HttpError.code`; `createUser({ kycStatus })`; `User.closed_at`.
 - `src/app/api/v1/me/route.ts`: `auth`, `kyc`, `recovery` in GET.
 - `src/app/api/v1/onboarding/route.ts`: binds the identity, email from the token, KYC pending when enforced.

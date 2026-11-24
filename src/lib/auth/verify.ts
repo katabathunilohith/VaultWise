@@ -15,6 +15,12 @@ export interface VerifiedToken {
   emailVerified: boolean;
   /** Firebase sign-in provider, e.g. "password", "google.com", "phone". */
   provider: string;
+  /**
+   * devices: when this sign-in started (ms): the token's `auth_time` (when the person last typed their
+   * password or otherwise signed in), which stays the same when the app refreshes its ID token.
+   * Falls back to `iat` (when this ID token was issued) if `auth_time` is missing; Firebase always sends it.
+   */
+  signedInAt: number | null;
 }
 
 export class TokenError extends Error {}
@@ -54,10 +60,12 @@ export async function verifyIdToken(token: string): Promise<VerifiedToken> {
   const authTime = payload.auth_time;
   if (typeof authTime === "number" && authTime * 1000 > Date.now() + 5 * 60_000) throw new TokenError("auth_time is in the future");
   const firebase = (payload.firebase ?? {}) as { sign_in_provider?: unknown };
+  const signedInSec = typeof authTime === "number" && Number.isFinite(authTime) ? authTime : typeof payload.iat === "number" ? payload.iat : null;
   return {
     uid: payload.sub,
     email: typeof payload.email === "string" ? payload.email.toLowerCase() : null,
     emailVerified: payload.email_verified === true,
     provider: typeof firebase.sign_in_provider === "string" ? firebase.sign_in_provider : "unknown",
+    signedInAt: signedInSec === null ? null : signedInSec * 1000,
   };
 }

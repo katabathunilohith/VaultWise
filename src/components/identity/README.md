@@ -50,7 +50,7 @@ If someone is signed in but a token can't be had (offline, a refresh blip), the 
 
 New passwords need at least 8 characters, with a letter and a number (the same rule as the mobile app). ID numbers are checked on the device with the server's formats, including the Indian passport format for the India market.
 
-With sign-in on, Settings also: signs this browser out after "Close account"; asks for the current PIN to change it (`{ pin, currentPin }`); and, once the ID is verified, shows the name as read-only and doesn't send it (the server answers `name_locked` to a change). Server messages such as `current_pin_required`, `pin_mismatch` and `name_locked` are shown as they are.
+With sign-in on, Settings also: signs this browser out after "Close account"; asks for the current PIN to change it (`{ pin, currentPin }`); and, once the ID is verified, shows the name as read-only and doesn't send it (the server answers `name_locked` to a change). Server messages such as `mpin_wrong`, `mpin_locked`, `name_in_check` and `name_locked` are shown as they are.
 
 ## Files
 

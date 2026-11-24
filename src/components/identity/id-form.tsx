@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { IdCard, ImageUp } from "lucide-react";
 import { Button, ErrorNote, Field, Input, Select, cx } from "@/components/ui";
+import { askAiConsent } from "@/components/ai-consent"; // ai-consent
 import { DOC_TYPES, checkIdNumber, normalizeIdNumber, type DocType } from "./types";
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -112,7 +113,7 @@ export function IdForm({
   const [err, setErr] = useState<string | null>(null);
   const info = DOC_TYPES[docType];
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
     if (photo === "required" && !file) return setErr("Add a photo of your ID.");
@@ -121,6 +122,8 @@ export function IdForm({
     if (file && file.size > MAX_BYTES) return setErr("That photo is too big. Use one under 10 MB.");
     const bad = checkIdNumber(docType, number, market);
     if (bad) return setErr(bad);
+    // ai-consent: a photo may be read by the AI, so ask first (once). Closing the question sends nothing.
+    if (file && !(await askAiConsent("id"))) return;
     onSubmit({ docType, file, idNumber: normalizeIdNumber(number) });
   };
 

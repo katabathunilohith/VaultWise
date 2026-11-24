@@ -10,6 +10,26 @@ export type KycStatus = "not_started" | "pending" | "needs_review" | "verified" 
 /** India: aadhaar, pan, passport, driving_licence, voter_id. Other markets: passport, national_id. */
 export type IdDocType = "aadhaar" | "pan" | "passport" | "driving_licence" | "voter_id" | "national_id";
 
+/**
+ * How this account verifies (plan 07): "photo" (a photo of an ID, the default) or "steps" (PAN,
+ * then Aadhaar through DigiLocker, then a bank account by reverse penny drop; India accounts only).
+ */
+export type KycFlow = "photo" | "steps";
+
+/** The three onboarding checks, in the order they are done. */
+export type KycStepName = "pan" | "aadhaar" | "bank";
+
+/** todo: not done yet. review: a person will check it (a name didn't match). failed: try it again. */
+export type KycStepStatus = "todo" | "done" | "review" | "failed";
+
+export interface KycStep {
+  status: KycStepStatus;
+  /** PAN: its last 4 characters. Aadhaar and bank account: their last 4 digits. Never more. */
+  last4: string | null;
+}
+
+export type KycSteps = Record<KycStepName, KycStep>;
+
 /** GET/POST /api/v1/kyc. */
 export interface KycView {
   status: KycStatus;
@@ -19,6 +39,25 @@ export interface KycView {
   /** Plain-words reasons for needs_review or rejected. */
   reasons: string[];
   updatedAt: Millis | null;
+  /** "photo" when the server doesn't say (servers from before plan 07). */
+  flow: KycFlow;
+  /** Where each step is, in the "steps" flow; null in the "photo" flow. */
+  steps: KycSteps | null;
+}
+
+/** POST /api/v1/kyc/digilocker/start: the provider's DigiLocker page to open, and the try it belongs to. */
+export interface DigiLockerStart {
+  url: string;
+  requestId: string;
+}
+
+/** POST /api/v1/kyc/bank/start: a ₹1 UPI payment from the account to check (refunded). */
+export interface BankCheckStart {
+  /** A `upi://pay` link. */
+  upiLink: string;
+  requestId: string;
+  /** When the link stops working; null from servers that don't say. */
+  expiresAt: Millis | null;
 }
 
 /** An ID to check: the photo, and the number if the person typed it (it helps when the photo is hard to read). */

@@ -3,7 +3,8 @@ import { body, customer, handle, json } from "@/lib/api";
 import { run } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { riskProfile } from "@/lib/invest/core";
-import { BANDS, modelPortfolio, QUESTIONS, scoreAnswers } from "@/lib/invest/profile";
+import { BANDS, missingAnswers, modelPortfolio, QUESTIONS, scoreAnswers } from "@/lib/invest/profile";
+import { HttpError } from "@/lib/users";
 
 export const GET = handle(async () => {
   const user = await customer({ tick: false, access: "read" });
@@ -14,6 +15,8 @@ export const GET = handle(async () => {
 export const POST = handle(async (req: Request) => {
   const user = await customer({ tick: false });
   const b = await body(req, z.object({ answers: z.record(z.string(), z.number().int().min(0).max(3)) }));
+  const missing = missingAnswers(b.answers);
+  if (missing.length) throw new HttpError(400, `Answer every question first (${missing.length} left)`, "missing_answer");
   const scored = scoreAnswers(b.answers);
   const profile = { ...scored, completedAt: Date.now() };
   run("UPDATE users SET risk_profile = ? WHERE id = ?", JSON.stringify(profile), user.id);

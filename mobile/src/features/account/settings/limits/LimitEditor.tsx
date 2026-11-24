@@ -4,8 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { CheckCircleIcon } from "@/components/icons";
 import { Amount, AmountKeypad, Banner, Button, PracticeBadge, Stack, Txt } from "@/components/ui";
+import { MpinPanel } from "@/features/mpin"; // mpin
 import { api } from "@/lib/api/client";
-import { errorMessage } from "@/lib/api/errors";
+import { errorMessage, mayHaveGoneThrough } from "@/lib/api/errors";
 import { invalidate } from "@/lib/api/keys";
 import type { LimitKey, LimitsOverview } from "@/lib/api/types";
 import { haptic } from "@/lib/haptics";
@@ -15,7 +16,8 @@ import { HandPalmIcon } from "../../icons";
 import { StepScreen } from "../../layout";
 import { limitMeta, shortDate, type EditMode } from "./limitMeta";
 
-type Step = "check" | "amount" | "done";
+/** mpin: a raise ends with the MPIN, on a step of its own (this editor is a React Native Modal, so no sheet route). */
+type Step = "check" | "amount" | "mpin" | "done";
 
 /**
  * Change one limit, in a full-screen modal. A raise starts with the scam check (before the form),
@@ -37,6 +39,8 @@ export function LimitEditor({
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
+  /** The change got no answer and may have saved: it isn't sent again from here (the limits are read again). */
+  const [unconfirmed, setUnconfirmed] = useState(false);
   const [saved, setSaved] = useState<LimitsOverview | null>(null);
 
   const meta = limitMeta(limitKey);
@@ -59,26 +63,57 @@ export function LimitEditor({
     router.push("/support");
   };
 
+  /** Saved: show the new limit. The emergency overview shows the monthly emergency limit, so it's re-read too. */
+  const applied = async (overview: LimitsOverview) => {
+    setSaved(overview);
+    await invalidate(qc, "limits", "emergency");
+    setStep("done");
+  };
+
+  /** A failed save. No answer means it may have saved: re-read the limits and offer only a look, never a resend. */
+  const failed = (e: unknown) => {
+    haptic("error");
+    setFailure(e);
+    if (mayHaveGoneThrough(e)) {
+      setUnconfirmed(true);
+      void invalidate(qc, "limits", "emergency");
+    }
+  };
+
   const save = async () => {
-    if (amount === null || problem) return;
-    setSaving(true);
+    if (amount === null || problem || unconfirmed) return;
     setFailure(null);
+    // mpin: raising a limit needs the MPIN; lowering one applies straight away.
+    if (mode === "raise") return setStep("mpin");
+    setSaving(true);
     try {
       const res = await api.setLimits({ [limitKey]: amount / 100 });
-      setSaved(res.overview);
-      // The emergency overview shows the monthly emergency limit, so it's re-read too.
-      await invalidate(qc, "limits", "emergency");
-      setStep("done");
+      await applied(res.overview);
     } catch (e) {
-      haptic("error");
-      setFailure(e);
+      failed(e);
     } finally {
       setSaving(false);
     }
   };
 
   let body;
-  if (step === "check") {
+  if (step === "mpin" && amount !== null) {
+    body = (
+      <StepScreen back={saving ? undefined : () => setStep("amount")} scroll={false}>
+        <MpinPanel
+          reason={`Raise your ${meta.noun} to ${moneyWhole(amount, cur)}`}
+          run={(pin) => api.setLimits({ [limitKey]: amount / 100 }, pin)}
+          onDone={(_pin, res) => void applied((res as { overview: LimitsOverview }).overview)}
+          onError={(e) => {
+            failed(e);
+            setStep("amount");
+          }}
+          onBusy={setSaving}
+          padLift={48}
+        />
+      </StepScreen>
+    );
+  } else if (step === "check") {
     body = (
       <StepScreen
         close={onClose}
@@ -111,19 +146,23 @@ export function LimitEditor({
         close={mode === "raise" ? undefined : onClose}
         scroll={false}
         footer={
-          <Button
-            label={
-              amount !== null && !problem
-                ? `${mode === "raise" ? "Raise" : "Lower"} to ${moneyWhole(amount, cur)}`
-                : mode === "raise"
-                  ? "Raise limit"
-                  : "Lower limit"
-            }
-            disabled={amount === null || !!problem}
-            loading={saving}
-            armOnMount
-            onPress={() => void save()}
-          />
+          unconfirmed ? (
+            <Button key="check" label="Check your limits" armOnMount onPress={onClose} />
+          ) : (
+            <Button
+              label={
+                amount !== null && !problem
+                  ? `${mode === "raise" ? "Raise" : "Lower"} to ${moneyWhole(amount, cur)}`
+                  : mode === "raise"
+                    ? "Raise limit"
+                    : "Lower limit"
+              }
+              disabled={amount === null || !!problem}
+              loading={saving}
+              armOnMount
+              onPress={() => void save()}
+            />
+          )
         }
       >
         <Stack gap={space.xs}>
@@ -145,7 +184,15 @@ export function LimitEditor({
               : (problem ?? (mode === "raise" ? "You can raise a limit once a month." : "You can lower it again any time."))}
           </Txt>
         </View>
-        {failure ? <Banner tone="danger" title="That didn't save" body={`${errorMessage(failure)} Nothing changed.`} /> : null}
+        {unconfirmed ? (
+          <Banner
+            tone="warning"
+            title="We couldn't confirm the change"
+            body="Vaultwise didn't answer in time, so it may have saved. Check your limits before you try again."
+          />
+        ) : failure ? (
+          <Banner tone="danger" title="That didn't save" body={`${errorMessage(failure)} Nothing changed.`} />
+        ) : null}
         <View style={styles.spacer} />
         <AmountKeypad value={value} onChange={setValue} maxDecimals={0} />
       </StepScreen>

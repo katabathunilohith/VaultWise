@@ -8,6 +8,7 @@ import { assertWalletEnabled, walletEnabled, WalletError } from "./config";
 import { limitState, RAISE_WINDOW_MS, spentOn } from "./plan";
 import { timeZoneFor } from "../timezones";
 import { ensureWalletTables, recordPayment, saveWalletSettings, walletSettings, type AutoSaveSource, type WalletSettings } from "./store";
+import { alertLimitLoosened, alertMoneyOut } from "../alerts"; // alerts
 
 /**
  * Money in and out of the wallet. Every move is one ledger journal plus one audit entry, in one
@@ -170,6 +171,7 @@ export function spend(user: User, input: { amount: number; payee: string; note?:
       details: { amount: input.amount, payee, note },
       ts,
     });
+    alertMoneyOut(user, input.amount, `paid to ${payee} from your wallet`); // alerts
     return journalId;
   });
 }
@@ -197,6 +199,7 @@ export function cashOut(user: User, amount: number, opts: { ts?: number } = {}) 
       actorType: "user",
     });
     audit({ userId: user.id, actor: user.id, actorType: "user", action: "wallet.cashed_out", entityType: "journal", entityId: journalId, details: { amount, to: "bank" }, ts });
+    alertMoneyOut(user, amount, "moved from your wallet to your bank"); // alerts
     return journalId;
   });
 }
@@ -252,6 +255,7 @@ export function updateWalletSettings(
       },
       ts: now,
     });
+    if (raised) alertLimitLoosened(user.id, after.dailyLimit === null ? "You turned off your wallet's daily limit." : "You raised your wallet's daily limit."); // alerts
   });
   return after;
 }

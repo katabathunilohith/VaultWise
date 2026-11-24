@@ -8,6 +8,7 @@ import { billWord, covers, rulesCategory } from "../../categories";
 import { ApiError } from "../errors";
 import { DEMO_SAMPLES } from "../samples";
 import type { EmergencyHistoryItem, ProofView, Stage, StageStatus, UploadFile, Vault, VaultDetail, WithdrawalRow } from "../types";
+import { registerPracticeSlice } from "./persist";
 import { clone, currency, newId, recompute, record, S } from "./state";
 
 type Outcome = "approved" | "purpose" | "edited" | "review";
@@ -169,6 +170,17 @@ export function resetProofs() {
   proofs.clear();
   seedSnapshotProofs();
 }
+
+registerPracticeSlice<DemoProof[]>({
+  key: "proofs",
+  save: () => [...proofs.values()],
+  load: (saved) => {
+    if (!Array.isArray(saved)) throw new Error("Not a list of proofs");
+    proofs.clear();
+    for (const p of saved) proofs.set(p.id, p);
+  },
+  reset: resetProofs,
+});
 
 /** Settles every proof whose checks are done (the server runs them in the background). */
 export function settleProofs() {

@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Platform, StyleSheet, View } from "react-native";
 import { WalletIcon } from "@/components/icons";
 import { Amount, Banner, Button, Card, Chip, Divider, HoldToConfirm, ModalScreen, PracticeBadge, TextField, Txt, useHardwareBack } from "@/components/ui";
 import { KeypadFooter, TypedAmount } from "@/features/vaults/fields";
+import { withMpin } from "@/features/mpin"; // mpin
 import { api } from "@/lib/api/client";
 import { useInvalidateMoney } from "@/lib/api/hooks";
 import { WALLET_NOTE_MAX, WALLET_PAYEE_MAX, type Wallet } from "@/lib/api/wallet-types";
@@ -52,10 +53,12 @@ export function SpendFlow({ wallet }: { wallet: Wallet }) {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await api.walletSpend(minor / 100, name, note.trim() || null);
+      // mpin: the MPIN sheet stays up while the payment is checked; closing it sends nothing.
+      const res = await withMpin(`Pay ${amountText(minor, cur)} to ${name}`, (pin) => api.walletSpend(minor / 100, name, note.trim() || null, pin));
+      if (!res) return;
       // The money has gone: the commit haptic plays now, never a celebration.
       haptic("irreversible.commit");
-      setAfter(res?.wallet?.balance ?? wallet.balance - minor);
+      setAfter(res.wallet?.balance ?? wallet.balance - minor);
       setStep("done");
       void invalidate();
     } catch (e) {

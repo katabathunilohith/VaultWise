@@ -5,6 +5,7 @@
  */
 
 import type { MeAuth, MeKyc, MeRecovery } from "./identity-types"; // identity
+import type { MeDevice, MePhone } from "./security-types"; // devices
 
 export type Minor = number;
 export type Millis = number;
@@ -78,6 +79,27 @@ export interface MeOnboarded {
   auth?: MeAuth;
   kyc?: MeKyc;
   recovery?: MeRecovery | null;
+  /** mpin: the MPIN's state (optional: older servers and fixtures leave it out). */
+  mpin?: MeMpin;
+  /** devices: the verified phone number (masked) and whether the phone asking is trusted (plan 06; optional for older servers). */
+  phone?: MePhone;
+  device?: MeDevice;
+}
+
+/** mpin: what /me says about the MPIN (docs/plans/contracts.md, MPIN). */
+export interface MeMpin {
+  /** The server still has an older 4-digit PIN: the phone asks for a 6-digit MPIN at the next money move. */
+  upgradeDue: boolean;
+  /** While money moves are locked after wrong tries: when they unlock (ms since epoch). */
+  lockedUntil: Millis | null;
+  /** Practice only: true while the simulator still uses the Practice MPIN, so screens can show it. */
+  practiceDefault?: boolean;
+  /**
+   * mpin: true when the server refuses a wrong MPIN on money moves (MPIN_ENFORCED on), so a move it
+   * accepted proves the MPIN typed for it. Not sent by the server yet (asked for); until it is, the
+   * phone never copies an MPIN from a money move into its unlock PIN (features/mpin/sync.ts).
+   */
+  enforced?: boolean;
 }
 
 export interface MeNew {
@@ -460,6 +482,7 @@ export interface EmergencyInput {
   reasonCode: string;
   note?: string;
   attest: boolean;
+  /** mpin: every tier needs the MPIN. */
   pin?: string;
 }
 

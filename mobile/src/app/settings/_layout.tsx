@@ -7,6 +7,10 @@ export default function Layout() {
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
       <Stack.Screen name="security" options={{ presentation: "fullScreenModal", gestureEnabled: false }} />
+      {/* devices: flows with a code or the MPIN are full-screen modals too */}
+      <Stack.Screen name="trust-device" options={{ presentation: "fullScreenModal", gestureEnabled: false }} />
+      <Stack.Screen name="reset-mpin" options={{ presentation: "fullScreenModal", gestureEnabled: false }} />
+      <Stack.Screen name="verify-phone" options={{ presentation: "fullScreenModal", gestureEnabled: false }} />
     </Stack>
   );
 }

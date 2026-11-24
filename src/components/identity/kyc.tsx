@@ -7,6 +7,7 @@ import { timeAgo } from "@/lib/shared";
 import { useMe } from "@/components/shell";
 import { Badge, Card, CardTitle, ErrorNote, KV, LinkButton, Notice, PageHeader, Skeleton, useToast, type Tone } from "@/components/ui";
 import { IdForm, idFormData, type IdSubmission } from "./id-form";
+import { KycStepsCard, readKycSteps, STEPS_KEEPS } from "./kyc-steps"; // kyc-checks
 import { docLabel, docTypesFor, endingIn, kycStatusOf, readKyc, type KycStatus, type KycView } from "./types";
 
 const KYC_URL = "/api/v1/kyc";
@@ -53,8 +54,18 @@ function StatusIcon({ status }: { status: KycStatus }) {
   return <IdCard className={`${cls} text-muted`} aria-hidden />;
 }
 
-function StatusCard({ view }: { view: KycView }) {
-  const c = KYC_COPY[view.status];
+/** kyc-checks: the steps flow (PAN, DigiLocker, bank) words a few statuses differently; the rest are shared. */
+const STEPS_COPY: Partial<Record<KycStatus, { title: string; body: string }>> = {
+  not_started: { title: "You're not verified yet", body: "Check your PAN, Aadhaar and bank account. Once they're verified you can move money." },
+  needs_review: {
+    title: "A person is checking your details",
+    body: "One of the names didn't match your account, so a person will look at it. We'll update this page when they're done.",
+  },
+  rejected: { title: "We couldn't verify you", body: "Read why below, then do the steps again." },
+};
+
+function StatusCard({ view, steps }: { view: KycView; steps?: boolean }) {
+  const c = { ...KYC_COPY[view.status], ...(steps ? STEPS_COPY[view.status] : {}) };
   return (
     <Card>
       <div className="flex items-start gap-3">
@@ -87,12 +98,16 @@ function StatusCard({ view }: { view: KycView }) {
   );
 }
 
-function Keeps() {
-  const rows: { icon: ReactNode; text: string }[] = [
-    { icon: <Lock className="size-4" />, text: "We never store your full ID number. We keep the last 4 digits so we can match it later." },
-    { icon: <IdCard className="size-4" />, text: "We keep the photo so a person can look at it if our automatic check isn't sure." },
-    { icon: <ScanSearch className="size-4" />, text: "We check the name on the ID matches the name on your account." },
-  ];
+function Keeps({ steps }: { steps?: boolean }) {
+  const texts = steps
+    ? STEPS_KEEPS
+    : [
+        "We never store your full ID number. We keep the last 4 digits so we can match it later.",
+        "We keep the photo so a person can look at it if our automatic check isn't sure.",
+        "We check the name on the ID matches the name on your account.",
+      ];
+  const icons = [<Lock key="l" className="size-4" />, <IdCard key="i" className="size-4" />, <ScanSearch key="s" className="size-4" />];
+  const rows: { icon: ReactNode; text: string }[] = texts.map((text, i) => ({ icon: icons[i], text }));
   return (
     <Card>
       <CardTitle>What we keep</CardTitle>
@@ -115,6 +130,7 @@ export function KycPage() {
   const fromMe: KycView = { status: kycStatusOf(me), docType: me.kyc?.docType ?? null, idLast4: me.kyc?.idLast4 ?? null, reasons: [], updatedAt: null };
   const { data, error, reload } = useApi<unknown>(KYC_URL);
   const view = readKyc(data) ?? fromMe;
+  const steps = readKycSteps(data); // kyc-checks: null in the photo flow
   const waiting = view.status === "pending" || view.status === "needs_review";
 
   // While a check is running, look again every 15 seconds.
@@ -151,6 +167,13 @@ export function KycPage() {
   // While a check runs the server refuses another one (409 kyc_in_review), so the form only shows before and after.
   const canSend = !recovering && (view.status === "not_started" || view.status === "rejected");
 
+  // kyc-checks: after any step, reload this page's view, /me and anything else on screen.
+  const stepChanged = async () => {
+    await reload();
+    me.reload();
+    refreshAll();
+  };
+
   if (!data && !error)
     return (
       <div>
@@ -175,14 +198,16 @@ export function KycPage() {
       />
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1fr]">
         <div className="space-y-5">
-          <StatusCard view={view} />
-          <Keeps />
+          <StatusCard view={view} steps={!!steps} />
+          <Keeps steps={!!steps} />
         </div>
         <div>
           {recovering ? (
             <Notice tone="warn" title="Your account is being checked">
               You can&apos;t change your ID until a person confirms it&apos;s you.
             </Notice>
+          ) : steps && view.status !== "verified" ? (
+            <KycStepsCard steps={steps} locked={waiting} onChanged={stepChanged} />
           ) : canSend ? (
             <Card>
               <CardTitle sub="Use an ID with your photo and your name as it is on your account.">

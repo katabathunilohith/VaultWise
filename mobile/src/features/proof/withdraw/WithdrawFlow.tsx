@@ -61,6 +61,7 @@ export function WithdrawFlow({ vaultParam, withdrawalParam }: { vaultParam: stri
     lastDecline,
     submitting,
     error: submitError,
+    unconfirmed,
     clearError: clearSubmitError,
     submit,
     tryAnother,
@@ -300,7 +301,9 @@ export function WithdrawFlow({ vaultParam, withdrawalParam }: { vaultParam: stri
           maxDocAgeDays={rules.maxDocAgeDays}
           submitting={busy}
           error={submitError}
-          onUse={() => void submit({ vaultId: vault.id, amount, payee, note, file: doc.file })}
+          unconfirmed={unconfirmed}
+          onCheck={finish}
+          onUse={() => void submit({ vaultId: vault.id, amount, payee, note, file: doc.file, currency: vault.currency })}
           onSecondary={doc.source === "library" ? () => void choosePhoto() : back}
         />
       );

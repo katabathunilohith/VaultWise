@@ -2,11 +2,14 @@ import { useCallback, useState } from "react";
 import { router } from "expo-router";
 import { resumeTarget, withdrawalStatus } from "@/features/vaults/withdrawal-status";
 import { api } from "@/lib/api/client";
-import { errorMessage } from "@/lib/api/errors";
+import { errorMessage, mayHaveGoneThrough } from "@/lib/api/errors";
 import { useInvalidateMoney } from "@/lib/api/hooks";
 import type { UploadFile, WithdrawalRow } from "@/lib/api/types";
 import { haptic } from "@/lib/haptics";
 import { ensureAiAnswer } from "@/features/ai-consent"; // ai-consent
+import { withMpin } from "@/features/mpin"; // mpin
+import { UNCONFIRMED_TEXT } from "./ReviewStep";
+import { money } from "@/lib/money";
 
 /** The withdrawal this flow is attached to (created here, or resumed from the vault). */
 interface Attached {
@@ -27,6 +30,8 @@ export interface WithdrawalRequest {
   payee: string;
   note: string;
   file: UploadFile;
+  /** For the MPIN prompt's line ("Withdraw ₹1,200 for City Clinic"). */
+  currency?: string;
 }
 
 /**
@@ -41,6 +46,8 @@ export function useWithdrawalSubmission({ onSent }: { onSent: () => void }) {
   const [lastDecline, setLastDecline] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The request (the money move) got no answer: it may exist, so it's never sent again from here. */
+  const [unconfirmed, setUnconfirmed] = useState(false);
 
   /** Cancels the orphan, if any, then refreshes the money screens. */
   const release = useCallback(
@@ -89,15 +96,23 @@ export function useWithdrawalSubmission({ onSent }: { onSent: () => void }) {
   /** Sends the bill, creating the request first if none is attached. Calls onSent once it's in. */
   const submit = useCallback(
     async (req: WithdrawalRequest) => {
-      if (submitting) return;
+      if (submitting || unconfirmed) return;
       // ai-consent: ask once whether an AI may read the bill; closing the question sends nothing.
       if (!(await ensureAiAnswer())) return;
       setSubmitting(true);
       setError(null);
+      /** Sending the request itself (not the bill), so a lost answer there means it may exist. */
+      let creating = false;
       try {
         let wid = attached?.id ?? null;
         if (!wid) {
-          const w = await api.withdraw(req.vaultId, req.amount / 100, req.payee.trim(), req.note.trim() || undefined);
+          creating = true;
+          // mpin: the request is the money move, so the MPIN goes with it (the sheet stays up while it's checked).
+          const payee = req.payee.trim();
+          const what = req.currency ? `Withdraw ${money(req.amount, req.currency)} for ${payee}` : `Withdraw for ${payee}`;
+          const w = await withMpin(what, (pin) => api.withdraw(req.vaultId, req.amount / 100, payee, req.note.trim() || undefined, pin));
+          if (!w) return; // closed the MPIN prompt: nothing was sent
+          creating = false;
           wid = w.id;
           setAttached({ id: w.id, createdHere: true, hasProof: false });
         }
@@ -108,12 +123,17 @@ export function useWithdrawalSubmission({ onSent }: { onSent: () => void }) {
         onSent();
       } catch (e) {
         haptic("error");
-        setError(errorMessage(e));
+        if (creating && mayHaveGoneThrough(e)) {
+          // It may have been made: re-read the vault (its withdrawals show it) instead of offering to send it again.
+          setUnconfirmed(true);
+          void invalidate();
+          setError(UNCONFIRMED_TEXT);
+        } else setError(errorMessage(e));
       } finally {
         setSubmitting(false);
       }
     },
-    [attached, submitting, onSent],
+    [attached, submitting, unconfirmed, onSent, invalidate],
   );
 
   /**
@@ -132,5 +152,5 @@ export function useWithdrawalSubmission({ onSent }: { onSent: () => void }) {
   /** A verdict came in (money paid out or released): refresh the money screens. */
   const refresh = useCallback(() => void invalidate(), [invalidate]);
 
-  return { proofId, lastDecline, submitting, error, clearError, submit, tryAnother, resume, dropOrphan, finish, refresh };
+  return { proofId, lastDecline, submitting, error, unconfirmed, clearError, submit, tryAnother, resume, dropOrphan, finish, refresh };
 }

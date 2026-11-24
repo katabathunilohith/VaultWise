@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { get, run } from "@/lib/db";
 import { executeEmergency, planEmergency, settleEmergencies } from "@/lib/emergency";
+import { emergencyRiskScore } from "@/lib/fraud";
 import { balanceOf, transfer, userAccount, worldAccount } from "@/lib/ledger";
 import { createUser, type User } from "@/lib/users";
 import { createVault, deposit, getVaultRow, heldFor } from "@/lib/vaults";
@@ -21,12 +22,18 @@ deposit(fresh(), health, 500_00);
 deposit(fresh(), rainy, 1_000_00);
 
 describe("emergency cascade", () => {
-  it("covers small requests from the Health vault alone (Tier 1, no PIN)", () => {
+  it("covers small requests from the Health vault alone (Tier 1)", () => {
     const p = planEmergency(fresh(), 300_00);
     expect(p.tier1).toBe(300_00);
     expect(p.tier2).toBe(0);
-    expect(p.needsPin).toBe(false);
+    expect(p.needsPin).toBe(true); // mpin: every tier needs the MPIN while MPIN_ENFORCED is on
     expect(p.blocked).toBe(false);
+    process.env.MPIN_ENFORCED = "false";
+    try {
+      expect(planEmergency(fresh(), 300_00).needsPin).toBe(false); // the old rule: Tier 1 needs no PIN
+    } finally {
+      delete process.env.MPIN_ENFORCED;
+    }
   });
 
   it("cascades the remainder to other vaults only once Health is exhausted", () => {
@@ -69,5 +76,26 @@ describe("emergency cascade", () => {
     }
     const p = planEmergency(fresh(), 10_00);
     expect(p.checks.find((c) => c.key === "velocity")?.status).toBe("block");
+  });
+});
+
+describe("risk score and overdue receipts", () => {
+  it("still counts a receipt after the scheduler marks it overdue", () => {
+    const u = createUser({ name: "Ola Bright", jurisdiction: "US", pin: "1357" });
+    const me = () => get<User>("SELECT * FROM users WHERE id = ?", u.id)!;
+    const now = Date.now();
+    run(
+      `INSERT INTO emergency_requests (id, user_id, amount, reason_code, tier, plan, guardrails, status, receipt_status, receipt_due_at, created_at)
+       VALUES ('em_overdue_test', ?, 100, 'medical', 1, '[]', '[]', 'released', 'requested', ?, ?)`,
+      u.id,
+      now - 60_000,
+      now - 86_400_000,
+    );
+    const receipts = () => emergencyRiskScore(u.id, 100_00, now).features.find((f) => f.name === "Overdue or rejected receipts")!;
+    expect(receipts()).toMatchObject({ value: 1, points: 15 });
+    settleEmergencies(me(), now);
+    expect(get<{ receipt_status: string }>("SELECT receipt_status FROM emergency_requests WHERE id = 'em_overdue_test'")?.receipt_status).toBe("overdue");
+    // Before the fix an overdue receipt scored 0 points.
+    expect(receipts()).toMatchObject({ value: 1, points: 15 });
   });
 });

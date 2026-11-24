@@ -11,16 +11,22 @@ import { IdentitySettingsCard } from "@/components/identity/settings"; // identi
 import { AuthedDownloadLink } from "@/components/identity/media"; // identity
 import { signOutNow } from "@/components/identity/session"; // identity
 import { kycStatusOf } from "@/components/identity/types"; // identity
-import { Badge, Button, Card, CardTitle, ErrorNote, Field, Input, KV, PageHeader, Select, useToast } from "@/components/ui";
+import { Badge, Button, Card, CardTitle, ErrorNote, Field, Input, KV, Notice, PageHeader, Select, useToast } from "@/components/ui";
+import { moneyErrorText, MpinField, mpinReady } from "@/components/mpin"; // mpin
+import { DevicesAlertsCard } from "@/components/devices-alerts"; // devices
+import { AiConsentSwitch } from "@/components/ai-consent"; // ai-consent
 
 export default function SettingsPage() {
-  const { user, rules, aiEnabled, reload, auth, kyc } = useMe();
+  const { user, rules, aiEnabled, reload, auth, kyc, mpin } = useMe();
   // identity: with sign-in on, Reset closes this account instead of wiping the demo database.
   const closes = auth?.mode === "firebase";
-  // identity: with sign-in on, changing the PIN needs the current one, and a verified ID locks the name.
-  const needsCurrentPin = auth?.mode === "firebase";
+  // identity: with sign-in on, a verified ID locks the name.
   const nameLocked = auth?.mode === "firebase" && kycStatusOf({ kyc, user }) === "verified";
-  const [currentPin, setCurrentPin] = useState(""); // identity
+  // mpin: changing the MPIN always needs the current one; closing an account needs it too.
+  const [currentPin, setCurrentPin] = useState("");
+  const [pinErr, setPinErr] = useState<string | null>(null);
+  const [closePin, setClosePin] = useState("");
+  const [closeErr, setCloseErr] = useState<string | null>(null);
   const toast = useToast();
   const router = useRouter();
   const [name, setName] = useState(user.name);
@@ -42,6 +48,23 @@ export default function SettingsPage() {
     } catch (e) {
       setErr((e as Error).message);
       return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // mpin: POST /api/v1/mpin checks the current MPIN (wrong tries count toward the lock) and the new one's strength.
+  const changeMpin = async () => {
+    setBusy("pin");
+    setPinErr(null);
+    try {
+      await api.post("/api/v1/mpin", { currentPin, newPin: pin });
+      toast({ tone: "good", text: "MPIN updated." });
+      setPin("");
+      setCurrentPin("");
+      reload();
+    } catch (e) {
+      setPinErr(moneyErrorText(e, () => setCurrentPin("")));
     } finally {
       setBusy(null);
     }
@@ -82,26 +105,31 @@ export default function SettingsPage() {
         </Card>
 
         <Card>
-          <CardTitle sub="Required for Tier 2 emergency access">
+          <CardTitle sub="Needed for every money move">
             <span className="inline-flex items-center gap-2">
-              <KeyRound className="size-4" /> Security PIN
+              <KeyRound className="size-4" /> MPIN
             </span>
           </CardTitle>
+          {/* mpin: accounts opened before MPINs keep their old PIN until they choose a 6-digit one */}
+          {mpin?.upgradeDue && (
+            <div className="mb-4">
+              <Notice tone="warn" title="Choose a 6-digit MPIN">
+                Your current PIN still works. A 6-digit MPIN is much harder to guess.
+              </Notice>
+            </div>
+          )}
           <div className="flex flex-wrap items-end gap-3">
-            {/* identity: with sign-in on, the server asks for the current PIN too */}
-            {needsCurrentPin && (
-              <Field label="Current PIN">
-                <Input
-                  type="password"
-                  inputMode="numeric"
-                  value={currentPin}
-                  onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
-                  maxLength={6}
-                  autoComplete="current-password"
-                />
-              </Field>
-            )}
-            <Field label="New PIN (4–6 digits)">
+            <Field label="Current MPIN">
+              <Input
+                type="password"
+                inputMode="numeric"
+                value={currentPin}
+                onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
+                maxLength={6}
+                autoComplete="current-password"
+              />
+            </Field>
+            <Field label="New MPIN (6 digits)">
               <Input
                 type="password"
                 inputMode="numeric"
@@ -111,25 +139,25 @@ export default function SettingsPage() {
                 autoComplete="new-password"
               />
             </Field>
-            <Button
-              disabled={pin.length < 4 || (needsCurrentPin && currentPin.length < 4)}
-              loading={busy === "pin"}
-              onClick={async () => {
-                const ok = await save("pin", needsCurrentPin ? { pin, currentPin } : { pin }, "PIN updated."); // identity
-                if (ok || !needsCurrentPin) setPin("");
-                if (ok) setCurrentPin(""); // identity
-              }}
-            >
+            <Button disabled={pin.length !== 6 || !mpinReady(currentPin)} loading={busy === "pin"} onClick={changeMpin}>
               Update
             </Button>
           </div>
+          {pinErr && (
+            <div className="mt-3">
+              <ErrorNote>{pinErr}</ErrorNote>
+            </div>
+          )}
           <p className="mt-4 text-xs text-muted">
-            PINs are stored as salted scrypt hashes. Biometric step-up and device attestation would replace this on mobile.
+            MPINs are stored as salted scrypt hashes. Five wrong tries lock money moves for a minute, and each further five for longer.
           </p>
         </Card>
 
         {/* identity: sign out and the ID check */}
         <IdentitySettingsCard className="lg:col-span-2" />
+
+        {/* devices: verified phone number (texted code), signed-in phones with sign-out, recent alerts */}
+        <DevicesAlertsCard className="lg:col-span-2" />
 
         <div className="lg:col-span-2">
           <LimitsCard />
@@ -219,6 +247,11 @@ export default function SettingsPage() {
                 Export
               </AuthedDownloadLink>
             </div>
+            {/* ai-consent: whether bills, IDs and assistant questions may go to the AI (no = a person reads them) */}
+            <div className="rounded-xl border border-line p-3">
+              <div className="mb-1 text-sm font-medium">AI reading</div>
+              <AiConsentSwitch reason="bill" />
+            </div>
           </div>
         </Card>
 
@@ -237,16 +270,35 @@ export default function SettingsPage() {
                 ? "Closes your account and signs this login out of it. Records are kept as the law requires."
                 : "Deletes the local database and uploaded proofs, then returns to onboarding."}
             </p>
+            {/* mpin: closing an account needs the MPIN */}
+            {closes && (
+              <div className="mt-3">
+                <MpinField value={closePin} onChange={setClosePin} hint="Closing your account needs your MPIN." />
+              </div>
+            )}
+            {closeErr && (
+              <div className="mt-3">
+                <ErrorNote>{closeErr}</ErrorNote>
+              </div>
+            )}
             <Button
               variant="danger"
               size="sm"
               className="mt-3"
               icon={<RotateCcw className="size-3.5" />}
               loading={busy === "reset"}
+              disabled={closes && !mpinReady(closePin)}
               onClick={async () => {
                 if (!confirm(closes ? "Close your account? This can't be undone." : "Delete all local data and start over?")) return;
                 setBusy("reset");
-                await api.post("/api/v1/reset");
+                setCloseErr(null);
+                try {
+                  await api.post("/api/v1/reset", closes ? { pin: closePin } : undefined);
+                } catch (e) {
+                  setCloseErr(moneyErrorText(e, () => setClosePin(""))); // mpin
+                  setBusy(null);
+                  return;
+                }
                 if (closes) await signOutNow(); // identity: a closed account's login is signed out here too
                 clearApiCache();
                 router.push("/");

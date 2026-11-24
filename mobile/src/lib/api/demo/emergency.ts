@@ -5,12 +5,15 @@
 import { assertPracticeCanMove } from "./identity"; // identity
 import { emergencyTier } from "../../categories";
 import { ApiError } from "../errors";
-import { PRACTICE_PIN } from "../practice";
 import type { EmergencyHistoryItem, EmergencyInput, EmergencyOverview, EmergencyPlanItem, EmergencyPreview, EmergencyResult, Guardrail, UploadFile, Vault } from "../types";
 import { EMERGENCY_REASONS } from "../types";
+import { requirePracticeMpin } from "./mpin"; // mpin
+import { practiceAlert } from "./alerts"; // alerts
+import { money } from "../../money"; // alerts
+import { assertPracticeDeviceCap } from "./devices"; // devices
 import { submitReceiptProof } from "./proofs";
 import { settleDue } from "./settle";
-import { applyEmergencyCap, clone, DAY, findVault, newId, recompute, record, S, toMinor, wait } from "./state";
+import { applyEmergencyCap, clone, currency, DAY, findVault, newId, recompute, record, S, toMinor, wait } from "./state"; // alerts: currency
 
 const tierVaults = (tier: 1 | 2) => S.vaults.filter((v) => emergencyTier(v.category) === tier);
 
@@ -103,11 +106,13 @@ export const emergencyApi = {
   emergencyWithdraw: async (input: EmergencyInput): Promise<EmergencyResult> => {
     assertPracticeCanMove(); // identity: read-only while a Practice recovery request waits
     await wait(700);
+    assertPracticeDeviceCap(toMinor(input.amount)); // devices: the amount asked for, before the MPIN (as on the server)
+    // mpin: every tier needs the MPIN, checked before anything moves (as on the server).
+    requirePracticeMpin(input.pin);
     const p = plan(toMinor(input.amount));
     if (p.blocked) return { id: newId("emg"), status: "blocked", plan: p };
     if (!input.attest) throw new ApiError("Confirm this is a genuine emergency", 400);
     if (p.needsNote && (input.note ?? "").trim().length < 10) throw new ApiError("Add a short description of what happened", 400);
-    if (p.needsPin && input.pin !== PRACTICE_PIN) throw new ApiError("That PIN isn't right", 403);
     const now = Date.now();
     for (const item of p.items) {
       const v = findVault(item.vaultId);
@@ -148,6 +153,7 @@ export const emergencyApi = {
       history: [item, ...S.emergency.history],
     };
     applyEmergencyCap();
+    practiceAlert("money_out", "Emergency money sent", `${money(p.amount, currency)} ${tier2 ? "is on its way" : "went"} to your bank from your vaults.`); // alerts
     // The whole plan, as the server answers, with the items as they moved.
     return { id: item.id, status: tier2 ? "processing" : "released", plan: { ...p, items: item.plan }, releaseAt, receiptRequired: true };
   },

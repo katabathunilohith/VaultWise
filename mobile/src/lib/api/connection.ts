@@ -1,6 +1,7 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { getAuthState } from "../auth/firebase"; // identity
+import { allowedServerAddress } from "@/features/protection/https"; // protection
 import { getItem, KEYS, setItem } from "../storage";
 import { PRACTICE_ONLY } from "../build";
 
@@ -78,6 +79,16 @@ async function ping(baseUrl: string, timeoutMs = 3500): Promise<string | null> {
   }
 }
 
+/**
+ * protection: an address the app may talk to (https only outside development builds,
+ * features/protection/https.ts), or the build's default address in place of one that isn't. That
+ * covers an http:// address saved by an older build or typed before the rule. The default comes with
+ * the build (EXPO_PUBLIC_API_URL), so it isn't checked again.
+ */
+export function usableBaseUrl(url: string, dev: boolean = __DEV__): string {
+  return allowedServerAddress(url, dev).ok ? url : defaultBaseUrl();
+}
+
 /** Reads the saved preference and decides the mode. Safe to call more than once. */
 export async function initConnection() {
   const saved = await getItem(KEYS.connection);
@@ -101,6 +112,7 @@ let applySeq = 0;
 export async function applyConnection(pref: ConnectionPref, baseUrl = state.baseUrl) {
   if (PRACTICE_ONLY) pref = "demo";
   const seq = ++applySeq;
+  baseUrl = usableBaseUrl(baseUrl); // protection
   // Keep the app mounted while re-checking; only the very first check gates the UI.
   update({ pref, baseUrl });
   // Saved in the background: the first check gates the UI, so it shouldn't wait on the Keychain.

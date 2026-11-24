@@ -4,10 +4,15 @@ import { audit } from "../audit";
 import { HttpError, type User } from "../users";
 import { validateUpload } from "../verification/pipeline";
 import { DOC_LABELS, docTypesFor, last4, maskId, validateIdNumber, type DocType } from "./ids";
+import { kycLevelFor } from "./levels";
 import { assertIdentitySecret, idHash } from "./secret";
 import { completeKycRecord, deleteKycPhoto, deleteKycRecord, ensureKycTables, insertKycRecord, kycRecord, kycSubmissionsSince, latestKycRecord, latestVerifiedRecord, setKycDecision, storeIdImage, type KycRecord } from "./store";
 import { externalProvider } from "./providers/external";
 import { practiceProvider } from "./providers/practice";
+import { stepsHoldName, stepsView } from "./checks/view"; // kyc-checks
+import { flowFor } from "./checks/config"; // kyc-checks
+import { confirmBankOnApproval } from "./checks/approval"; // kyc-checks
+import type { KycSteps } from "./checks/types"; // kyc-checks
 import type { KycCheck, KycProvider, KycResult, KycStatus } from "./types";
 
 /** What the customer sees. "not_started" = no ID submitted and not verified. */
@@ -19,6 +24,9 @@ export interface KycView {
   idLast4: string | null;
   reasons: string[];
   updatedAt: number | null;
+  /** kyc-checks: only in the steps flow (KYC_FLOW=steps, India accounts). Absent means the photo flow. */
+  flow?: "steps";
+  steps?: KycSteps;
 }
 
 const PROVIDERS: Record<string, KycProvider> = { practice: practiceProvider, external: externalProvider };
@@ -38,6 +46,15 @@ export function kycProvider(): KycProvider {
 const LIMIT_PER_DAY = 5;
 
 export function kycView(user: User): KycView {
+  const base = photoView(user);
+  // kyc-checks: the steps flow adds where each step is; the photo flow's answer is unchanged.
+  const s = stepsView(user);
+  if (!s) return base;
+  const reasons = base.status === "verified" ? [] : [...new Set([...base.reasons, ...s.reasons])];
+  return { ...base, reasons, updatedAt: base.updatedAt ?? s.updatedAt, flow: s.flow, steps: s.steps };
+}
+
+function photoView(user: User): KycView {
   const rec = latestKycRecord(user.id);
   if (user.kyc_status === "verified") {
     const v = latestVerifiedRecord(user.id);
@@ -59,14 +76,34 @@ export function kycSummary(user: User): { status: KycViewStatus; docType?: strin
   return { status: v.status, ...(v.docType ? { docType: v.docType } : {}), ...(v.idLast4 ? { idLast4: v.idLast4 } : {}) };
 }
 
-const LEVEL: Record<KycStatus, number> = { verified: 2, pending: 1, needs_review: 1, rejected: 0 };
+/** Sets users.kyc_status and the matching kyc_level. Exported for the onboarding checks (kyc-checks). */
+export function setUserKyc(userId: string, status: KycStatus) {
+  run("UPDATE users SET kyc_status = ?, kyc_level = ? WHERE id = ?", status, kycLevelFor(status), userId);
+}
 
-function setUserKyc(userId: string, status: KycStatus) {
-  run("UPDATE users SET kyc_status = ?, kyc_level = ? WHERE id = ?", status, LEVEL[status], userId);
+/**
+ * identity: the account's name is what every ID check compares documents with, so it can't change
+ * - after a verified ID (name_locked: it must keep matching the ID),
+ * - while an ID check is pending or with a person (the reviewer compares the name as it was sent), or
+ * - kyc-checks: once a step of the steps flow has compared it (stepsHoldName), until a rejection.
+ */
+export function assertNameChangeAllowed(user: User, name: string | undefined) {
+  if (!name || name === user.name) return;
+  if (user.kyc_status === "verified" && latestVerifiedRecord(user.id))
+    throw new HttpError(403, "Your name matches your verified ID, so it can't be changed here. Contact support to change it.", "name_locked");
+  const latest = latestKycRecord(user.id);
+  if ((latest && (latest.status === "pending" || latest.status === "needs_review")) || stepsHoldName(user))
+    throw new HttpError(409, "Your name is being checked against your ID, so it can't be changed until that check is finished.", "name_in_check");
+}
+
+/** kyc-checks: in the steps flow (KYC_FLOW=steps) the ID is checked through PAN, DigiLocker and the bank, not a photo. */
+export function assertPhotoFlow(user: { jurisdiction: string }) {
+  if (flowFor(user) === "steps") throw new HttpError(409, "Verify your ID with the steps (PAN, Aadhaar and bank) instead.", "kyc_flow_steps");
 }
 
 export async function submitKyc(user: User, input: { docType: string; file: { buffer: Buffer; mime: string }; idNumber?: string | null }): Promise<KycView> {
   assertIdentitySecret();
+  assertPhotoFlow(user); // kyc-checks
   const accepted = docTypesFor(user.jurisdiction);
   if (!accepted.includes(input.docType as DocType))
     throw new HttpError(400, `Choose one of: ${accepted.map((d) => DOC_LABELS[d]).join(", ")}.`, "doc_type_not_accepted");
@@ -206,6 +243,7 @@ export function decideKyc(id: string, decision: "verified" | "rejected", reviewe
   // A rejection's note is what the customer is told, so it should say what to do next.
   setKycDecision(id, decision, reviewer, now, decision === "rejected" ? [note] : []);
   if (decision === "rejected") deleteKycPhoto(id);
+  if (decision === "verified") confirmBankOnApproval(rec.user_id, rec, now); // kyc-checks: a bank account that went to a person is verified now
   setUserKyc(rec.user_id, decision);
   audit({
     userId: rec.user_id,

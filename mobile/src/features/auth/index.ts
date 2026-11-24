@@ -4,5 +4,5 @@
  * touch point.
  */
 export { SIGN_IN_ENABLED } from "./config";
-export { signOutOfVaultwise, startAuth, useServerSignOut, useSignInGate, type SignInGate } from "./gate";
+export { onBeforeSignOut, signOutOfVaultwise, startAuth, useServerSignOut, useSignInGate, type SignInGate } from "./gate";
 export { SignInPreviewRow, SignOutRow, useAuthSettings } from "./settings";

@@ -6,12 +6,14 @@ import { Banner, Button, HoldToConfirm, Txt, useHardwareBack } from "@/component
 import { errorMessage } from "@/lib/api/errors";
 import { useMe } from "@/lib/api/hooks"; // identity
 import { PRACTICE_PIN, usePracticeMode } from "@/lib/api/practice";
+import { api } from "@/lib/api/client";
+import { withMpin } from "@/features/mpin"; // mpin
 import { haptic } from "@/lib/haptics";
 import { authenticateBiometric } from "@/lib/auth/biometrics";
 import { useSession } from "@/lib/auth/session-state";
 import { space, useTheme } from "@/theme";
 import { goBack, Page, StepScreen } from "../../layout";
-import { biometricName, GuardedPinPad, PinLayout, PinStatus, pinVerifier, useBiometricKind, usePinGuard } from "../../pin";
+import { biometricName, GuardedPinPad, PinLayout, PinStatus, pinVerifier, pinWord, useBiometricKind, useDevicePinLength, usePinGuard } from "../../pin";
 import { finishDeletion } from "./finishDeletion";
 import { DeleteReview } from "./DeleteReview";
 
@@ -19,7 +21,8 @@ type Phase = "review" | "confirm" | "verify" | "deleting" | "failed";
 
 /**
  * Delete account (R5): consequences and where each balance goes, an acknowledgement, then a
- * confirmation where keeping the account is the main button, then the PIN.
+ * confirmation where keeping the account is the main button, then the PIN. Closing a signed-in
+ * account needs the MPIN, checked by the server (the MPIN sheet); otherwise this phone's PIN.
  */
 export function DeleteAccountScreen() {
   const qc = useQueryClient();
@@ -46,9 +49,23 @@ export function DeleteAccountScreen() {
   const options = <RouterStack.Screen options={{ gestureEnabled: phase === "review" || phase === "failed" }} />;
 
   const commit = async () => {
+    // mpin: with sign-in on, the server closes the account only with the MPIN. The sheet stays up while it's checked.
+    if (closing) {
+      let closed: unknown;
+      try {
+        closed = await withMpin("Close your Vaultwise account", (pin) => api.reset(pin));
+      } catch (e) {
+        haptic("error");
+        setFailure(e);
+        setPhase("failed");
+        return;
+      }
+      if (!closed) return;
+      haptic("irreversible.commit");
+    }
     setPhase("deleting");
     try {
-      await finishDeletion(qc);
+      await finishDeletion(qc, { resetDone: closing });
     } catch (e) {
       haptic("error");
       setFailure(e);
@@ -73,7 +90,12 @@ export function DeleteAccountScreen() {
           onBack={() => setPhase("review")}
           footer={
             <>
-              <Button label="Delete my account" variant="dangerOutline" size="md" onPress={() => setPhase("verify")} />
+              <Button
+                label={closing ? "Close my account" : "Delete my account"}
+                variant="dangerOutline"
+                size="md"
+                onPress={() => (closing ? void commit() : setPhase("verify"))}
+              />
               <Button label="Keep my account" armOnMount onPress={goBack} />
             </>
           }
@@ -159,6 +181,7 @@ function Verify({ onBack, onConfirmed }: { onBack: () => void; onConfirmed: () =
   const session = useSession();
   const kind = useBiometricKind();
   const guard = usePinGuard();
+  const length = useDevicePinLength();
   const verify = pinVerifier(session.hasDevicePin);
   const confirmed = () => {
     haptic("irreversible.commit");
@@ -179,15 +202,25 @@ function Verify({ onBack, onConfirmed }: { onBack: () => void; onConfirmed: () =
     );
 
   const bio = biometricName(kind);
-  const demoHint = !session.hasDevicePin ? ` In demo mode the PIN is ${PRACTICE_PIN}.` : "";
+  const demoHint = !session.hasDevicePin ? ` Practice MPIN: ${PRACTICE_PIN}.` : "";
+  const word = pinWord(session.hasDevicePin ? length : 6);
   return (
     <StepScreen back={onBack} scroll={false}>
       <PinLayout
         bottomInset={false}
-        title="Enter your PIN to delete"
+        title={`Enter your ${word} to delete`}
         body={`${bio ? `Or use ${bio}. ` : ""}This deletes your account.${demoHint}`}
-        status={<PinStatus guard={guard} />}
-        pad={<GuardedPinPad guard={guard} verify={verify} onSuccess={confirmed} biometric={kind ?? null} onBiometric={() => void tryBiometric()} />}
+        status={<PinStatus guard={guard} word={word} />}
+        pad={
+          <GuardedPinPad
+            guard={guard}
+            length={(session.hasDevicePin ? length : null) ?? 6}
+            verify={verify}
+            onSuccess={confirmed}
+            biometric={kind ?? null}
+            onBiometric={() => void tryBiometric()}
+          />
+        }
       />
     </StepScreen>
   );

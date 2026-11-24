@@ -4,6 +4,11 @@
  * (including live AI verification when GROQ_API_KEY is set), and prints a
  * pass/fail report. Never touches ./data.
  *
+ * Like the phone app, every request says `x-ai-consent: yes` (a missing header means no) and carries one
+ * steady `x-device-id`. Accounts choose a 6-digit MPIN, and money routes send it as `pin`
+ * (src/lib/mpin/README.md, src/lib/money-routes.ts). The server runs as the open prototype on purpose
+ * (ALLOW_PROTOTYPE_IN_PRODUCTION=true) and trusts X-Real-IP, so one test can check the general rate limit.
+ *
  *   npm run build && npm run test:e2e
  */
 import { spawn } from "node:child_process";
@@ -18,6 +23,13 @@ const BASE = `http://localhost:${PORT}/api/v1`;
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "vaultwise-e2e-"));
 const results = [];
 let server;
+
+/** 6-digit MPINs that pass the policy (no repeats, no straight runs, not on the common list). */
+const PIN = "482915";
+const PIN_IN = "739204";
+const DEMO_PIN = "582047";
+/** What every request sends, as the phone app does after a yes to "Can an AI read what you send?". */
+const CLIENT_HEADERS = { "x-ai-consent": "yes", "x-device-id": "e2e-device-1" };
 
 /* ---------- harness ---------- */
 
@@ -38,10 +50,13 @@ async function test(name, fn) {
   }
 }
 
-async function call(method, url, body, { form } = {}) {
+/** `headers` adds to or replaces CLIENT_HEADERS; a header set to undefined is left out. */
+async function call(method, url, body, { form, headers } = {}) {
+  const sent = { ...CLIENT_HEADERS, ...(form || body === undefined ? {} : { "Content-Type": "application/json" }), ...headers };
+  for (const k of Object.keys(sent)) if (sent[k] === undefined) delete sent[k];
   const res = await fetch(`${BASE}${url}`, {
     method,
-    headers: form || body === undefined ? undefined : { "Content-Type": "application/json" },
+    headers: sent,
     body: form ?? (body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body)),
   });
   const text = await res.text();
@@ -78,7 +93,7 @@ async function upload(vaultId, withdrawalId, bytes, type, name = "proof.jpg") {
   return call("POST", `/vaults/${vaultId}/proofs`, undefined, { form });
 }
 async function sample(key) {
-  const res = await fetch(`${BASE}/samples/${key}`);
+  const res = await fetch(`${BASE}/samples/${key}`, { headers: CLIENT_HEADERS });
   return new Uint8Array(await res.arrayBuffer());
 }
 
@@ -109,7 +124,9 @@ const isoDaysAgo = (d) => new Date(Date.now() - d * 86_400_000).toISOString().sl
 
 async function start() {
   server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(PORT)], {
-    env: { ...process.env, VAULTWISE_DATA_DIR: dataDir },
+    // The open prototype under `next start` (NODE_ENV=production) needs ALLOW_PROTOTYPE_IN_PRODUCTION (plan 05).
+    // TRUST_PROXY_HEADER lets the rate-limit test act as visitors behind a proxy; other requests send no address.
+    env: { ...process.env, VAULTWISE_DATA_DIR: dataDir, ALLOW_PROTOTYPE_IN_PRODUCTION: "true", TRUST_PROXY_HEADER: "x-real-ip" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let log = "";
@@ -153,15 +170,19 @@ async function main() {
       const r = await post("/onboarding", { name: "E2E Tester", jurisdiction: "US", pin: "12", demo: false });
       expect(r.status === 400, `status ${r.status}`);
     });
-    await test("onboards a new customer (US)", async () => {
-      const r = await post("/onboarding", { name: "Jordan Tester", jurisdiction: "US", pin: "4321", demo: false });
+    await test("rejects an easy 6-digit MPIN (a straight run)", async () => {
+      const r = await post("/onboarding", { name: "E2E Tester", jurisdiction: "US", pin: "123456", demo: false });
+      expect(r.status === 400 && r.data.code === "mpin_weak", `status ${r.status} ${JSON.stringify(r.data)}`);
+    });
+    await test("onboards a new customer (US) with a 6-digit MPIN", async () => {
+      const r = await post("/onboarding", { name: "Jordan Tester", jurisdiction: "US", pin: PIN, demo: false });
       expect(r.status === 200, `status ${r.status} ${JSON.stringify(r.data)}`);
       const me = await get("/me");
       expect(me.data.onboarded && me.data.user.currency === "USD", "not onboarded as USD");
     });
 
     await test("refuses a second onboarding", async () => {
-      const r = await post("/onboarding", { name: "Again", jurisdiction: "US", pin: "1111", demo: false });
+      const r = await post("/onboarding", { name: "Again", jurisdiction: "US", pin: PIN_IN, demo: false });
       expect(r.status === 409, `status ${r.status}`);
     });
     await test("malformed JSON → 400", async () => {
@@ -218,12 +239,16 @@ async function main() {
     });
 
     console.log("\nProof-gated withdrawals");
+    await test("a withdrawal without the MPIN → 401 mpin_required", async () => {
+      const r = await post(`/vaults/${ids.health}/withdrawals`, { amount: 10, payee: "Clinic" });
+      expect(r.status === 401 && r.data.code === "mpin_required", `status ${r.status} ${JSON.stringify(r.data)}`);
+    });
     await test("withdrawal above the available balance → 400", async () => {
-      const r = await post(`/vaults/${ids.health}/withdrawals`, { amount: 600, payee: "Clinic" });
+      const r = await post(`/vaults/${ids.health}/withdrawals`, { amount: 600, payee: "Clinic", pin: PIN });
       expect(r.status === 400, `status ${r.status}`);
     });
     await test("wrong upload type → 415", async () => {
-      const w = await post(`/vaults/${ids.health}/withdrawals`, { amount: 10, payee: "Pharmacy" });
+      const w = await post(`/vaults/${ids.health}/withdrawals`, { amount: 10, payee: "Pharmacy", pin: PIN });
       ids.w0 = w.data.id;
       const r = await upload(ids.health, ids.w0, new TextEncoder().encode("hello"), "text/plain", "note.txt");
       expect(r.status === 415, `status ${r.status}`);
@@ -245,7 +270,7 @@ async function main() {
       expect(again.status === 409, `second cancel status ${again.status}`);
     });
     await test("a withdrawal places a hold on the funds", async () => {
-      const w = await post(`/vaults/${ids.health}/withdrawals`, { amount: 297.5, payee: "City General Hospital" });
+      const w = await post(`/vaults/${ids.health}/withdrawals`, { amount: 297.5, payee: "City General Hospital", pin: PIN });
       expect(w.status === 201 && w.data.status === "awaiting_proof", `status ${w.status}`);
       ids.w1 = w.data.id;
       const v = await vault(ids.health);
@@ -273,7 +298,7 @@ async function main() {
       });
     if (ai)
       await test("resubmitting the same invoice → auto-declined as a duplicate, hold released", async () => {
-        const w = await post(`/vaults/${ids.health}/withdrawals`, { amount: 50, payee: "City General Hospital" });
+        const w = await post(`/vaults/${ids.health}/withdrawals`, { amount: 50, payee: "City General Hospital", pin: PIN });
         ids.w2 = w.data.id;
         const r = await upload(ids.health, ids.w2, await sample("medical-invoice"), "image/jpeg");
         ids.p2 = r.data.id;
@@ -308,17 +333,21 @@ async function main() {
       });
 
     console.log("\nEmergency cascade");
-    await test("small request plans as Tier 1 only (no PIN)", async () => {
+    await test("small request plans as Tier 1 only (the MPIN is still needed on every tier)", async () => {
       const r = await post("/emergency/preview", { amount: 100 });
-      expect(r.data.tier1 === 10_000 && r.data.tier2 === 0 && !r.data.needsPin, JSON.stringify(r.data).slice(0, 120));
+      expect(r.data.tier1 === 10_000 && r.data.tier2 === 0 && r.data.needsPin === true, JSON.stringify(r.data).slice(0, 120));
     });
     await test("release without attestation → 400", async () => {
-      const r = await post("/emergency/withdrawals", { amount: 100, reasonCode: "medical", attest: false });
+      const r = await post("/emergency/withdrawals", { amount: 100, reasonCode: "medical", attest: false, pin: PIN });
       expect(r.status === 400, `status ${r.status}`);
+    });
+    await test("Tier 1 without the MPIN → refused", async () => {
+      const r = await post("/emergency/withdrawals", { amount: 100, reasonCode: "medical", attest: true });
+      expect(r.status === 401 && r.data.code === "mpin_required", `status ${r.status} ${JSON.stringify(r.data)}`);
     });
     await test("Tier 1 releases instantly to the bank", async () => {
       const before = await bank();
-      const r = await post("/emergency/withdrawals", { amount: 100, reasonCode: "medical", attest: true });
+      const r = await post("/emergency/withdrawals", { amount: 100, reasonCode: "medical", attest: true, pin: PIN });
       expect(r.status === 201 && r.data.status === "released", `status ${r.status} ${r.data.status}`);
       expect((await bank()) === before + 10_000, "bank not credited");
     });
@@ -347,7 +376,7 @@ async function main() {
         reasonCode: "accident",
         attest: true,
         note: "Fell off a bike, urgent care",
-        pin: "4321",
+        pin: PIN,
       });
       expect(r.status === 201 && r.data.status === "processing", `status ${r.status} ${r.data.status}`);
       const v = await vault(ids.rainy);
@@ -359,7 +388,7 @@ async function main() {
         reasonCode: "other",
         attest: true,
         note: "Testing the monthly cap guard",
-        pin: "4321",
+        pin: PIN,
       });
       expect(r.status === 422 && r.data.status === "blocked", `status ${r.status}`);
     });
@@ -376,7 +405,7 @@ async function main() {
     await test("5 simultaneous withdrawals for 80% of a vault → exactly one accepted", async () => {
       const avail = (await vault(ids.rainy)).available;
       const amt = Math.floor((avail * 0.8) / 100);
-      const rs = await Promise.all(Array.from({ length: 5 }, () => post(`/vaults/${ids.rainy}/withdrawals`, { amount: amt, payee: "Plumber" })));
+      const rs = await Promise.all(Array.from({ length: 5 }, () => post(`/vaults/${ids.rainy}/withdrawals`, { amount: amt, payee: "Plumber", pin: PIN })));
       const ok = rs.filter((r) => r.status === 201).length;
       expect(ok === 1, `${ok} accepted (statuses ${rs.map((r) => r.status).join(",")})`);
     });
@@ -392,7 +421,7 @@ async function main() {
 
     console.log("\nInvesting");
     await test("investing before a risk profile → 400", async () => {
-      const r = await post("/invest/core/buy", { amount: 100 });
+      const r = await post("/invest/core/buy", { amount: 100, pin: PIN });
       expect(r.status === 400, `status ${r.status}`);
     });
     await test("risk profile maps to a band and model portfolio", async () => {
@@ -402,7 +431,7 @@ async function main() {
     });
     await test("Core buy fills across the model portfolio and debits exactly", async () => {
       const before = await bank();
-      const r = await post("/invest/core/buy", { amount: 300 });
+      const r = await post("/invest/core/buy", { amount: 300, pin: PIN });
       expect(r.status === 201, `status ${r.status} ${JSON.stringify(r.data)}`);
       const total = r.data.fills.reduce((s, f) => s + f.amount, 0);
       expect(total === 30_000, `fills sum ${total}`);
@@ -458,7 +487,7 @@ async function main() {
       await test("assistant streams a reply", async () => {
         const res = await fetch(`${BASE}/assistant`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { ...CLIENT_HEADERS, "Content-Type": "application/json" },
           body: JSON.stringify({ messages: [{ role: "user", content: "In one sentence: what is Tier 1 emergency access?" }] }),
           signal: AbortSignal.timeout(60_000),
         });
@@ -508,10 +537,33 @@ async function main() {
       expect(r.status === 201, `status ${r.status}`);
       expect((await vault(r.data.id)).balance === 0, "client-supplied balance was accepted");
     });
+    await test("the assistant refuses without a yes to AI (403 ai_consent_required)", async () => {
+      const messages = [{ role: "user", content: "hi" }];
+      for (const consent of [undefined, "no"]) {
+        const r = await call("POST", "/assistant", { messages }, { headers: { "x-ai-consent": consent } });
+        expect(r.status === 403 && r.data.code === "ai_consent_required", `consent ${consent}: status ${r.status} ${JSON.stringify(r.data)}`);
+      }
+    });
     await test("oversized chat history → 400", async () => {
       const messages = Array.from({ length: 40 }, (_, k) => ({ role: k % 2 ? "assistant" : "user", content: "hi" }));
       const r = await post("/assistant", { messages });
       expect(r.status === 400, `status ${r.status}`);
+    });
+    await test("general rate limit: one address gets 429 with Retry-After past the per-minute limit", async () => {
+      // Fixed one-minute windows: within 2 × limit + 1 requests one window must fill, wherever the minute turns.
+      const limit = Number(process.env.RATE_LIMIT_PER_MINUTE || 120);
+      const from = { "x-real-ip": "203.0.113.77" };
+      for (let i = 1; i <= 2 * limit + 1; i++) {
+        const r = await fetch(`${BASE}/region`, { headers: from });
+        if (r.status === 429) {
+          const body = await r.json();
+          expect(body.code === "rate_limited", JSON.stringify(body));
+          expect(Number(r.headers.get("retry-after")) > 0, `Retry-After ${r.headers.get("retry-after")}`);
+          expect((await fetch(`${BASE}/region`, { headers: { "x-real-ip": "203.0.113.78" } })).status === 200, "another address was limited too");
+          return `refused after ${i} requests in the window`;
+        }
+      }
+      throw new Fail(`no 429 after ${2 * limit + 1} requests`);
     });
     await test("known limitation: ops endpoints have no authentication", async () => {
       const r = await get("/admin/overview");
@@ -533,7 +585,7 @@ async function main() {
 
     console.log("\nEdge cases");
     await test("upload over 10 MB → 413", async () => {
-      const w = await post(`/vaults/${ids.health}/withdrawals`, { amount: 1, payee: "Clinic" });
+      const w = await post(`/vaults/${ids.health}/withdrawals`, { amount: 1, payee: "Clinic", pin: PIN });
       const r = await upload(ids.health, w.data.id, new Uint8Array(11 * 1024 * 1024), "image/jpeg");
       expect(r.status === 413, `status ${r.status}`);
     });
@@ -546,7 +598,7 @@ async function main() {
       expect(r.status === 400, `status ${r.status}`);
     });
     await test("unknown emergency reason → 400", async () => {
-      const r = await post("/emergency/withdrawals", { amount: 1, reasonCode: "vacation", attest: true });
+      const r = await post("/emergency/withdrawals", { amount: 1, reasonCode: "vacation", attest: true, pin: PIN });
       expect(r.status === 400, `status ${r.status}`);
     });
     await test("unknown market for analysis → 404", async () => {
@@ -573,7 +625,7 @@ async function main() {
     for (const j of Object.keys(CURRENCY)) {
       await test(`demo seed (${j}) builds a consistent four-month history`, async () => {
         const t0 = performance.now();
-        const r = await post("/onboarding", { name: "Alex Morgan", country: j, pin: "1234", demo: true });
+        const r = await post("/onboarding", { name: "Alex Morgan", country: j, pin: DEMO_PIN, demo: true });
         expect(r.status === 200, `status ${r.status} ${JSON.stringify(r.data)}`);
         const me = (await get("/me")).data;
         expect(me.user.currency === CURRENCY[j], `currency ${me.user.currency}`);
@@ -603,7 +655,7 @@ async function main() {
     });
     await test("onboarding by country picks the market and currency (France → EUR)", async () => {
       await post("/reset");
-      const r = await post("/onboarding", { name: "Luc Martin", country: "FR", pin: "2468", demo: false });
+      const r = await post("/onboarding", { name: "Luc Martin", country: "FR", pin: PIN_IN, demo: false });
       expect(r.status === 200, `status ${r.status}`);
       const me = (await get("/me")).data;
       expect(me.user.currency === "EUR" && me.user.jurisdiction === "EU" && me.user.country.code === "FR", JSON.stringify(me.user).slice(0, 160));
@@ -611,28 +663,30 @@ async function main() {
     });
     await test("unsupported country is refused at onboarding", async () => {
       await post("/reset");
-      const r = await post("/onboarding", { name: "Ana Silva", country: "BR", pin: "2468", demo: false });
+      const r = await post("/onboarding", { name: "Ana Silva", country: "BR", pin: PIN_IN, demo: false });
       expect(r.status === 400, `status ${r.status}`);
     });
 
     console.log("\nPersonal limits");
     await test("tighten any time, raise once a month, enforce on withdrawals", async () => {
       await post("/reset");
-      await post("/onboarding", { name: "Jordan Tester", country: "US", pin: "4321", demo: false });
+      await post("/onboarding", { name: "Jordan Tester", country: "US", pin: PIN, demo: false });
       const l = (await get("/limits")).data;
       expect(l.limits.singleWithdrawal === 500_000 && l.quota.available, JSON.stringify(l.limits));
       expect((await call("PUT", "/limits", { singleWithdrawal: 100 })).status === 200, "tighten failed");
       expect((await call("PUT", "/limits", { dailyWithdrawal: 500 })).status === 200, "second tighten failed");
-      expect((await call("PUT", "/limits", { singleWithdrawal: 250 })).status === 200, "first raise failed");
-      const second = await call("PUT", "/limits", { dailyWithdrawal: 900 });
+      const noPin = await call("PUT", "/limits", { singleWithdrawal: 250 });
+      expect(noPin.status === 401 && noPin.data.code === "mpin_required", `raise without MPIN ${noPin.status}`);
+      expect((await call("PUT", "/limits", { singleWithdrawal: 250, pin: PIN })).status === 200, "first raise failed");
+      const second = await call("PUT", "/limits", { dailyWithdrawal: 900, pin: PIN });
       expect(second.status === 409 && /already raised/.test(second.data.error), `second raise ${second.status}`);
       await post("/accounts/simulate", { type: "salary" });
       const v = (await post("/vaults", { name: "Health", category: "health", target: 2000, initialDeposit: 1000 })).data.id;
-      const over = await post(`/vaults/${v}/withdrawals`, { amount: 300, payee: "Clinic" });
+      const over = await post(`/vaults/${v}/withdrawals`, { amount: 300, payee: "Clinic", pin: PIN });
       expect(over.status === 400 && /single-withdrawal limit/.test(over.data.error), `over single ${over.status} ${over.data.error}`);
-      expect((await post(`/vaults/${v}/withdrawals`, { amount: 240, payee: "Clinic" })).status === 201, "within limit refused");
-      expect((await post(`/vaults/${v}/withdrawals`, { amount: 240, payee: "Clinic" })).status === 201, "second within daily refused");
-      const daily = await post(`/vaults/${v}/withdrawals`, { amount: 100, payee: "Clinic" });
+      expect((await post(`/vaults/${v}/withdrawals`, { amount: 240, payee: "Clinic", pin: PIN })).status === 201, "within limit refused");
+      expect((await post(`/vaults/${v}/withdrawals`, { amount: 240, payee: "Clinic", pin: PIN })).status === 201, "second within daily refused");
+      const daily = await post(`/vaults/${v}/withdrawals`, { amount: 100, payee: "Clinic", pin: PIN });
       expect(daily.status === 400 && /daily limit/.test(daily.data.error), `daily ${daily.status} ${daily.data.error}`);
     });
     await test("a lower personal emergency limit becomes the cap", async () => {
@@ -647,10 +701,10 @@ async function main() {
     // Each scenario gets a fresh wallet that has already used its monthly raise.
     const wallet = async () => {
       await post("/reset");
-      await post("/onboarding", { name: "Priya Sharma", country: "IN", pin: "2468", demo: false });
-      const r = await call("PUT", "/limits", { dailyWithdrawal: 900_000 });
+      await post("/onboarding", { name: "Priya Sharma", country: "IN", pin: PIN_IN, demo: false });
+      const r = await call("PUT", "/limits", { dailyWithdrawal: 900_000, pin: PIN_IN });
       expect(r.status === 200, `monthly raise ${r.status}`);
-      const blocked = await call("PUT", "/limits", { singleWithdrawal: 500_000 });
+      const blocked = await call("PUT", "/limits", { singleWithdrawal: 500_000, pin: PIN_IN });
       expect(blocked.status === 409, "monthly rule not enforced");
     };
     const ask = async (fields, reasonCode, explanation) => {
@@ -658,6 +712,7 @@ async function main() {
       for (const [k, v] of Object.entries(fields)) form.append(k, String(v));
       form.append("reasonCode", reasonCode);
       form.append("explanation", explanation);
+      form.append("pin", PIN_IN); // mpin: asking to raise a limit is a money action
       return call("POST", "/limits/emergency", undefined, { form });
     };
     const scenarios = [
@@ -739,7 +794,7 @@ async function main() {
   if (ai && (process.env.E2E_AI_SAMPLES || process.env.E2E_ONLY_AI)) {
     console.log("\nLive AI regression — every sample document");
     await post("/reset");
-    await post("/onboarding", { name: "Sam Rivera", jurisdiction: "US", pin: "2468", demo: false });
+    await post("/onboarding", { name: "Sam Rivera", jurisdiction: "US", pin: PIN_IN, demo: false });
     for (let k = 0; k < 4; k++) await post("/accounts/simulate", { type: "salary" });
     const mk = async (name, category, deposit, extra = {}) =>
       (await post("/vaults", { name, category, target: 10_000, initialDeposit: deposit, ...extra })).data.id;
@@ -761,7 +816,7 @@ async function main() {
     ];
     for (const [key, vaultId, amount, expected] of cases) {
       await test(`${key} → ${expected.join(" / ")}`, async () => {
-        const w = await post(`/vaults/${vaultId}/withdrawals`, { amount, payee: key });
+        const w = await post(`/vaults/${vaultId}/withdrawals`, { amount, payee: key, pin: PIN_IN });
         expect(w.status === 201, `withdrawal ${w.status} ${JSON.stringify(w.data)}`);
         const r = await upload(vaultId, w.data.id, await sample(key), "image/jpeg", `${key}.jpg`);
         expect(r.status === 202, `upload ${r.status}`);
@@ -786,7 +841,7 @@ async function main() {
           ["Catering deposit (120 guests)", 600],
         ],
       });
-      const w = await post(`/vaults/${v.wedding}/withdrawals`, { amount: 2400, payee: "Lakeside Banquet Hall" });
+      const w = await post(`/vaults/${v.wedding}/withdrawals`, { amount: 2400, payee: "Lakeside Banquet Hall", pin: PIN_IN });
       const r = await upload(v.wedding, w.data.id, doc, "image/jpeg", "venue.jpg");
       const p = await waitForProof(r.data.id);
       expect(p.verification.decision === "human_review", `got ${p.verification.decision} (${Math.round(p.verification.confidence * 100)}%)`);
@@ -794,7 +849,7 @@ async function main() {
     });
     await test("post-hoc emergency receipt is verified without touching the release", async () => {
       // More than the Health vaults hold, so Tier 2 is involved and a receipt is requested.
-      const e = await post("/emergency/withdrawals", { amount: 600, reasonCode: "home_repair", attest: true, pin: "2468" });
+      const e = await post("/emergency/withdrawals", { amount: 600, reasonCode: "home_repair", attest: true, pin: PIN_IN });
       expect(e.status === 201 && e.data.receiptRequired, `emergency ${e.status} ${JSON.stringify(e.data).slice(0, 120)}`);
       const doc = await renderDoc({
         issuer: "QuickFix Plumbing & Heating",

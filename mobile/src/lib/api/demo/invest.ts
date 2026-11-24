@@ -10,6 +10,7 @@ import { nextRunFrom, splitByWeight, type PlanFrequency } from "../../invest";
 import { ApiError } from "../errors";
 import type { Holding, InvestCore, Minor, Portfolio } from "../types";
 import { clone, journal, newId, S, toMinor, wait, type InvestState } from "./state";
+import { requirePracticeMpin } from "./mpin"; // mpin
 
 type Sip = InvestCore["sips"][number];
 
@@ -80,9 +81,10 @@ export const investApi = {
   investCore: async () => coreView(),
   investSatellite: async () => clone(satelliteFx) as Record<string, unknown>,
   // Like the server, a buy is paid from the bank, and refused when the bank is short.
-  buyCore: async (amountMajor: number) => {
+  buyCore: async (amountMajor: number, pin?: string) => {
     assertPracticeCanMove(); // identity: read-only while a Practice recovery request waits
     await wait(600);
+    requirePracticeMpin(pin); // mpin
     const amount = toMinor(amountMajor);
     if (!(amount > 0)) throw new ApiError("Amount must be positive", 400);
     if (amount > S.totals.bank) throw new ApiError("Insufficient funds in Linked bank account", 400);

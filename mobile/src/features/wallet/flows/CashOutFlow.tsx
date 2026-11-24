@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BankIcon, WalletIcon } from "@/components/icons";
 import { Amount, Banner, Button, Card, Divider, ModalScreen, PracticeBadge, Txt, useHardwareBack } from "@/components/ui";
 import { KeypadFooter, TypedAmount } from "@/features/vaults/fields";
+import { withMpin } from "@/features/mpin"; // mpin
 import { api } from "@/lib/api/client";
 import { useInvalidateMoney } from "@/lib/api/hooks";
 import type { Wallet } from "@/lib/api/wallet-types";
@@ -41,10 +42,11 @@ export function CashOutFlow({ wallet }: { wallet: Wallet }) {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await api.walletCashOut(minor / 100);
+      const res = await withMpin(`Move ${amountText(minor, cur)} to your bank`, (pin) => api.walletCashOut(minor / 100, pin)); // mpin
+      if (!res) return;
       // Money out: the plain commit haptic, no celebration.
       haptic("irreversible.commit");
-      setAfter(res?.wallet?.balance ?? wallet.balance - minor);
+      setAfter(res.wallet?.balance ?? wallet.balance - minor);
       setStep("done");
       void invalidate();
     } catch (e) {

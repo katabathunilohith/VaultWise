@@ -9,17 +9,20 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { initConnection } from "@/lib/api/connection";
 import { initQueryFocus, queryClient, useConnection, useMe } from "@/lib/api/hooks";
+import { restorePracticeData } from "@/lib/api/practice";
 import { initHaptics } from "@/lib/haptics";
 import { setMoneyLocale } from "@/lib/money";
 import { takePendingCheckout, usePendingCheckout } from "@/lib/pending-checkout";
 import { initSession } from "@/lib/session";
 import { useSession } from "@/lib/auth/session-state";
-import { watchAppLock } from "@/lib/auth/app-lock";
+import { noteActivity, watchAppLock } from "@/lib/auth/app-lock"; // protection: noteActivity
 import { ThemeProvider, useTheme } from "@/theme";
 import { fontMap } from "@/theme/fonts";
 import { startAuth, useServerSignOut, useSignInGate } from "@/features/auth"; // identity
 import { isRecoveryAccess, RecoveryChrome } from "@/features/recovery"; // identity
 import { TESTER_ENABLED, TesterHost } from "@/features/tester"; // tester
+import { UpdateChrome } from "@/features/updates"; // updates
+import { PrivacyCover, SensitiveRouteGuard } from "@/features/protection"; // protection
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -28,7 +31,9 @@ export default function RootLayout() {
   useEffect(() => {
     // identity: first, so the connection check knows whether a 401 means "sign in" or "no server".
     const stopAuth = startAuth();
-    void initConnection();
+    // Practice data saved on this phone loads first: queries wait for the connection check, so no
+    // screen shows the sample data before the saved data is back.
+    void restorePracticeData().finally(() => void initConnection());
     void initHaptics();
     void initSession();
     return stopAuth;
@@ -36,7 +41,8 @@ export default function RootLayout() {
   useEffect(() => initQueryFocus(), []);
   if (!fontsLoaded && !fontError) return null;
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    // protection: every touch resets the idle lock (lib/auth/app-lock.ts)
+    <GestureHandlerRootView style={{ flex: 1 }} onTouchStartCapture={noteActivity}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <ThemeProvider>
@@ -105,8 +111,12 @@ function Shell() {
   return (
     <NavThemeProvider value={navTheme}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+      {/* protection: no screenshots on money-out, MPIN and ID routes */}
+      <SensitiveRouteGuard />
       {/* tester */}
       {TESTER_ENABLED ? <TesterHost /> : null}
+      {/* updates: "A new version is ready" above the main tabs */}
+      <UpdateChrome>
       {/* identity: the read-only bar while a recovery request waits for a person */}
       <RecoveryChrome active={readOnly}>
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
@@ -146,6 +156,8 @@ function Shell() {
             <Stack.Screen name="tester-feedback" options={modal} />
             {/* identity */}
             <Stack.Screen name="verify-id" options={modal} />
+            {/* mpin: the MPIN sheet, opened over any money flow just before it sends */}
+            <Stack.Screen name="mpin" options={modal} />
           </Stack.Protected>
           {/* identity: signed out, or a preview from Settings in Practice */}
           <Stack.Protected guard={authOpen}>
@@ -161,6 +173,10 @@ function Shell() {
           <Stack.Screen name="ai-consent" options={{ ...sheet, sheetAllowedDetents: [0.8, 1] }} />
         </Stack>
       </RecoveryChrome>
+      {/* updates */}
+      </UpdateChrome>
+      {/* protection: iOS blurred cover in the app switcher */}
+      <PrivacyCover />
     </NavThemeProvider>
   );
 }

@@ -1,10 +1,10 @@
-import { customer, handle, json } from "@/lib/api";
+import { customer, handle, json, limitParam } from "@/lib/api";
 import { all, parseJson } from "@/lib/db";
 
 export const GET = handle(async (req: Request) => {
   const user = await customer({ tick: false, access: "read" });
   const url = new URL(req.url);
-  const limit = Math.min(500, Number(url.searchParams.get("limit") ?? 200));
+  const limit = limitParam(url, 200, 500);
   const audit = all<{
     id: number;
     ts: number;
