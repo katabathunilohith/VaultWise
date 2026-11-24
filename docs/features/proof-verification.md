@@ -18,10 +18,10 @@
 
 1. The client creates a withdrawal (`POST /api/v1/vaults/{id}/withdrawals`, documented with vaults). It starts in `awaiting_proof` and holds the money.
 2. The client uploads the bill: `POST /api/v1/vaults/{id}/proofs` with `file` and `withdrawalId` (multipart). The route checks the withdrawal belongs to the customer and is still `awaiting_proof`.
-3. `validateUpload()` rejects files the pipeline can't read. `createProof()` writes the file to disk, inserts a `proofs` row and a `verifications` row with six `pending` stages, moves the withdrawal to `verifying`, records `ai_allowed` and writes the `proof.uploaded` audit entry. `aiAllowed` is a required input, and only `true` (the route's `aiConsented()`, a `yes` in `x-ai-consent`) stores 1; anything else stores 0.
+3. `validateUpload()` ([proofs.ts](../../src/lib/verification/proofs.ts)) rejects files the pipeline can't read. `createProof()` writes the file to disk, inserts a `proofs` row and a `verifications` row with six `pending` stages, moves the withdrawal to `verifying`, records `ai_allowed` and writes the `proof.uploaded` audit entry. `aiAllowed` is a required input, and only `true` (the route's `aiConsented()`, a `yes` in `x-ai-consent`) stores 1; anything else stores 0.
 4. The route schedules `runPipeline()` with Next's `after()` and returns `{ id, status: "processing" }`.
-5. `runPipeline()` runs the six stages in order. Each `begin()`/`finish()` saves the stage list to `verifications.stages`.
-6. The decision stage writes the result, the audit entry and any fraud flags, then `applyOutcome()` pays out, declines or marks the withdrawal `in_review`.
+5. `runPipeline()` ([pipeline.ts](../../src/lib/verification/pipeline.ts)) only orchestrates: it loads one shared `PipelineContext` (`loadContext()`) and runs the six stage functions in order. Each stage calls `ctx.begin(key)` and `ctx.finish(stage)`, which save the stage list to `verifications.stages`.
+6. `recordOutcome()` ([persistence.ts](../../src/lib/verification/persistence.ts)) writes the result, the audit entry and any fraud flags in one transaction, and `applyOutcome()` pays out, declines or marks the withdrawal `in_review`.
 7. Clients poll `GET /api/v1/proofs/{id}` until the verification is no longer `processing`.
 
 ```mermaid
@@ -50,25 +50,40 @@ sequenceDiagram
 |---|---|---|---|---|
 | 1 | `intake` | Upload & integrity | File type and size; exact duplicate by SHA-256 across every account (fail, hard fail, high flag). | 1, or 0 on a duplicate |
 | 2 | `preprocess` | Pre-processing & forensics | `preprocess()`: auto-orient, trim, fit inside 1024×1024, normalise, median denoise, JPEG q88. Reads EXIF. Warns if the short side is under 300 px, if EXIF `Software` matches an editing app (also a medium flag), or if the file was modified more than 24 h after capture. Saves EXIF to `proofs.exif`. | 0.6 with any warning, else 1 |
-| 3 | `extract` | OCR & layout understanding | Sends the processed JPEG to the vision model with the vault name, category, amount, today's date and any custom-vault rule. Skipped when `ai_allowed = 0` or no key. Checks "Document detected" (not a document is a hard fail) and "Fields extracted" (pass at 3 of 4: issuer, date, total, type). A failed call marks the stage `failed` with a customer-safe reason. | 0.5 if a document + 0.3 × fields/4 + 0.2 × legibility |
+| 3 | `extract` | OCR & layout understanding | Sends the processed JPEG to the vision model with the vault name, category, amount, today's date and any custom-vault rule. Skipped when `ai_allowed = 0`, or when there is no key and no reader set with `setBillReader()`. Checks "Document detected" (not a document is a hard fail) and "Fields extracted" (pass at 3 of 4: issuer, date, total, type). A failed call marks the stage `failed` with a customer-safe reason. | 0.5 if a document + 0.3 × fields/4 + 0.2 × legibility |
 | 4 | `classify` | Purpose classification | Purpose match, amount covered, totals add up, document date, name on document, currency. Skipped without extracted fields. | the purpose match score |
 | 5 | `tamper` | Tamper & reuse detection | Error level analysis, document reuse (content fingerprint and dHash), capture time vs document date, visual edit signs from the model, arithmetic. | 1 − tamper score |
 | 6 | `decision` | Decision & audit trail | Weighted confidence, then the routing rules below. | the confidence |
 
-**Classify details** (`src/lib/verification/pipeline.ts`, stage 4):
+Each stage is one function in [src/lib/verification/stages/](../../src/lib/verification/stages/) with its pure part split out for unit tests (since 2026-11-24; before, all six lived in one 530-line `runPipeline()`). The split was checked against the offline evaluation: the same decisions, confidences, reasons and checks for every bill ([evaluation](../evaluation/README.md)).
 
-- Purpose: `0.6 × model category score + 0.25 × keyword score + 0.15 × purpose_match`, using the best of the vault's accepted categories (`acceptedCategories()`: an Emergency vault accepts emergency, health and housing bills; a custom vault uses `purpose_match` alone). Pass at ≥ 0.7, warn at ≥ 0.4, fail below. Below 0.2 on a real document is a hard fail.
+| # | File | Stage function | Pure part |
+|---|---|---|---|
+| – | [stages/context.ts](../../src/lib/verification/stages/context.ts) | `loadContext()` (proof, user, market rules, vault, amount asked, file) | – |
+| 1 | [stages/intake.ts](../../src/lib/verification/stages/intake.ts) | `runIntake()` | – |
+| 2 | [stages/preprocess.ts](../../src/lib/verification/stages/preprocess.ts) | `runPreprocess()` | – |
+| 3 | [stages/ai-read.ts](../../src/lib/verification/stages/ai-read.ts) | `runAiRead()` | `extractionPrompt()`, `normaliseExtraction()`, `parseAmount()` |
+| 4 | [stages/rules.ts](../../src/lib/verification/stages/rules.ts) | `runRules()` | `evaluateRules()` |
+| 5 | [stages/tamper.ts](../../src/lib/verification/stages/tamper.ts) | `runTamper()` | `contentKeys()`, `tamperScoreOf()`, `metadataScore()`, `assessTamper()` |
+| 6 | [stages/decision.ts](../../src/lib/verification/stages/decision.ts) | `runDecision()` | `decide()`, `CONFIDENCE_WEIGHTS` |
+| – | [persistence.ts](../../src/lib/verification/persistence.ts) | `recordOutcome()`, or `recordError()` if any stage throws | – |
+
+**Classify details** (`evaluateRules()` in [stages/rules.ts](../../src/lib/verification/stages/rules.ts)):
+
+- Purpose: `0.6 × model category score + 0.25 × keyword score + 0.15 × purpose_match`, using the best of the vault's accepted categories (`acceptedCategories()`: an Emergency vault accepts emergency, health and housing bills; a custom vault uses `purpose_match` alone). Pass at ≥ 0.7, warn at ≥ 0.4, fail below. Below 0.2 on a real document is a hard fail. A keyword counts only where it starts a word (`startsWord()` in [classify.ts](../../src/lib/verification/classify.ts), since 2026-11-24): it still matches as a prefix ("diagnos" in "diagnosis"), but no longer inside another word ("lease" in "please", "rent" in "current", "fee" in "coffee" used to count as purpose evidence).
+- Amounts the model returns as text are read by `parseAmount()` ([stages/ai-read.ts](../../src/lib/verification/stages/ai-read.ts)): the first number in the text, so "₹1,200.50", "Rs. 99" and "Rs. 500/-" read as 1200.5, 99 and 500. Before 2026-11-24 every non-digit was stripped, which kept the "." of "Rs." and read "Rs. 99" as 0.99.
 - Amount: the document total must be at least 98% of the requested amount (score 1). Less is a fail with score `ratio × 0.6`. No total is a warning (score 0.5).
 - Totals add up: with two or more line items, the smallest gap between the total and (items, items + tax, subtotal + tax) is compared to the total. ≤ 2% passes, ≤ 25% warns, more fails and raises a high flag.
 - Date: more than 2 days in the future is a hard fail (score 0). Older than `maxDocAgeDays` is a fail (score 0.2). No date warns (0.5).
 - Name: the account holder's first name on the bill scores 1; only the family name scores 0.6 ("likely a dependant"); neither scores 0.35 (warn). No name on the bill leaves 0.7.
 
-**Tamper details** (stage 5):
+**Tamper details** (`runTamper()` and `assessTamper()` in [stages/tamper.ts](../../src/lib/verification/stages/tamper.ts)):
 
-- ELA (`errorLevelAnalysis()`): re-saves at JPEG quality 75, compares luminance in 8×8 blocks, flags outlier blocks and measures the largest cluster. Score = `(largestCluster − 10) / 20`, clamped to 0..1. Fail at ≥ 0.5 (medium flag), warn at ≥ 0.2. Photos above 25 MP skip ELA. The heatmap is saved as `{proofId}_ela.png`.
-- Reuse: content keys `ref:{issuer}:{reference}` and `amt:{issuer}:{total}:{date}`. A match with any earlier proof is a hard fail and a high flag. With no extracted fields, a dHash within 10 of 256 bits of an earlier proof fails and adds a review reason.
+- ELA (`errorLevelAnalysis()`): re-saves at JPEG quality 75, compares luminance in 8×8 blocks, flags outlier blocks and measures the largest cluster. Score = `(largestCluster − 10) / 20`, clamped to 0..1. Fail at ≥ 0.5 (medium flag), warn at ≥ 0.2. Photos above 25 MP skip ELA. The heatmap is saved as `{proofId}_ela.png`. When the per-block error has no spread at all (the image re-compresses almost unchanged, typically because it was already saved at about quality 75), ELA is `inconclusive`: the check shows as `info` and its score counts as no evidence.
+- Reuse: content keys `ref:{issuer}:{reference}` and `amt:{issuer}:{total}:{date}`. A match with any earlier proof is a hard fail and a high flag. With no extracted fields, a dHash within 10 of 256 bits of an earlier proof fails and adds a review reason. A bill that was read but is near-identical (dHash ≤ 10) to an earlier proof with different content is a warning (an edited copy, or a recurring bill from the same template) and only counts as corroboration below.
 - Timestamp: a document date more than 7 days after the EXIF capture time fails (medium flag).
-- Tamper score = `1 − (1 − 0.85·ELA)(1 − exif)(1 − min(1, 0.3·signs))(1 − arith)`, where `exif` is 0.7 for the timestamp gap or 0.5 for editing software, and `arith` is 0.6 for a mismatch or 0.15 for a minor gap. ≥ 0.8 is a hard fail and a high flag.
+- Tamper score = `1 − (1 − 0.85·ELA)(1 − exif)(1 − min(1, 0.3·signs))(1 − arith)`, where `exif = metadataScore()` combines 0.7 for the timestamp gap and 0.5 for editing software (both together give 0.85), and `arith` is 0.6 for a mismatch or 0.15 for a minor gap.
+- A score ≥ 0.8 (`TAMPER_DECLINE_AT`) is a hard fail and a high flag only when something corroborates it (`assessTamper()`): editing software, the timestamp gap, totals off by more than 25% (`mismatch`), edit signs seen by the model, or the near-identical earlier proof with different content. ELA on its own, however strong, adds a "Tamper evidence" warning and sends the bill to a person. This hard fail is marked `forensic`; every other hard fail (exact duplicate, reused content, wrong purpose, future date, not a document) is not.
 
 ### Decision and confidence
 
@@ -76,20 +91,23 @@ sequenceDiagram
 
 Without extracted fields, extraction counts as 0.3 and confidence is capped at 0.6. The rules run in this order:
 
-1. Any hard fail → `auto_denied`.
+1. Any hard fail → `auto_denied`. A `forensic` hard fail (the tamper decline) counts only when the customer allowed the AI: someone who asked for a person goes to one. Exact duplicates, reused content, the wrong purpose, a future date and "not a document" decline everyone.
 2. No extraction because the customer said no to the AI → `human_review`.
 3. No extraction for another reason (no key, call failed) → `human_review`, with the reason.
 4. Confidence ≥ `autoApprove` (0.85), tamper score < 0.3, amount fully covered, no failed check in extract/classify/tamper, and not a custom vault → `auto_approved`.
-5. Confidence ≤ `autoDeny` (0.35) → `auto_denied`.
+5. Confidence ≤ `autoDeny` (0.35) → `auto_denied`, unless it is that low only because of ELA with nothing to corroborate it (the confidence without ELA is above 0.35).
 6. Anything else → `human_review`, listing every failed or warned check.
 
-If the pipeline throws, the verification is marked `status = 'error'` and `human_review`, running stages become `failed`, pending ones `skipped`, and `verification.error` is audited.
+These rules are `decide()` in [stages/decision.ts](../../src/lib/verification/stages/decision.ts), pure and unit-tested. If the pipeline throws, `recordError()` marks the verification `status = 'error'` and `human_review`, running stages become `failed`, pending ones `skipped`, and `verification.error` is audited.
+
+The ELA rules above (inconclusive ELA, no decline on ELA alone, forensic declines only with AI consent) and `PIPELINE_VERSION` `vw-proof@1.5` landed on 2026-11-24 with the evaluation; see the [evaluation](../evaluation/README.md) for the bills behind them.
 
 ### Human review and appeals
 
 - The review queue (admin overview) holds verifications with `decision = 'human_review'` and no final decision, plus every `final_decision = 'appealed'`, oldest first.
-- A reviewer posts `approved` or `denied` with a note. `reviewDecision()` refuses (409) anything not awaiting review, records the reviewer and note, audits `verification.reviewed.{decision}` and calls `applyOutcome()`.
+- A reviewer posts `approved` or `denied` with a note. `reviewDecision()` ([review.ts](../../src/lib/verification/review.ts)) refuses (409) anything not awaiting review, records the reviewer and note, audits `verification.reviewed.{decision}` and calls `applyOutcome()`.
 - A customer can appeal only a `denied` verification, and only once: if it already has an appeal note, `appeal()` refuses with 409 `already_appealed` ([tests/appeals.test.ts](../../tests/appeals.test.ts)). The phone hides the button in the same case. `appeal()` sets `final_decision = 'appealed'`, stores the note, re-queues it and moves the withdrawal to `appealed` (an active hold in `src/lib/vaults.ts`).
+- Because an appeal holds the money again, `appeal()` refuses with 409 `appeal_funds_unavailable` when the vault no longer has the withdrawal's amount available (the money left the vault after the decline); otherwise a reviewer's approval would fail later. Adding the money back makes the appeal possible again (2026-11-24).
 
 ### How the phone shows progress
 
@@ -107,9 +125,16 @@ The web page `/proofs/{id}` polls every 700 ms (`useProof()`) and shows every st
 
 | File | What it holds | Key exports |
 |---|---|---|
-| [src/lib/verification/pipeline.ts](../../src/lib/verification/pipeline.ts) | Upload checks, the six stages, decision, review, appeal, view | `validateUpload()` rejects unreadable files · `createProof()` stores file and rows · `runPipeline()` runs all stages · `reviewDecision()` reviewer verdict · `appeal()` customer appeal · `proofView()` API shape · `PIPELINE_VERSION` |
+| [src/lib/verification/pipeline.ts](../../src/lib/verification/pipeline.ts) | The orchestrator and the module's public surface: routes and tests import from here | `runPipeline()` runs all stages; re-exports `validateUpload()`, `createProof()`, `proofView()`, `reviewDecision()`, `appeal()`, `setBillReader()`, `PIPELINE_VERSION` and the row types |
+| [src/lib/verification/stages/](../../src/lib/verification/stages/) | One file per stage over a shared `PipelineContext` (table above) | `loadContext()` · `runIntake()` · `runPreprocess()` · `runAiRead()` · `runRules()` · `runTamper()` · `runDecision()`; pure `evaluateRules()`, `assessTamper()`, `decide()`, `parseAmount()` |
+| [src/lib/verification/stages/ai-read.ts](../../src/lib/verification/stages/ai-read.ts) | The bill reader seam | `setBillReader(fn)` swaps the Groq call, `null` restores it (tests, the offline evaluation); `BillReader`, `BillReadInput` |
+| [src/lib/verification/proofs.ts](../../src/lib/verification/proofs.ts) | Before and around the pipeline | `validateUpload()` rejects unreadable files · `createProof()` stores file and rows · `proofView()` API shape |
+| [src/lib/verification/persistence.ts](../../src/lib/verification/persistence.ts) | Saving progress and the outcome | `saveStages()` · `recordOutcome()` · `recordError()` · `applyOutcome()` payout / decline / hold (shared with review) |
+| [src/lib/verification/review.ts](../../src/lib/verification/review.ts) | People's side | `reviewDecision()` reviewer verdict · `appeal()` customer appeal |
+| [src/lib/verification/types.ts](../../src/lib/verification/types.ts) | Shared shapes | `PIPELINE_VERSION`, `STAGE_DEFS`, `Stage`, `Check`, `Extraction`, `ProofRow`, `VerificationRow` |
+| [src/lib/verification/README.md](../../src/lib/verification/README.md) | Stage map, files, how to swap the bill reader | – |
 | [src/lib/verification/forensics.ts](../../src/lib/verification/forensics.ts) | Image helpers with sharp and exifr | `probeImage()` decodability · `sha256()` file hash · `dHash()` 256-bit perceptual hash · `hamming()` bit distance · `readExif()` EXIF summary · `preprocess()` image for the model · `errorLevelAnalysis()` ELA + heatmap · `EDITING_SOFTWARE`, `ELA_MAX_PIXELS` |
-| [src/lib/verification/classify.ts](../../src/lib/verification/classify.ts) | Keyword lexicon per category | `keywordScores()` weighted keyword scores and hits · `acceptedCategories()` which bills a vault accepts |
+| [src/lib/verification/classify.ts](../../src/lib/verification/classify.ts) | Keyword lexicon per category | `keywordScores()` weighted keyword scores and hits (terms match at the start of a word) · `acceptedCategories()` which bills a vault accepts |
 | [src/lib/samples.ts](../../src/lib/samples.ts) | Sample bill generator | `SAMPLES` the seven samples · `renderSample()` JPEG for a user |
 | [src/lib/custom-rules.ts](../../src/lib/custom-rules.ts) | A custom vault's own rule, added to the prompt | `customRuleFor()` · `customRulePrompt()` |
 | [src/lib/compliance.ts](../../src/lib/compliance.ts) | Per-market thresholds | `rulesFor()` → `verification` |
@@ -186,7 +211,7 @@ The web page `/proofs/{id}` polls every 700 ms (`useProof()`) and shows every st
 | Near-duplicate | dHash distance ≤ 10 of 256 bits (with no readable content) |
 | Custom vault without a template | Never auto-approved |
 | Upload route time limit | `maxDuration = 90` s |
-| Model version stored | `vw-proof@1.4 · vision=<VISION_MODEL>` |
+| Model version stored | `vw-proof@1.5 · vision=<VISION_MODEL>` (`PIPELINE_VERSION` in `types.ts`) |
 
 ### Sample bills
 
@@ -200,7 +225,7 @@ The web page `/proofs/{id}` polls every 700 ms (`useProof()`) and shows every st
 | `old-invoice` | account holder | Dated 300 days ago, outside the 120-day window |
 | `tampered-invoice` | account holder | A new total pasted over the real one (ELA fires) |
 
-`renderSample()` draws each bill as SVG, places it on a desk-coloured background with a 1.2° tilt and saves it as a JPEG. Dates are fresh, amounts scale to the user's currency, and reference numbers are deterministic, so the same sample twice is a byte-identical duplicate. The phone bundles static copies in `mobile/assets/samples/` for Practice mode and the live AI test; live, it uploads the server's copy by URL.
+`renderSample()` draws each bill as SVG, places it on a desk-coloured background with a 1.2° tilt and saves it as a JPEG. Dates are fresh, amounts scale to the user's currency, and reference numbers are deterministic, so the same sample twice is a byte-identical duplicate. The phone bundles static copies in `mobile/assets/samples/` for Practice mode; live, it uploads the server's copy by URL. The live AI test (`npm run test:ai`) renders the samples at run time with `renderSample()`, so their dates stay inside the 120-day window (maintainability B20, 2026-11-24).
 
 ## Configuration
 
@@ -216,9 +241,12 @@ The web page `/proofs/{id}` polls every 700 ms (`useProof()`) and shows every st
 
 | File | What it covers |
 |---|---|
-| [tests/forensics.test.ts](../../tests/forensics.test.ts) | ELA flags the tampered sample but not the genuine one; deterministic samples; keyword classifier; ELA skip above 25 MP; `validateUpload()` 415/413 cases |
+| [tests/forensics.test.ts](../../tests/forensics.test.ts) | ELA flags the tampered sample but not the genuine one; ELA is inconclusive on an image that re-compresses unchanged; deterministic samples; keyword classifier; ELA skip above 25 MP; `validateUpload()` 415/413 cases |
+| [tests/verification-stages.test.ts](../../tests/verification-stages.test.ts) | Stage units: `evaluateRules()` (recent, old, future, wrong purpose, totals, dependant, short bill), `decide()` (approve, hard fails, forensic fails without consent, uncorroborated ELA, never approve with a failed check, a custom vault or nothing read), the word-start keyword rule, `assessTamper()` (ELA alone goes to a person, corroborated ELA declines, metadata signals combine), `contentKeys()` and `normaliseExtraction()`; a run through a stand-in reader (`setBillReader()`) that approves and pays, declines the same bill re-encoded and never reads without consent; the tamper policy end to end |
+| [tests/appeals.test.ts](../../tests/appeals.test.ts) | One appeal per check (409 `already_appealed`); 409 `appeal_funds_unavailable` when the money left the vault, allowed once it's back |
 | [tests/ai-consent.test.ts](../../tests/ai-consent.test.ts) | `ai_allowed = 0` skips the vision model and routes to a person |
-| [tests/ai-verification.test.ts](../../tests/ai-verification.test.ts) | No key → `human_review`; with `npm run test:ai` all seven samples through the live model |
+| [tests/ai-verification.test.ts](../../tests/ai-verification.test.ts) | No key → `human_review`; with `npm run test:ai` all seven samples, rendered at run time, through the live model |
+| [eval/verification/](../../eval/verification/) | `npm run eval:verification`: the labelled offline evaluation (edited, duplicate, wrong-purpose and stale bills) through an oracle reader set with `setBillReader()`; `-- --live` uses the model. Results and method: [docs/evaluation/](../evaluation/README.md) |
 | [scripts/e2e.mjs](../../scripts/e2e.mjs) | Upload, second proof 409, appeal into the queue, sample path traversal 404, and (with `E2E_AI_SAMPLES`) expected decisions per sample |
 
 There are no phone tests for `stages.ts`, `verdict.ts` or the withdraw flow.
@@ -230,15 +258,15 @@ There are no phone tests for `stages.ts`, `verdict.ts` or the withdraw flow.
 - In prototype auth mode, `GET /proofs/{id}/file` serves any proof to any customer who knows the id.
 - `plainCheck()` on the phone matches labels `matches purpose` and `perceptual reuse`, but the server emits `Matches {Category}` and `Document reuse`, so those fall back to generic text. The `metadata` line always says "No camera details" because that check is always `info`.
 - The server's sample notes and the phone's `DEMO_SAMPLES` differ (for example the old invoice: "Outside the document-age window" vs "goes to a person"; the pipeline sends it to a person).
-- The bundled sample JPEGs have fixed dates and the name "Alex Morgan" (the medical invoice is dated 2026-10-06), so in the live test they will pass the 120-day window in early 2027 and never match the test user's name.
+- The bundled sample JPEGs in `mobile/assets/samples/` have fixed dates and the name "Alex Morgan" (the medical invoice is dated 2026-10-06), so they will pass the 120-day window in early 2027. Only Practice uses them now; the live test renders fresh ones.
 - `extractionPrompt()` receives `userName` but does not use it.
-- A total of 0 read from a bill becomes `null` (`Number(...) || null`).
+- A total of 0 read from a bill becomes `null` (`parseAmount()`).
 
 ## Maintainability notes
 
 - **Good seams:** `forensics.ts` and `classify.ts` are pure and reused by KYC (`src/lib/kyc/analyse.ts`). Stage results are plain data (`Stage`, `Check`), so the web and phone render the same record. Thresholds come from `compliance.ts`.
-- **SRP:** `runPipeline()` is about 530 lines with all six stages, scoring and persistence inline. One function per stage over a shared context would make each stage testable alone.
-- **DIP / testing:** the pipeline calls `chatJson()` directly. KYC has `setIdExtractor()` for tests; the pipeline has no such seam, so its AI path can only be tested with a live key.
+- **SRP (done 2026-11-24):** the 530-line `runPipeline()` is now one function per stage over a shared context, with the pure rules split out (maintainability S1).
+- **DIP / testing (done 2026-11-24):** `setBillReader()` swaps the vision model, like KYC's `setIdExtractor()` (maintainability C3), so the AI path is tested offline and evaluated with an oracle reader.
 - **Coupling:** the phone reads English check labels and reasons with regexes (`plainCheck()`, `declineKind()`). A stable code per check would remove that and the drift listed above.
 - **Duplication:** `createProof()` repeats the MIME and size checks of `validateUpload()`. The review target "4 business hours" is hard-coded in `verification.tsx`, the admin page and the admin overview route instead of reading `reviewSlaHours`. The sample list exists twice.
-- **Coupling:** KYC, recovery and limit requests import `validateUpload()` from the 900-line pipeline module.
+- **Coupling:** KYC, recovery and limit requests still import `validateUpload()` through the pipeline barrel (`@/lib/verification/pipeline`), though it now lives in `proofs.ts` (maintainability C9).

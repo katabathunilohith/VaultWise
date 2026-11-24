@@ -5,9 +5,12 @@
  * Plan 05: a production server without sign-in configured stops here with a clear message instead of
  * serving the open prototype. The rule itself is `productionStartupProblem()` in src/lib/auth/config.ts;
  * the Node-only check is in src/instrumentation-node.ts, imported only on the Node runtime.
+ *
+ * audit-anchors: then one audit anchor per start (src/lib/audit-anchors); the scheduler adds one a day.
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
-  const { checkProductionStartup } = await import("./instrumentation-node");
+  const { checkProductionStartup, anchorAuditAtStartup } = await import("./instrumentation-node");
   checkProductionStartup();
+  anchorAuditAtStartup(); // audit-anchors
 }

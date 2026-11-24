@@ -369,7 +369,7 @@ Plan 08's acceptance needs every L1 item passed, planned or accepted. These L1 g
 |---|---|---|
 | Request bodies | Pass | Every JSON body goes through a zod schema via `body()` in [api.ts](../../src/lib/api.ts). Routes without `body()` take no body. |
 | SQL | Pass | Every query uses `?` parameters. The three queries that build SQL text only add one `?` per list item (in `fraud.ts`, `vaults.ts` and `wallet/plan.ts`); no value is pasted into SQL. |
-| Uploads | Pass | JPEG, PNG and WebP only, 10 MB at most ([pipeline.ts](../../src/lib/verification/pipeline.ts) `ALLOWED_MIME`, `MAX_BYTES`), and decoded by `sharp` ([forensics.ts](../../src/lib/verification/forensics.ts)). |
+| Uploads | Pass | JPEG, PNG and WebP only, 10 MB at most ([proofs.ts](../../src/lib/verification/proofs.ts) `ALLOWED_MIME`, `MAX_BYTES`), and decoded by `sharp` ([forensics.ts](../../src/lib/verification/forensics.ts)). |
 | Deep links and scanned codes | Pass | Ids must match `^[A-Za-z0-9_-]{3,64}$` ([intent-link.ts](../../mobile/src/features/pay/intent-link.ts)). |
 | Error messages | Fail | Unexpected errors return the raw exception text, such as SQLite messages ([api.ts](../../src/lib/api.ts) `errorResponse()`, line 19 at `012a9fc`). AI errors pass the provider's message through too. |
 | Oversized input | Fail | No body size limit on JSON routes, and the installed zod has a memory-exhaustion advisory (see CODE-3). |

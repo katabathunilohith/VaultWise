@@ -38,7 +38,7 @@ Switch off: unset `FIREBASE_PROJECT_ID`. Identities stay in the database but are
 | Admin route, not an admin | 403 | `{ code: "admin_only", error: "Only the operations team can do this." }` |
 
 `access` defaults to `"write"`. GET routes (and the read-only POSTs `emergency/preview` and `assistant`) pass
-`{ access: "read" }`. Money-out routes pass `{ kyc: true }`.
+`{ access: "read" }`. Money routes pass `{ money: "<action>" }` and take the ID gate from the map in `src/lib/money-routes.ts` (money out, and money in from the linked bank); `assertKycGate(user)` in `session.ts` is the gate on its own, which `moneyGate()` in `src/lib/api.ts` applies when a route learns from the body that it moves money.
 
 **Recovery access** (a claim whose automated checks passed, waiting for a person) is a short allowlist, opted in with
 `customer({ access: "read", recovery: true })`: `GET /api/v1/dashboard` and `GET /api/v1/vaults`. `GET /api/v1/me` shows

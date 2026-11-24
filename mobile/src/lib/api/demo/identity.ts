@@ -7,7 +7,8 @@
  * - A recovery request waits for the same pretend person (about 20 seconds), and can be cancelled.
  *   With the sample card it passes the automatic checks ("read_only"): like the server, /me then
  *   says recovery access, with the first name only and the email masked, and Practice wallet moves
- *   are refused (assertPracticeCanMove; the older Practice money flows don't check it). With any
+ *   are refused (assertPracticeCanMove; assertPracticeIdVerified also needs a verified ID, for the
+ *   moves the server's money table marks `kyc`). With any
  *   other photo it's "after_approval": a new login would have no access at all until approved;
  *   Practice can't take the sample account away, so only the status screens show that.
  * - kyc-checks (plan 07): the onboarding steps (PAN, Aadhaar through DigiLocker, bank account) with
@@ -290,6 +291,19 @@ export function assertPracticeCanMove() {
   settleIdentity();
   if (readOnlyClaim())
     throw new ApiError("Your account is being checked. Money can't move until a person confirms it's you.", 403, "recovery_restricted");
+}
+
+/**
+ * The server's ID gate (`customer({ money })` for an action marked `kyc: true` in
+ * src/lib/money-routes.ts): money out, investing and money in from the bank need a verified ID,
+ * 403 `kyc_required`. Checked first, before the device cap and the MPIN, as on the server; it also
+ * refuses while a recovery request waits (assertPracticeCanMove). The contract test
+ * (__tests__/contract-money-actions.test.ts) holds every Practice money move to the server's table.
+ */
+export function assertPracticeIdVerified() {
+  assertPracticeCanMove();
+  const kyc = S.me.user.kycStatus;
+  if (kyc && kyc !== "verified") throw new ApiError("Verify your ID to move money.", 403, "kyc_required");
 }
 
 /** A request that passed the automatic checks and waits for a person: the account is read-only. */

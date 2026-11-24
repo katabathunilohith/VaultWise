@@ -2,7 +2,7 @@
 
 A spending balance inside the app. Money comes in from the linked bank and goes out to a vault, to someone the customer pays, or back to the bank. A customer can also choose to have their vaults' auto-saves come from the wallet instead of the bank.
 
-Money moves the same way as everything else here: each move is one double-entry journal on the ledger plus one audit entry, in one transaction. The wallet is a ledger account of kind `wallet` and can never go below zero.
+Money moves the same way as everything else here: each move the person makes is one double-entry journal on the ledger and two audit rows, in one transaction: the ledger's `ledger.<kind>` row (every journal gets one, from `post()` in `src/lib/ledger.ts`) and the wallet's own row for what the person did (`wallet.topped_up`, `wallet.moved_to_vault`, `wallet.spent`, `wallet.cashed_out`). A scheduled auto-save from the wallet writes only the ledger's row. The wallet is a ledger account of kind `wallet` and can never go below zero.
 
 ## What it does
 
@@ -17,7 +17,7 @@ Money moves the same way as everything else here: each move is one double-entry 
 Money never goes from a vault to the wallet. Vaults release money only through proof-checked withdrawals.
 
 - **Daily limit** (optional, off by default). Turning it on or lowering it works any time. Raising it or turning it off works once per 30 days. Spends and cash-outs count toward it, per calendar day in the customer's own time zone (midnight in their country's main zone, from `src/lib/timezones.ts`; India is Asia/Kolkata), so "resets at midnight" is their midnight wherever the server runs. Payday days and personal limits still use the server's day.
-- **Auto-save source**: `bank` (default) or `wallet`. Only fixed recurring rules follow it. Percent-of-income rules and round-ups stay on the bank, because they are tied to money arriving in or leaving the bank. A run the wallet can't cover is recorded as `contribution.missed` and skipped, exactly like a run the bank can't cover today; the bank is not used as a fallback.
+- **Auto-save source**: `bank` (default) or `wallet`. Only fixed recurring rules follow it. Percent-of-income rules and round-ups stay on the bank, because they are tied to money arriving in or leaving the bank. A run the wallet can't cover is recorded as `contribution.missed` and skipped, exactly like a run the bank can't cover today; the bank is not used as a fallback. Each run (paid or missed) commits together with its move of the vault's next run date, so a failure part-way through a catch-up never pays a run twice (`runDueWalletContributions()`, like `runDueContributions()` in `src/lib/vaults.ts`).
 - **Payday** = last income credit + the median gap between the last seven paydays (credits on the same day count as one). With one payday, the gap is 30 days. With none, payday is 30 days from now. A payday that passed with no income rolls forward by whole gaps. Days to payday is at least 1.
 - **Safe to spend today** = max(0, balance − fixed auto-saves due from the wallet before payday) ÷ days to payday, rounded down, then capped by what is left of the daily limit if one is set.
 
@@ -41,7 +41,7 @@ Money routes opt in with `customer({ money: "<action>" })`: the policy map in `s
 | Route | Access | Body | Answer |
 |---|---|---|---|
 | `GET /api/v1/wallet` | `customer({ access: "read" })` | | `WalletView` (see `view.ts`) |
-| `POST /api/v1/wallet/top-up` | `customer({ tick: false, kyc: true })` (money in, no MPIN) | `{ amount }` | 201 `{ journalId, wallet }` |
+| `POST /api/v1/wallet/top-up` | `customer({ tick: false, money: "wallet_top_up" })` (money in from the bank: the ID gate, no MPIN) | `{ amount }` | 201 `{ journalId, wallet }` |
 | `POST /api/v1/wallet/move` | `customer({ tick: false, money: "wallet_move" })` | `{ vaultId, amount, pin }` | 201 `{ journalId, wallet }` |
 | `POST /api/v1/wallet/spend` | `customer({ tick: false, money: "wallet_spend" })`, new-device cap | `{ amount, payee, note?, pin }` | 201 `{ journalId, wallet }` |
 | `POST /api/v1/wallet/cash-out` | `customer({ tick: false, money: "wallet_cash_out" })`, new-device cap | `{ amount, pin }` | 201 `{ journalId, wallet }` |

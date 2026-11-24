@@ -17,7 +17,7 @@ flowchart LR
 | 1. Plan | A short plan: goal, scope, acceptance criteria | `docs/plans/NN-name.md`, linked from the [roadmap](../plans/roadmap.md) |
 | 2. Design | Modules, seams, data and API changes, risks | The same plan file, "Design" section |
 | 3. Build | Code on a feature branch, following the [module guide](module-guide.md) | `feature/<name>` branch |
-| 4. Test | Automated checks pass, plus manual checks of the flow | CI and the pull request description |
+| 4. Test | Automated checks pass, plus manual checks of the flow | CI (`.github/workflows/ci.yml`) and the pull request description |
 | 5. Review | An approved pull request | GitHub |
 | 6. Release | A version, a changelog entry, a tag, then a build or an update | `CHANGELOG.md` (server and web), `mobile/CHANGELOG.md`, git tags, EAS |
 | 7. Maintain | Bugs fixed, docs current, dependencies updated | Issues, `docs/` |
@@ -57,11 +57,13 @@ flowchart LR
 
 - `main` always works and is what gets released.
 - Work on a branch: `feature/<name>`, `fix/<name>` or `docs/<name>`.
-- Commit small, working steps. Write messages in the imperative, saying what changed and why: `Add MPIN lockout after five wrong tries`.
+- **One change per commit.** Commit small, working steps: a fix, a refactor and a docs update are three commits, so each can be reviewed, reverted or found with `git bisect` on its own. (Since 24 November 2026, after an external review found commits that mixed many changes.)
+- Write messages in the imperative, saying what changed and why: `Add MPIN lockout after five wrong tries`.
 - Never commit secrets. `.env.local` files are ignored by git; only the blank `.env.example` files are tracked.
 
 ### Code rules
 
+- Use Node 24 (`.nvmrc`; CI reads it). The root `package.json` needs 22.18 or later (`engines`): the server uses the built-in `node:sqlite`, and `npm run audit:verify` runs TypeScript with Node's type stripping.
 - Read the framework docs for the version in use before writing code. Next.js 16 and Expo SDK 58 both change APIs between versions (see `AGENTS.md` in the root and in `mobile/`).
 - Phone screens use the UI kit (`mobile/src/components/ui`) and theme tokens. Haptics go through `haptic(token)` only.
 - Install phone packages with `npx expo install <package>`, so versions match the SDK.
@@ -73,15 +75,30 @@ flowchart LR
 |---|---|---|
 | Server unit and integration tests | `npm test` (root) | Every change to `src/` |
 | Typecheck and lint, server | `npm run typecheck`, `npm run lint` (root) | Every change |
-| Typecheck and lint, phone | `npm run typecheck`, `npm run lint` (`mobile/`) | Every change to `mobile/` |
+| Typecheck and lint, phone | `npm run typecheck` (the app, then the tests with `tsconfig.test.json`), `npm run lint` (`mobile/`) | Every change to `mobile/` |
+| Phone unit and contract tests | `npm test` (`mobile/`: Jest with jest-expo) | Every change to `mobile/` |
+| Contract tests, both sides | `npx vitest run tests/contract` (root) and `npx jest contract` (`mobile/`) | When a rule that lives on both the server and the phone changes (part of `npm test` on each side) |
 | End-to-end API suite | `npm run build`, then `npm run test:e2e` (root) | Before a release that changes the server |
 | Live AI check | `npm run test:ai` (root, needs `GROQ_API_KEY`) | When prompts, models or thresholds change |
+| Verification evaluation | `npm run eval:verification` (root; `-- --live` uses Groq) | When the verification pipeline's rules, thresholds or prompt change: compare with the recorded results in [docs/evaluation](../evaluation/README.md) |
 | Expo health check | `npm run doctor` (`mobile/`) | After changing phone packages |
 | Phone bundles build | `npx expo export --platform android` (`mobile/`) | Before building an APK or publishing an update |
 | Manual check | Run the flow in the browser preview or on a phone | Every user-facing change |
 
-- New server logic comes with a test in `tests/`.
-- The phone app has no test runner yet. Adding one is in the [maintainability review](../maintainability.md). Until then, the pull request lists the manual checks done.
+- New server logic comes with a test in `tests/`; new phone logic with a test in a `__tests__` folder next to it (where tests go on each side: [module guide](module-guide.md#tests)).
+- **A rule that lives on both sides** (the server and the phone or its Practice simulator) has one vector file in `tests/contract/vectors/`, read by both suites. Change the rule, change its vector, and both suites must pass; never change a vector to make only one side pass ([tests/contract/README.md](../../tests/contract/README.md)).
+- The pull request still lists the manual checks done for anything a screen shows.
+
+### Continuous integration
+
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs on every push to `main` and every pull request, with the Node version from `.nvmrc` and no secrets (no Groq key and no Firebase, so the server runs in prototype mode and AI checks fall back to a person). Two jobs:
+
+| Job | Steps |
+|---|---|
+| Server and web app (root) | `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` |
+| Phone app (`mobile/`) | `npm ci`, `npm run typecheck`, `npx eslint src scripts --max-warnings=0`, `npm test` (reads `../tests/contract/vectors`), `npx expo export --platform web` |
+
+Merge a pull request only when both jobs are green. The end-to-end suite (`npm run test:e2e`), the live AI check and the evaluation's live pass stay manual (table above). The phone's CI lint fails on warnings, which `npm run lint` (`expo lint`) only prints, so fix warnings before pushing.
 
 ## 5. Review
 
@@ -106,13 +123,20 @@ Open a pull request into `main`. The other person reviews it. The description in
 
 ### Versions
 
-Phone app versions follow `MAJOR.MINOR.PATCH` in `mobile/app.json`: PATCH for fixes, MINOR for features, MAJOR for the first real launch or a breaking change. Build numbers count up on their own.
+One version for the whole repository, `MAJOR.MINOR.PATCH`, kept in three places: `package.json` (server and web), `mobile/package.json` and `mobile/app.json` (`expo.version`, what the phone shows). PATCH for fixes, MINOR for features, MAJOR for the first real launch or a breaking change. Build numbers count up on their own.
+
+| Version | Tag | What |
+|---|---|---|
+| 0.1.0 (2026-11-22) | `v0.1.0` on commit `012a9fc` | The first tester release |
+| 0.2.0 (2026-11-24) | `v0.2.0` on the commit that releases this round | Roadmap steps 1 to 8, the security review and the external review fixes |
+
+Each version has a section in both changelogs ([CHANGELOG.md](../../CHANGELOG.md), [mobile/CHANGELOG.md](../../mobile/CHANGELOG.md)).
 
 ### Steps
 
-1. Move the **Unreleased** notes in `mobile/CHANGELOG.md` (and `CHANGELOG.md` for server changes) under the new version and date.
-2. Set the same version in `mobile/app.json`.
-3. Commit, then tag: `git tag v0.2.0` and `git push --tags`.
+1. Move the **Unreleased** notes in `CHANGELOG.md` and `mobile/CHANGELOG.md` under the new version and date (write "Nothing yet." under **Unreleased** when one side has no changes).
+2. Set the same version in `package.json`, `mobile/package.json` and `mobile/app.json`.
+3. Commit (`Release 0.2.0`), check CI is green on that commit, then tag it and push the tag: `git tag v0.2.0` and `git push --tags`. A missing earlier tag is added the same way on its commit: `git tag v0.1.0 012a9fc`.
 4. Ship it:
    - **Code or design only:** `npm run update:apk -- "What changed"` from `mobile/`. Phones get it over the air.
    - **Native changes** (new native package, permission, icon, splash, plugins): `npm run build:apk` and share the new APK.
@@ -134,7 +158,7 @@ Phone app versions follow `MAJOR.MINOR.PATCH` in `mobile/app.json`: PATCH for fi
 
 - **Bad over-the-air update:** check out the last good commit and publish it again with `npm run update:apk -- "Roll back to vX.Y.Z"`. Phones move to it on their next two opens.
 - **Bad APK:** share the previous APK link again. Updates can't fix a broken native build.
-- **Bad server deploy:** redeploy the previous tag. Database changes must stay backwards compatible, so this is safe.
+- **Bad server deploy:** redeploy the previous tag. Database changes must stay backwards compatible, so this is safe. After restoring a database backup instead, restore the audit anchors from the same backup and run `npm run audit:verify` ([deploy/restore.md](../../deploy/restore.md)).
 
 ## 7. Maintain
 

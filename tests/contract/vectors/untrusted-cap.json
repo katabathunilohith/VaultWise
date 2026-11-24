@@ -1,0 +1,19 @@
+{
+  "rule": "untrusted-cap",
+  "about": "What a phone that isn't trusted yet may move out of the account in one go: USD 50 scaled by the currency's price level (CURRENCY_SCALE) and rounded to a whole unit, in minor units. An unknown currency counts as USD.",
+  "server": "src/lib/devices/rules.ts (untrustedMoveCap), with CURRENCY_SCALE from src/lib/shared.ts",
+  "phone": "mobile/src/lib/api/demo/devices.ts (untrustedCapFor, the Practice simulator), with CURRENCY_SCALE from mobile/src/lib/api/pay-sim.ts",
+  "cases": {
+    "untrustedCap": [
+      { "why": "USD 50", "input": { "currency": "USD" }, "expected": 5000 },
+      { "why": "INR at 80 to the dollar: ₹4,000", "input": { "currency": "INR" }, "expected": 400000 },
+      { "why": "EUR 47.50 rounds up to a whole €48", "input": { "currency": "EUR" }, "expected": 4800 },
+      { "why": "GBP 40", "input": { "currency": "GBP" }, "expected": 4000 },
+      { "why": "SGD 65", "input": { "currency": "SGD" }, "expected": 6500 },
+      { "why": "CAD 67.50 rounds up to 68", "input": { "currency": "CAD" }, "expected": 6800 },
+      { "why": "AUD 75", "input": { "currency": "AUD" }, "expected": 7500 },
+      { "why": "AED 183.50 rounds up to 184", "input": { "currency": "AED" }, "expected": 18400 },
+      { "why": "a currency without a scale counts as USD", "input": { "currency": "JPY" }, "expected": 5000 }
+    ]
+  }
+}

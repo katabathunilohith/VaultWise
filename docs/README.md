@@ -2,7 +2,7 @@
 
 Everything you need to understand, change and release Vaultwise. Start with the architecture, then read the feature you're working on.
 
-> Written against commit `012a9fc` plus the Practice-save change and the server work for plans 03, 05, 06 and 07, 22 November 2026. If the code and a doc disagree, the code wins: fix the doc in the same pull request.
+> Written against commit `012a9fc` plus the Practice-save change and the server work for plans 03, 05, 06 and 07, 22 November 2026, and updated on 24 November 2026 for version 0.2.0 (the external review: the limits, recovery and verification splits, MPIN for SIPs and Satellite, the money-in ID gate, audit anchors, the phone's test runner, contract tests and CI). If the code and a doc disagree, the code wins: fix the doc in the same pull request.
 
 ## Start here
 
@@ -15,6 +15,26 @@ Everything you need to understand, change and release Vaultwise. Start with the 
 | [Maintainability review](maintainability.md) | When planning clean-up work |
 | [Roadmap and plans](plans/roadmap.md) | To see what's next, in what order, and why |
 | [Contracts](plans/contracts.md) | The interfaces agreed for plans 02 to 08, and where the code deviates ("Deviations as built") |
+| [How this was built](how-this-was-built.md) | To see who decided what, how the AI coding assistant was used, and how the work was checked |
+| [Demo script](demo-script.md) | Before the capstone demo: the 5 to 7 minute script, what to do if something stalls, and the backup video checklist |
+
+## Testing and evaluation
+
+| Doc | Read it when |
+|---|---|
+| [Contract tests](../tests/contract/README.md) | You change a rule that lives on both the server and the phone (MPIN policy, ID numbers, device trust and cap, emergency tiers, wallet maths, the SIP rule, the money table): one vector file, two suites |
+| [Evaluation of bill verification](evaluation/README.md) | You change the verification pipeline's rules, thresholds or prompt: a labelled set of bills, `npm run eval:verification`, and the measured results ([verification-results.md](evaluation/verification-results.md)) |
+| [Development process: tests and CI](process/development-process.md#4-test) | Before a pull request: which checks to run, and what CI runs on every push |
+
+## Walkthroughs
+
+Self-study guides to the core, so either of us can explain it without the tool. Each has a diagram, a path through the code, the rules with their tests, viva questions and exercises.
+
+| Walkthrough | What it covers |
+|---|---|
+| [The ledger](walkthroughs/ledger.md) | Accounts, journals and entries; how deposits, withdrawals, emergency money and wallet moves are recorded; balances, holds and the invariants |
+| [The MPIN](walkthroughs/mpin.md) | Choosing, storing (scrypt) and checking the MPIN on every money move; the lock; reset with a texted code and the 72-hour hold; rollback mode; the phone side |
+| [The verification pipeline](walkthroughs/verification-pipeline.md) | From upload to decision: consent, forensics, the AI read, rules, thresholds, person review and appeals |
 
 ## Features
 
@@ -63,6 +83,8 @@ Everything you need to understand, change and release Vaultwise. Start with the 
 - [deploy/README.md](../deploy/README.md): putting the server online step by step (AWS Lightsail, Caddy, systemd, backups), with [deploy/restore.md](../deploy/restore.md) for restoring.
 - [mobile/DESIGN.md](../mobile/DESIGN.md) and [mobile/RESEARCH.md](../mobile/RESEARCH.md): the design rules and the research behind them.
 - [CHANGELOG.md](../CHANGELOG.md) and [mobile/CHANGELOG.md](../mobile/CHANGELOG.md): what changed on the server and web app, and in each phone app version.
+- [.github/workflows/ci.yml](../.github/workflows/ci.yml): the checks CI runs on every push to `main` and every pull request.
+- [tests/contract/README.md](../tests/contract/README.md): the contract tests shared by the server and the phone.
 - Module READMEs sit next to the code they describe, for example [src/lib/wallet/README.md](../src/lib/wallet/README.md). Each one says how to switch the module off and how to remove it.
 
 ## Keeping docs current
@@ -70,4 +92,5 @@ Everything you need to understand, change and release Vaultwise. Start with the 
 - A pull request that changes behaviour updates the matching doc. Reviewers check it (see the [development process](process/development-process.md)).
 - New feature: add a doc in `docs/features/` from the template in the [module guide](process/module-guide.md), and link it above.
 - New route, table, environment variable or command: add it to the matching page in `docs/reference/`.
+- Changed a rule that the phone or Practice also implements: update its vector in `tests/contract/vectors/` so both suites check the new answer.
 - Finished a plan: mark it done in the [roadmap](plans/roadmap.md) and move what was built into the feature docs.

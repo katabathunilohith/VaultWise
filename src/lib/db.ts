@@ -7,6 +7,23 @@ export const DATA_DIR = process.env.VAULTWISE_DATA_DIR || path.join(process.cwd(
 export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 const DB_PATH = path.join(DATA_DIR, "vaultwise.db");
 
+/**
+ * invest: Satellite strategies and their last backtest, one row per customer and strategy (B9). Used by SCHEMA and
+ * by the migration below that split the old shared table. Queries live in src/lib/invest/strategies.ts.
+ */
+const STRATEGIES_TABLE = `CREATE TABLE IF NOT EXISTS strategies (
+  user_id TEXT NOT NULL,
+  id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  params TEXT NOT NULL,
+  stage TEXT NOT NULL,
+  last_backtest TEXT,
+  paper_started_at INTEGER,
+  promoted_at INTEGER,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, id)
+);`;
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
@@ -258,16 +275,7 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS strategies (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  params TEXT NOT NULL,
-  stage TEXT NOT NULL,
-  last_backtest TEXT,
-  paper_started_at INTEGER,
-  promoted_at INTEGER,
-  created_at INTEGER NOT NULL
-);
+${STRATEGIES_TABLE}
 
 CREATE TABLE IF NOT EXISTS paper_positions (
   id TEXT PRIMARY KEY,
@@ -372,6 +380,36 @@ function migrate(d: DatabaseSync) {
   if (!proofCols.includes("ai_allowed")) d.exec("ALTER TABLE proofs ADD COLUMN ai_allowed INTEGER NOT NULL DEFAULT 0");
   // Sign-ups waiting for an ID check used to start at KYC level 0; the rule is 1 (src/lib/kyc/levels.ts).
   if (userCols.includes("kyc_status")) d.exec("UPDATE users SET kyc_level = 1 WHERE kyc_status IN ('pending', 'needs_review') AND kyc_level = 0");
+  // invest: strategies used to be one row per strategy for every customer (B9).
+  const strategyCols = (d.prepare("PRAGMA table_info(strategies)").all() as { name: string }[]).map((c) => c.name);
+  if (!strategyCols.includes("user_id")) splitSharedStrategies(d);
+}
+
+/**
+ * invest (B9): rebuilds the old shared `strategies` table with one row per customer. A shared row held the last
+ * backtest anyone ran, so it goes to the customer who ran it: the newest `strategy.gate_*` audit entry for that
+ * strategy. A row with no such entry has no owner to give it to and is dropped (it's a backtest result the
+ * customer can run again). All or nothing, inside a savepoint.
+ */
+function splitSharedStrategies(d: DatabaseSync) {
+  d.exec("SAVEPOINT split_strategies");
+  try {
+    d.exec("ALTER TABLE strategies RENAME TO strategies_shared");
+    d.exec(STRATEGIES_TABLE);
+    d.exec(`INSERT INTO strategies (user_id, id, name, params, stage, last_backtest, paper_started_at, promoted_at, created_at)
+      SELECT a.user_id, s.id, s.name, s.params, s.stage, s.last_backtest, s.paper_started_at, s.promoted_at, s.created_at
+      FROM strategies_shared s
+      JOIN audit_log a ON a.id = (
+        SELECT MAX(id) FROM audit_log
+        WHERE entity_type = 'strategy' AND entity_id = s.id AND action IN ('strategy.gate_passed', 'strategy.gate_failed') AND user_id IS NOT NULL
+      )`);
+    d.exec("DROP TABLE strategies_shared");
+    d.exec("RELEASE split_strategies");
+  } catch (e) {
+    d.exec("ROLLBACK TO split_strategies");
+    d.exec("RELEASE split_strategies");
+    throw e;
+  }
 }
 
 function open(): DatabaseSync {

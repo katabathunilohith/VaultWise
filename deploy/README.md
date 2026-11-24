@@ -318,8 +318,8 @@ must show no local changes), then run the three `sudo install` lines from step 1
 
 ### 17. Nightly backups
 
-`deploy/backup.sh` copies the database safely while the app runs, checks the copy, packs the photos with it, and keeps
-14 days of backups in `/var/backups/vaultwise`. Step 12 installed it as the root-owned `/usr/local/sbin/vaultwise-backup`;
+`deploy/backup.sh` copies the database safely while the app runs, checks the copy, packs the photos and the audit
+anchors (below) with it, and keeps 14 days of backups in `/var/backups/vaultwise`. Step 12 installed it as the root-owned `/usr/local/sbin/vaultwise-backup`;
 cron runs that copy, never the one in `/opt/vaultwise`. Schedule it and run it once:
 
 ```bash
@@ -353,6 +353,32 @@ The server clock is UTC, so `30 21` runs at 03:00 IST. The last command should p
   ```
 
   The file holds personal data: keep it on an encrypted drive and delete copies older than 14 days.
+
+**Audit anchors.** Every important action is written to a hash-chained audit log in the database, but someone who can
+rewrite the database could rebuild the whole chain. So the app also writes the chain's head (the newest row's id and
+hash, and the row count) as one line to `/var/lib/vaultwise/audit-anchors.jsonl` when it starts and once a day, and
+the same line to its log, which the journal keeps (`journalctl -u vaultwise -o cat | grep audit_anchor`). The nightly
+backup copies the file (to S3 too, when set up) and checks the newest anchor against the database copy: a mismatch
+prints `AUDIT ANCHOR MISMATCH` in the backup log and the run fails.
+
+The full check walks every hash again and compares the chain with every anchor. Run it as the app user, never as root,
+once a month with the restore test and whenever the backup log shows a mismatch. It must end with `OK:`:
+
+```bash
+sudo -u vaultwise -H bash -c 'cd /opt/vaultwise && export VAULTWISE_DATA_DIR=/var/lib/vaultwise && set -a && . /etc/vaultwise.env && set +a && npm run audit:verify'
+```
+
+To check the journal's copy as well (only lines since the last restore, if there was one, will match):
+
+```bash
+sudo journalctl -u vaultwise -o cat --no-pager | grep audit_anchor | sudo tee /var/lib/vaultwise/journal-anchors.jsonl > /dev/null
+sudo chown vaultwise:vaultwise /var/lib/vaultwise/journal-anchors.jsonl
+sudo -u vaultwise -H bash -c 'cd /opt/vaultwise && VAULTWISE_DATA_DIR=/var/lib/vaultwise npm run audit:verify -- --anchors /var/lib/vaultwise/journal-anchors.jsonl'
+sudo rm /var/lib/vaultwise/journal-anchors.jsonl
+```
+
+Optional: after the first start, `sudo chattr +a /var/lib/vaultwise/audit-anchors.jsonl` makes the file append-only,
+even for the app (it only ever appends). Only root can undo that (`sudo chattr -a ...`), which a restore needs.
 
 ### 18. Test a restore
 
@@ -410,6 +436,7 @@ The `tester-live` profile in `mobile/eas.json` makes an Android APK that talks t
 | No certificate / browser warning | Ports 80 and 443 open (step 7)? Domain points here (step 8)? `journalctl -u caddy -n 50 --no-pager` |
 | Sign-in fails on the website | Your domain is in Firebase's **Authorised domains** (step 3), and the `NEXT_PUBLIC_FIREBASE_*` values are right. Rebuild after fixing them (step 15) |
 | Wrong or lost data | [restore.md](restore.md) |
+| `AUDIT ANCHOR MISMATCH` in `/var/log/vaultwise-backup.log`, or `npm run audit:verify` fails | The audit log may have been changed. Don't restore or delete anything yet: keep the server, the backups, S3 and the journal as they are, and run the checker on older backups (`-- --db <backup>/vaultwise.db --anchors <backup>/audit-anchors.jsonl`) to find when it changed |
 
 **Turning it off (rollback).** Point the tester build back at Practice with an over-the-air update, then stop the
 server: `sudo systemctl stop vaultwise && sudo systemctl disable vaultwise`. The data stays in the snapshots and
@@ -423,7 +450,7 @@ first if you need the data, and remember the privacy policy promises to delete i
 | `Caddyfile` | HTTPS reverse proxy to the app on `127.0.0.1:3000` | `/etc/caddy/Caddyfile` |
 | `vaultwise.service` | Runs `npm start` as the `vaultwise` user, with `/etc/vaultwise.env` and `VAULTWISE_DATA_DIR=/var/lib/vaultwise` | `/etc/systemd/system/vaultwise.service` (root, 0644) |
 | `update.sh` | Pull and build as `vaultwise`, restart, wait until it answers; shows changes to the installed deploy files | `/usr/local/sbin/vaultwise-update` (root, 0755), run with `sudo` |
-| `backup.sh` | Nightly database and photo backup, keeps 14 days, optional S3 copy (`BACKUP_S3_URI`) | `/usr/local/sbin/vaultwise-backup` (root, 0755), run by `/etc/cron.d/vaultwise-backup` |
+| `backup.sh` | Nightly database, photo and audit-anchor backup with an anchor check, keeps 14 days, optional S3 copy (`BACKUP_S3_URI`) | `/usr/local/sbin/vaultwise-backup` (root, 0755), run by `/etc/cron.d/vaultwise-backup` |
 
 Root only ever runs the installed, root-owned copies. The files in `/opt/vaultwise/deploy` are the source you read and
 install from (step 15), never something root runs.

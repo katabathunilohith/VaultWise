@@ -88,7 +88,7 @@ stateDiagram-v2
 ```
 
 - Uploads are accepted only while the status is `requested`, `optional`, `overdue` or `rejected`; otherwise 409.
-- `createProof()` sets `submitted` and stores `receipt_proof_id`. `applyOutcome()` in [pipeline.ts](../../src/lib/verification/pipeline.ts) sets `verified`, `in_review` or `rejected`, for both the model and a human reviewer.
+- `createProof()` sets `submitted` and stores `receipt_proof_id`. `applyOutcome()` in [persistence.ts](../../src/lib/verification/persistence.ts) sets `verified`, `in_review` or `rejected`, for both the model and a human reviewer.
 - Optional receipts never become overdue. An overdue flag stays open after a later upload.
 
 ### Phone flow
@@ -121,14 +121,14 @@ From `Released`, "add receipt" swaps the modal to `?receipt=<id>` ([ReceiptUploa
 | --- | --- | --- |
 | [src/lib/emergency.ts](../../src/lib/emergency.ts) | Cascade, guardrails, execution, settlement | `emergencyStatus()` caps, counts, vaults, last 20 requests; `planEmergency()` dry-run plan and guardrails; `executeEmergency()` validate, pay Tier 1, save, audit, flag; `settleEmergencies()` release held money, mark overdue; `viewRequest()` row to API shape |
 | [src/lib/compliance.ts](../../src/lib/compliance.ts) | Per-market emergency rules | `rulesFor()` market rule set |
-| [src/lib/limits.ts](../../src/lib/limits.ts) | Personal monthly emergency limit | `effectiveEmergencyCap()` stricter of market and personal cap |
+| [src/lib/limits/store.ts](../../src/lib/limits/store.ts) | Personal monthly emergency limit | `effectiveEmergencyCap()` stricter of market and personal cap |
 | [src/lib/fraud.ts](../../src/lib/fraud.ts) | Risk score and flags | `emergencyRiskScore()` 0-100 score; `raiseFlag()` open a flag (see [fraud-and-audit.md](fraud-and-audit.md)) |
 | [src/lib/vaults.ts](../../src/lib/vaults.ts) | Holds and vault views | `heldFor()` held amount incl. emergency; `listVaults()` open vaults oldest first |
 | [src/lib/ledger.ts](../../src/lib/ledger.ts) | Money movement | `transfer()` vault to bank journal; `userAccount()` bank account |
 | [src/lib/users.ts](../../src/lib/users.ts) | PIN check | `checkPin()` scrypt compare |
 | [src/lib/scheduler.ts](../../src/lib/scheduler.ts) | Lazy scheduler | `tick()` calls `settleEmergencies()` |
 | [src/lib/shared.ts](../../src/lib/shared.ts) | Reason codes | `EMERGENCY_REASONS` seven codes |
-| [src/lib/verification/pipeline.ts](../../src/lib/verification/pipeline.ts) | Receipt proofs | `createProof()` sets `submitted`; `runPipeline()` decides; `reviewDecision()` human decision |
+| [src/lib/verification/](../../src/lib/verification/README.md) | Receipt proofs | `createProof()` sets `submitted` (`proofs.ts`); `runPipeline()` decides (`pipeline.ts`); `reviewDecision()` human decision (`review.ts`); `applyOutcome()` sets the receipt status (`persistence.ts`) |
 | [src/app/api/v1/emergency/](../../src/app/api/v1/emergency/) | Route handlers | `GET` status, `POST preview`, `POST withdrawals`, `POST [id]/receipt` |
 
 ### Web app
@@ -245,5 +245,5 @@ There are no phone tests for this area.
 - **SRP.** `emergencyStatus()` and `planEmergency()` mix SQL counts, policy and customer-facing copy (`fmtMoney` strings in guardrail details). A pure `evaluateGuardrails(stats, rules, amount)` returning codes would be easier to test and translate.
 - **OCP.** Tier membership (`health` only) and `TIER2_ORDER` are hard-coded in [emergency.ts](../../src/lib/emergency.ts); the phone has its own copy in `categories.ts`, and the simulator uses a different order.
 - **Duplication.** The "receipt can be uploaded" status list appears in the receipt route, the web page, `copy.ts` and the simulator; `EmergencyTrack.tsx` maps statuses again with regexes. "Used this month" SQL and `monthStart()` are repeated in [limits.ts](../../src/lib/limits.ts). The web page redeclares the plan types instead of importing them.
-- **Coupling.** The audit write and the money move share one transaction, which is right for success but loses failure records. Receipt status changes happen in [pipeline.ts](../../src/lib/verification/pipeline.ts) by raw SQL on `emergency_requests`, outside this module.
+- **Coupling.** The audit write and the money move share one transaction, which is right for success but loses failure records. Receipt status changes happen in the verification module ([proofs.ts](../../src/lib/verification/proofs.ts) and [persistence.ts](../../src/lib/verification/persistence.ts)) by raw SQL on `emergency_requests`, outside this module.
 - **LSP.** The Practice `emergencyWithdraw` satisfies the same type as the live one but behaves differently (see above). A shared contract test would catch drift.

@@ -2,8 +2,7 @@ import { z } from "zod";
 import { body, customer, handle, json } from "@/lib/api";
 import { run } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { riskProfile } from "@/lib/invest/core";
-import { BANDS, missingAnswers, modelPortfolio, QUESTIONS, scoreAnswers } from "@/lib/invest/profile";
+import { riskProfile, BANDS, missingAnswers, modelPortfolio, QUESTIONS, scoreAnswers } from "@/lib/invest";
 import { HttpError } from "@/lib/users";
 
 export const GET = handle(async () => {

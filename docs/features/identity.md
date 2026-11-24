@@ -1,6 +1,6 @@
 # Identity: sign-in, ID checks, recovery and closing an account
 
-> People sign in with Firebase, verify a government ID before money can leave, get back in with that ID if they lose their login, and a reviewer decides anything the automatic checks are unsure about.
+> People sign in with Firebase, verify a government ID before money can move in or out, get back in with that ID if they lose their login, and a reviewer decides anything the automatic checks are unsure about.
 
 **Status:** partly built. Sign-in, sessions, access rules, recovery claims, the reviewer console and account closing are built. The ID photo check is a Practice-grade check (vision model plus rules), not official KYC; the official provider slot and real email delivery are not built. The steps flow for India (PAN, Aadhaar through DigiLocker, bank account by reverse penny drop, [plan 07](../plans/07-onboarding-checks.md)) is built on the server and web with a test provider and a Setu adapter that hasn't run against Setu yet. The phone has the same steps against a live server and simulates them in Practice ([On the phone](#on-the-phone)). · **Switch:** `FIREBASE_PROJECT_ID` on the server (unset = prototype mode); `KYC_FLOW` (`photo` or `steps`). Web: `NEXT_PUBLIC_FIREBASE_*` plus `IDENTITY_ENABLED`. Phone: `EXPO_PUBLIC_FIREBASE_*` plus `SIGN_IN_ENABLED`, `KYC_ENABLED`, `RECOVERY_ENABLED`.
 
@@ -42,7 +42,7 @@ flowchart LR
     API["handle(), customer(), admin()<br/>src/lib/api.ts"]
     Auth["src/lib/auth<br/>session, identities, account"]
     Kyc["src/lib/kyc<br/>ids, secret, analyse, store, service"]
-    Rec["src/lib/recovery<br/>claims, limits, tokens, notify, service"]
+    Rec["src/lib/recovery<br/>service: find, reset, claimant, admin<br/>claims, limits, tokens, notify"]
     DB[("SQLite<br/>identities, users, kyc_records,<br/>recovery_claims, recovery_attempts")]
   end
   API --> Auth
@@ -86,7 +86,7 @@ flowchart TD
   K -- no --> OK["Return the wallet"]
 ```
 
-`access` defaults to `"write"`. GET routes pass `{ access: "read" }`. Money routes pass `{ money: "<action>" }`, and the map in `src/lib/money-routes.ts` decides whether that action keeps the KYC gate (see [mpin.md](mpin.md)); a few money-in routes still pass `{ kyc: true }` directly. Only two routes opt in with `recovery: true`: `GET /api/v1/dashboard` and `GET /api/v1/vaults`. `GET /api/v1/me` calls `session()` directly, so it answers during recovery but shows only the first name, a masked email and no risk profile.
+`access` defaults to `"write"`. GET routes pass `{ access: "read" }`. Money routes pass `{ money: "<action>" }`, and the map in `src/lib/money-routes.ts` decides whether that action keeps the KYC gate (see [mpin.md](mpin.md)). Since 2026-11-24 money coming in from the linked bank has its own actions with the gate and no MPIN (`wallet_top_up`, `vault_deposit`, `bank_simulate`, `roundup_sweep`, marked `moneyIn: true`; security review gap 7), so a vault deposit and a new vault's opening deposit now need a verified ID too (403 `kyc_required`). `POST /vaults` applies the gate only when the body has an `initialDeposit`, through `moneyGate(user, "vault_deposit")` in `src/lib/api.ts`, which calls `assertKycGate()` from `session.ts` before anything is written. Three routes that move no money still pass `{ kyc: true }` directly: uploading a proof (`POST /vaults/{id}/proofs`), an emergency receipt and `POST /invest/satellite/run`. Only two routes opt in with `recovery: true`: `GET /api/v1/dashboard` and `GET /api/v1/vaults`. `GET /api/v1/me` calls `session()` directly, so it answers during recovery but shows only the first name, a masked email and no risk profile.
 
 **Admin routes** call `admin()`, which calls `requireAdmin()`. Prototype mode is open and records the reviewer as `ops.reviewer@vaultwise`. Firebase mode needs a valid token whose email is verified and listed in `ADMIN_EMAILS`, otherwise 403 `admin_only`. The reviewer does not need a wallet.
 
@@ -173,9 +173,14 @@ flowchart LR
 | Forgot which email | `POST /recovery/find` then `/recovery/reset { findToken }` | No | Masked email; the reset goes to the full address the client never sees |
 | Lost the login | Make a new login, then `POST /recovery/claim` | Yes, a login with no wallet | A claim a person decides |
 
-- **Find** ([service.ts](../../src/lib/recovery/service.ts) `findAccount()`) takes a typed number, a photo or both. It matches only a **verified** KYC record on an open account (`verifiedHolder()`). On a match with an email, it returns a `findToken`: `base64url({u, e}).HMAC`, valid for 10 minutes ([tokens.ts](../../src/lib/recovery/tokens.ts)). Every try is audited with a hashed client tag.
-- **Claim** (`createClaim()`) needs a photo. It matches the same way, adds checks (name on account, matched ID, new sign-in email, account email, other pending claims), then decides **provisional access**. Provisional (`access: "read_only"`) needs every one of: AI read the card, it is an ID document of the chosen type, legible, not expired, no edit signals, the number read from the card equals the matched number and any typed number, and the name is a match or partial match. Then the new login's identity becomes `recovery_pending` and it gets the read-only allowlist. Otherwise (`"after_approval"`) the login stays unbound and sees nothing until approval.
-- **Notices** ([notify.ts](../../src/lib/recovery/notify.ts)) go to the account's current email: `recovery_started`, `recovery_approved`, `recovery_rejected`, `recovery_cancelled`. There is no email provider: `deliver()` logs a masked line and an audit row `notice.<kind>` is written.
+Routes import the use cases from [service.ts](../../src/lib/recovery/service.ts), which only re-exports them; each lives in its own file (split 2026-11-24, no behaviour change apart from the two fixes below).
+
+- **Find** (`findAccount()` in [find.ts](../../src/lib/recovery/find.ts)) takes a typed number, a photo or both. It matches only a **verified** KYC record on an open account (`verifiedHolder()`). On a match with an email, it returns a `findToken`: `base64url({u, e}).HMAC`, valid for 10 minutes ([tokens.ts](../../src/lib/recovery/tokens.ts)). Every try is audited with a hashed client tag.
+- **Reset** (`requestReset()` in [reset.ts](../../src/lib/recovery/reset.ts)) never says whether the account exists; the email itself is sent by `sendPasswordReset()` in [reset-email.ts](../../src/lib/recovery/reset-email.ts) (Identity Toolkit, needs `FIREBASE_WEB_API_KEY`; it never throws). Find and claim share the ID form and the number read from the photo (`numberFrom()` in [id-form.ts](../../src/lib/recovery/id-form.ts)).
+- **Claim** (`createClaim()` in [claimant.ts](../../src/lib/recovery/claimant.ts)) needs a photo. It matches the same way, adds checks (name on account, matched ID, new sign-in email, account email, other pending claims), then decides **provisional access** (`claimChecks()` in [claim-checks.ts](../../src/lib/recovery/claim-checks.ts), pure). Provisional (`access: "read_only"`) needs every one of: AI read the card, it is an ID document of the chosen type, legible, not expired, no edit signals, the number read from the card equals the matched number and any typed number, and the name is a match or partial match. Then the new login's identity becomes `recovery_pending` and it gets the read-only allowlist. Otherwise (`"after_approval"`) the login stays unbound and sees nothing until approval.
+- **The claim is recorded in one transaction that reads the sign-in again (2026-11-24).** Reading the card takes seconds, so if the same sign-in opened a wallet meanwhile the claim is refused with 409 `has_wallet` (409 `claim_pending` if it became `recovery_pending` or has another pending claim), nothing is bound and the stored photo is deleted. Before, the claim went ahead and could move the sign-in off its new wallet, or leave that wallet with no sign-in.
+- **`notifiedEmail`** in the claimant's view (`claimView()` in [claim-view.ts](../../src/lib/recovery/claim-view.ts)) is the address the "recovery started" notice went to, stored on the claim as `recovery_claims.notified_email` (`""` when the account had no email, shown as `null`). So it no longer changes when approval makes the new sign-in's email the account's (2026-11-24). Claims made before then have `NULL` there and show the account's current email, as before.
+- **Notices** ([notify.ts](../../src/lib/recovery/notify.ts)), sent from `claimant.ts` and `admin.ts`, go to the account's current email: `recovery_started`, `recovery_approved`, `recovery_rejected`, `recovery_cancelled`. There is no email provider: `deliver()` logs a masked line and an audit row `notice.<kind>` is written.
 
 ```mermaid
 stateDiagram-v2
@@ -186,7 +191,7 @@ stateDiagram-v2
   pending --> expired: 7 days with no decision
 ```
 
-**Approve**: the claimant identity becomes `active` on the wallet, every other identity for that wallet becomes `disabled`, `users.email` becomes the claimant's email, and other pending claims for the wallet are rejected. Approval answers 409 `claimant_has_wallet` if the claimant now has a different open wallet. **Reject, cancel, expire**: the claimant is unbound and the claim photo is deleted. Expiry is lazy: it runs when the claimant makes a request, and when the queue or a claim is read.
+**Approve** (`decideClaim()` in [admin.ts](../../src/lib/recovery/admin.ts), with `recoveryQueue()`): the claimant identity becomes `active` on the wallet, every other identity for that wallet becomes `disabled`, `users.email` becomes the claimant's email, and other pending claims for the wallet are rejected. Approval answers 409 `claimant_has_wallet` if the claimant now has a different open wallet. **Reject, cancel, expire**: the claimant is unbound and the claim photo is deleted. Expiry is lazy: it runs when the claimant makes a request, and when the queue or a claim is read.
 
 ### 5. Closing an account
 
@@ -211,13 +216,13 @@ In Firebase mode, `POST /api/v1/reset` calls `resolveCustomer({ access: "write" 
 
 | File | What it holds | Key exports |
 |---|---|---|
-| [src/lib/auth/config.ts](../../src/lib/auth/config.ts) | Mode and switches, read on every call | `authMode()` prototype or firebase; `adminEmails()` parsed list; `kycEnforced()` new sign-ups pending; `kycGateOn()` money-out gate |
+| [src/lib/auth/config.ts](../../src/lib/auth/config.ts) | Mode and switches, read on every call | `authMode()` prototype or firebase; `adminEmails()` parsed list; `kycEnforced()` new sign-ups pending; `kycGateOn()` the money gate (money out, investing, and money in from the bank) |
 | [src/lib/auth/verify.ts](../../src/lib/auth/verify.ts) | Firebase token check | `verifyIdToken()` claims to `VerifiedToken` (with `signedInAt`); `setVerificationKey()` test key |
 | [src/lib/auth/context.ts](../../src/lib/auth/context.ts) | Request headers and client keys | `withRequest()` binds headers; `requestHeaders()` reads them; `bearerToken()`; `clientIp()` proxy-aware IP; `clientKeys()` rate-limit keys |
 | [src/lib/auth/identities.ts](../../src/lib/auth/identities.ts) | `identities` table, `users.closed_at` | `bindIdentity()` upsert; `identityByUid()`; `unbindIdentity()`; `disableOtherIdentities()`; `isClosed()`; `markClosed()` |
-| [src/lib/auth/session.ts](../../src/lib/auth/session.ts) | Session and gates | `session()` who is calling, the per-person rate limit and the calling device; `signedIn()` token or 401; `resolveCustomer()` gates; `optionalUser()` never throws; `requireAdmin()`; `isAdminRequest()` |
+| [src/lib/auth/session.ts](../../src/lib/auth/session.ts) | Session and gates | `session()` who is calling, the per-person rate limit and the calling device; `signedIn()` token or 401; `resolveCustomer()` gates; `assertKycGate()` the ID gate on its own (403 `kyc_required`); `optionalUser()` never throws; `requireAdmin()`; `isAdminRequest()` |
 | [src/lib/auth/account.ts](../../src/lib/auth/account.ts) | Bind and close | `bindNewWallet()` onboarding bind; `closeAccount()` close and disable |
-| [src/lib/api.ts](../../src/lib/api.ts) | Route helpers | `handle()` errors and headers; `customer()` gates plus tick; `admin()` reviewer name |
+| [src/lib/api.ts](../../src/lib/api.ts) | Route helpers | `handle()` errors and headers; `customer()` gates plus tick; `moneyGate()` a money action's ID gate for a route that only sometimes moves money (`POST /vaults` with `initialDeposit`); `admin()` reviewer name |
 | [src/lib/ai-consent.ts](../../src/lib/ai-consent.ts) | `x-ai-consent` header | `aiConsented()` true only for `yes` (a missing header means no; see [ai.md](ai.md)) |
 | [src/lib/kyc/ids.ts](../../src/lib/kyc/ids.ts) | ID types, formats, masking | `docTypesFor()` per market; `validateIdNumber()`; `verhoeffValid()`; `maskId()`; `maskEmail()`; `last4()` |
 | [src/lib/kyc/secret.ts](../../src/lib/kyc/secret.ts) | HMAC with `IDENTITY_SECRET` | `idHash()` number hash; `sign()` token MAC; `safeEqual()`; `assertIdentitySecret()` |
@@ -239,7 +244,14 @@ In Firebase mode, `POST /api/v1/reset` calls `resolveCustomer({ access: "write" 
 | [src/lib/kyc/checks/service.ts](../../src/lib/kyc/checks/service.ts) | Steps use cases | `submitPan()`; `startDigiLocker()`; `finishDigiLocker()`; `startBank()`; `finishBank()`; internal `conclude()` |
 | [src/lib/bank/index.ts](../../src/lib/bank/index.ts), [store.ts](../../src/lib/bank/store.ts) | `bank_accounts` | `saveBankAccount()` last 4 only; `verifyBankAccount()`; `linkedBankAccount()`; `bankAccountById()` |
 | [src/lib/recovery/claims.ts](../../src/lib/recovery/claims.ts) | `recovery_claims`, `recovery_attempts`, expiry | `pendingClaimFor()`; `expireClaims()`; `settleExpiredClaimFor()`; `deleteClaimPhoto()`; `CLAIM_TTL_MS` |
-| [src/lib/recovery/service.ts](../../src/lib/recovery/service.ts) | Recovery use cases | `findAccount()`; `requestReset()`; `createClaim()`; `cancelClaim()`; `claimStatus()`; `recoveryQueue()`; `decideClaim()` |
+| [src/lib/recovery/service.ts](../../src/lib/recovery/service.ts) | The use cases routes call (re-exports only) | `findAccount()`; `requestReset()`; `createClaim()`; `cancelClaim()`; `claimStatus()`; `recoveryQueue()`; `decideClaim()`; `claimView()` |
+| [src/lib/recovery/id-form.ts](../../src/lib/recovery/id-form.ts) | The ID form shared by find and claim | `IdForm`; `numberFrom()` typed number or read from the photo; `userById()` |
+| [src/lib/recovery/find.ts](../../src/lib/recovery/find.ts) | Find an account by its verified ID | `findAccount()` → `FindAnswer` |
+| [src/lib/recovery/reset.ts](../../src/lib/recovery/reset.ts), [reset-email.ts](../../src/lib/recovery/reset-email.ts) | Password reset; the reset email sender | `requestReset()`; `sendPasswordReset()` |
+| [src/lib/recovery/claim-checks.ts](../../src/lib/recovery/claim-checks.ts) | Pure: the reviewer's checks and the provisional-access rule | `claimChecks()` → `{ checks, reasons, provisional }` |
+| [src/lib/recovery/claimant.ts](../../src/lib/recovery/claimant.ts) | The claimant's side | `createClaim()`; `claimStatus()`; `cancelClaim()` |
+| [src/lib/recovery/admin.ts](../../src/lib/recovery/admin.ts) | The reviewer's side | `recoveryQueue()`; `decideClaim()` |
+| [src/lib/recovery/claim-view.ts](../../src/lib/recovery/claim-view.ts) | A claim as the claimant sees it | `claimView()` → `ClaimView` (`notifiedEmail` from `notified_email`) |
 | [src/lib/recovery/limits.ts](../../src/lib/recovery/limits.ts) | Rate limits | `spendTry()` per key and global; `clientTag()` hashed tag; `LIMITS` |
 | [src/lib/recovery/tokens.ts](../../src/lib/recovery/tokens.ts), [notify.ts](../../src/lib/recovery/notify.ts), [config.ts](../../src/lib/recovery/config.ts) | Find tokens, notices, switch | `makeFindToken()`; `readFindToken()`; `notifyAccount()`; `assertRecoveryEnabled()` |
 | Steps routes: [kyc/pan](../../src/app/api/v1/kyc/pan/route.ts), [kyc/digilocker/start](../../src/app/api/v1/kyc/digilocker/start/route.ts), [finish](../../src/app/api/v1/kyc/digilocker/finish/route.ts), [kyc/bank/start](../../src/app/api/v1/kyc/bank/start/route.ts), [finish](../../src/app/api/v1/kyc/bank/finish/route.ts) | Thin handlers, `customer({ tick: false })` and zod | `POST` |
@@ -336,7 +348,7 @@ Steps-flow errors:
 | `identities` | `uid` PK, `user_id`, `email`, `provider`, `status` (`active`, `recovery_pending`, `disabled`), `created_at`, `updated_at` | Created on first use. `user_id NULL` = signed in, no wallet |
 | `users` (identity columns) | `kyc_status`, `kyc_level`, `email`, `closed_at` | `closed_at` added by `ensureIdentityTables()`; `email` is overwritten on recovery approval |
 | `kyc_records` | `id`, `user_id`, `doc_type`, `id_last4`, `id_hash`, `name_on_doc`, `dob`, `status`, `provider`, `checks`, `reasons`, `file_path`, `decided_by`, `decided_at`, `created_at` | Indexes on `(user_id, created_at)` and `id_hash` |
-| `recovery_claims` | `id`, `claimant_uid`, `claimant_email`, `user_id`, `doc_type`, `id_last4`, `status`, `checks`, `reasons`, `file_path`, `provisional`, `created_at`, `decided_at`, `decided_by` | Unique index: one `pending` claim per `claimant_uid` |
+| `recovery_claims` | `id`, `claimant_uid`, `claimant_email`, `user_id`, `doc_type`, `id_last4`, `status`, `checks`, `reasons`, `file_path`, `provisional`, `notified_email`, `created_at`, `decided_at`, `decided_by` | Unique index: one `pending` claim per `claimant_uid`. `provisional` and `notified_email` are added to an older table on first use (`notified_email` since 2026-11-24: the address the "recovery started" notice went to, `""` if none, `NULL` on older claims) |
 | `recovery_attempts` | `id`, `bucket`, `client_key` (SHA-256, 32 hex), `ts` | Rows older than 7 days are pruned on each try |
 | `kyc_checks` | `id` (`chk_…`), `user_id`, `step` (`pan`, `aadhaar`, `bank`), `status` (`started`, `done`, `review`, `failed`, `expired`), `provider`, `request_id`, `last4`, `id_hash` (PAN only), `name`, `year_of_birth`, `name_match`, `bank_account_id`, `reasons` (JSON, shown to the customer), `review_note` (reviewer only, e.g. a duplicate PAN), `expires_at`, `created_at`, `updated_at` | Steps flow. One row per try. Created on first use (`review_note` is added to older tables). Indexes on `(user_id, step, created_at)` and `id_hash` |
 | `bank_accounts` | `id` (`bank_…`), `user_id`, `ifsc`, `account_last4`, `holder_name`, `verified_at`, `provider_ref`, `created_at` | Steps flow. Created on first use. Never the full account number. `verified_at` is set when the bank step passed, or when a person approves a check whose holder name differed; null until then, and for good after a rejection. |
@@ -384,7 +396,7 @@ The web app keeps, beyond the Firebase SDK's storage: `vw-device-id` and `vw-dev
 | `FIREBASE_PROJECT_ID` | Server | Set = firebase mode |
 | `ADMIN_EMAILS` | Server | Comma list of reviewer emails (firebase mode) |
 | `IDENTITY_SECRET` | Server | HMAC key; required in firebase mode or `NODE_ENV=production`, else 500 `server_config`; dev key with a warning otherwise |
-| `KYC_ENFORCED` | Server | New sign-ups start `pending` (firebase default on, prototype only if `"true"`); `"false"` also turns off the money-out gate |
+| `KYC_ENFORCED` | Server | New sign-ups start `pending` (firebase default on, prototype only if `"true"`); `"false"` also turns off the money gate (money out, investing, and money in from the bank) |
 | `KYC_PROVIDER` | Server | `practice` (default) or `external` (not built); unknown values fall back to `practice` |
 | `GROQ_API_KEY`, `GROQ_VISION_MODEL` | Server | Vision model for reading cards; unset sends every check to a person |
 | `RECOVERY_ENABLED` | Server | `"false"` = 404 `recovery_off` on find, reset, claim |
@@ -406,11 +418,12 @@ The web app keeps, beyond the Firebase SDK's storage: `vw-device-id` and `vw-dev
 |---|---|
 | [tests/auth.test.ts](../../tests/auth.test.ts) | Prototype mode unchanged; 401 `signed_out`; 404 `no_wallet`; onboarding bind with KYC pending; wallets kept apart; KYC gate; recovery allowlist; name lock; current PIN; admin needs verified `ADMIN_EMAILS`; reset closes one account |
 | [tests/kyc.test.ts](../../tests/kyc.test.ts) | Verhoeff and formats; masking; HMAC stability; log redaction; name matching; practice provider outcomes; duplicates; parallel reservation; photo deletion on reject; `IDENTITY_SECRET` required |
-| [tests/recovery.test.ts](../../tests/recovery.test.ts) | Find with masked email; rate limits and proxy headers; reset never reveals accounts; `findToken`; claims with and without provisional access; approve, reject, cancel, expire; parallel claims; dev CORS for `x-device-id` |
+| [tests/recovery.test.ts](../../tests/recovery.test.ts) | Find with masked email; rate limits and proxy headers; reset never reveals accounts; `findToken`; claims with and without provisional access; approve, reject, cancel, expire; parallel claims; a wallet opened by the same sign-in while the card is read stops the claim (409 `has_wallet`, nothing bound, photo deleted); the claim shows the address that was told, also after approval; dev CORS for `x-device-id` |
+| [tests/money-in.test.ts](../../tests/money-in.test.ts) | The money-in rule (2026-11-24): every money-in action has the ID gate and no MPIN; top-up, vault deposit, opening deposit, simulate and sweep are refused with 403 `kyc_required` without a verified ID and move nothing; `KYC_ENFORCED=false` turns the gate off; an empty vault needs no ID; wallet → vault keeps `wallet_move` (MPIN and ID) |
 | [tests/kyc-steps.test.ts](../../tests/kyc-steps.test.ts) | Photo flow unchanged by default and for non-India accounts; the steps from nothing to verified with the contract's shapes and no full PAN stored; the redirect URL; name mismatches, duplicate PANs and bank names going to a person; reject and start again; the bank account verified at once on a passed step, and never from a try before a rejection; steps from another provider not counted; the name held during the steps and freed by a rejection; drifted names sent to a person; 5 tries a day; provider failures not counted; `kyc_step_waiting`; expired and other people's requests; the test provider refused on production; `SETU_BASE_URL` on production and its start-up warning; DigiLocker's return link on the web; the Setu adapter with `fetch` mocked, including a full flow |
 | [tests/ai-consent.test.ts](../../tests/ai-consent.test.ts) | ID photos are not read by the AI when the request says no (or says nothing) |
 
-There are no automated tests for the web identity components or the phone identity code.
+There are no automated tests for the web identity components. On the phone, the ID number rules (`mobile/src/lib/api/identity-ids.ts`) are held to the server's `src/lib/kyc/ids.ts` by the contract vectors in `tests/contract/vectors/id-numbers.json` (`mobile/src/lib/api/__tests__/contract-id-numbers.test.ts`, 2026-11-24); the rest of the phone's identity code has no tests.
 
 ## On the phone
 
@@ -501,7 +514,7 @@ The details are in [mobile/src/features/auth/README.md](../../mobile/src/feature
 - **Tolerant readers.** Web `types.ts` and phone `identity.ts` parse answers defensively, so server shape changes fail soft.
 - **Coupling between auth and recovery.** `session.ts` imports `recovery/claims` to lapse claims, and `account.ts` edits `recovery_claims` with raw SQL after probing `sqlite_master`. Recovery also imports auth. The two packages depend on each other.
 - **Side effects in reads.** `session()` writes the identity's email and may expire claims on every request.
-- **Duplication.** Verhoeff and ID formats live in three places (server `ids.ts`, web `types.ts`, phone `identity-ids.ts`). `userById` is defined in `session.ts` and `recovery/service.ts`, and inlined in `kyc/service.ts`. The two admin photo routes are copies. `CLAIM_TTL_MS` is defined on the server, the web and in Practice. `maskEmail` is copied into Practice.
-- **SRP.** `recovery/service.ts` (388 lines) holds find, reset (including the Identity Toolkit HTTP call), claims and the admin queue.
+- **Duplication.** Verhoeff and ID formats live in three places (server `ids.ts`, web `types.ts`, phone `identity-ids.ts`). `userById` is defined in `session.ts` and `recovery/id-form.ts`, and inlined in `kyc/service.ts`. The two admin photo routes are copies. `CLAIM_TTL_MS` is defined on the server, the web and in Practice. `maskEmail` is copied into Practice.
+- **SRP (done 2026-11-24).** `recovery/service.ts` used to hold find, reset (including the Identity Toolkit HTTP call), claims and the admin queue in 388 lines. It is now a barrel over `id-form.ts`, `find.ts`, `reset.ts`, `reset-email.ts`, `claim-checks.ts`, `claimant.ts`, `admin.ts` and `claim-view.ts` (maintainability S3). The reset email sender is its own file, not yet behind an interface. `id-form.ts` still imports `validateUpload()` from the verification pipeline (maintainability C9).
 - **Schema in code.** Three `ensure*Tables()` functions create tables and add columns lazily, each with its own `WeakSet`, instead of migrations.
 - **Inconsistent answers.** `no_wallet` is 401 in prototype mode and 404 in firebase mode.

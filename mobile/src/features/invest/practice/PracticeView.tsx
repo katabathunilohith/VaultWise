@@ -1,12 +1,14 @@
 import { useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
+import { router } from "expo-router";
 import { CaretDownIcon, InfoIcon, type Icon } from "@/components/icons";
-import { Amount, Banner, Divider, MoneyText, Press, ScreenSkeleton, Stack, Txt } from "@/components/ui";
+import { Amount, Banner, Button, Divider, MoneyText, Press, ScreenSkeleton, Stack, Txt } from "@/components/ui";
 import { useInvestSatellite, usePortfolio } from "@/lib/api/hooks";
 import type { Portfolio } from "@/lib/api/types";
 import { layout, space, useTheme } from "@/theme";
 import { CalmError } from "../CalmError";
 import { Pnl } from "../Pnl";
+import { AllocateModal } from "./AllocateModal"; // mpin
 import { Blueprint, PracticeChip } from "./Blueprint";
 import { PaperPositions } from "./PaperPositions";
 import { parseSatellite, type SatelliteView } from "./parse";
@@ -17,11 +19,15 @@ const CaretUpIcon: Icon = require("phosphor-react-native/src/icons/CaretUp").Car
 /**
  * Practice (the Satellite sleeve): a strategy paper-trading with virtual money. Deliberately
  * quiet — blueprint surface, muted palette, no trade buttons, no price-move colours, no haptics,
- * no streaks, points or rankings (FCA/SEC digital engagement practices).
+ * no streaks, points or rankings (FCA/SEC digital engagement practices). The one action is setting
+ * money aside (turning it on, or more within the cap), a money move with the MPIN (AllocateModal).
  */
 export function PracticeView() {
   const pf = usePortfolio();
   const sat = useInvestSatellite();
+  const [allocating, setAllocating] = useState(false);
+  // A fresh key per open remounts the flow, so every visit starts at its first step.
+  const [opens, setOpens] = useState(0);
   if (!pf.data || !sat.data) {
     const error = pf.error ?? sat.error;
     if (error)
@@ -38,21 +44,44 @@ export function PracticeView() {
   }
   const view = parseSatellite(sat.data);
   const optedIn = pf.data.satellite.optedIn || view.optedIn;
+  const e = view.eligibility;
+  // Only when the server says it can take more: eligible, with room left under the cap (or no figure to go on).
+  const canAllocate = !!e?.eligible && view.disclosures.length > 0 && (e.headroom === null || e.headroom > 0);
+  const allocate = () => {
+    setOpens((n) => n + 1);
+    setAllocating(true);
+  };
   return (
     <Stack gap={space.lg}>
       <Blueprint>
         <PracticeChip />
-        {optedIn ? <PracticeBody satellite={pf.data.satellite} currency={pf.data.currency} view={view} /> : <PracticeOff view={view} />}
+        {optedIn ? (
+          <PracticeBody satellite={pf.data.satellite} currency={pf.data.currency} view={view} onAllocate={canAllocate ? allocate : undefined} />
+        ) : (
+          <PracticeOff view={view} onTurnOn={canAllocate ? allocate : undefined} />
+        )}
       </Blueprint>
       <Txt v="caption" color="textMuted" align="center">
         Virtual money only. Not investment advice.
       </Txt>
+      <AllocateModal
+        key={`allocate-${opens}`}
+        visible={allocating}
+        onClose={() => setAllocating(false)}
+        onAskPerson={() => router.push("/support")}
+        currency={pf.data.currency}
+        optedIn={optedIn}
+        capPct={e?.capPct ?? view.maxAllocationPct}
+        headroom={e?.headroom ?? null}
+        disclosures={view.disclosures}
+      />
     </Stack>
   );
 }
 
-function PracticeOff({ view }: { view: SatelliteView }) {
+function PracticeOff({ view, onTurnOn }: { view: SatelliteView; onTurnOn?: () => void }) {
   const cap = view.maxAllocationPct;
+  const blocker = view.eligibility?.checks.find((c) => !c.pass);
   return (
     <Stack gap={space.xs}>
       <Txt v="titleL" accessibilityRole="header">
@@ -63,14 +92,32 @@ function PracticeOff({ view }: { view: SatelliteView }) {
           cap ? `, capped at ${cap}% of your investments,` : ""
         } and kept apart from your vaults.`}
       </Txt>
-      <Txt v="bodyM" color="textMuted">
-        You can turn it on in Vaultwise on the web.
-      </Txt>
+      {onTurnOn ? (
+        <Button label="Turn on Practice" variant="tonal" size="md" onPress={onTurnOn} style={{ alignSelf: "flex-start" }} />
+      ) : blocker ? (
+        <Txt v="bodyM" color="textMuted">
+          {`Not available yet: ${blocker.label.toLowerCase()}. ${blocker.detail}`}
+        </Txt>
+      ) : (
+        <Txt v="bodyM" color="textMuted">
+          You can turn it on in Vaultwise on the web.
+        </Txt>
+      )}
     </Stack>
   );
 }
 
-function PracticeBody({ satellite, currency, view }: { satellite: Portfolio["satellite"]; currency: string; view: SatelliteView }) {
+function PracticeBody({
+  satellite,
+  currency,
+  view,
+  onAllocate,
+}: {
+  satellite: Portfolio["satellite"];
+  currency: string;
+  view: SatelliteView;
+  onAllocate?: () => void;
+}) {
   const status = statusSentence(view.stages);
   return (
     <>
@@ -88,6 +135,7 @@ function PracticeBody({ satellite, currency, view }: { satellite: Portfolio["sat
           <Pnl value={satellite.realized} currency={currency} muted />
         </Figure>
       </View>
+      {onAllocate ? <Button label="Set aside more" variant="ghost" size="sm" onPress={onAllocate} style={{ alignSelf: "flex-start" }} /> : null}
 
       <Divider />
       <Stack gap={space.xs}>

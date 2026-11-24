@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { body, customer, handle, json } from "@/lib/api";
-import { setMarketEnabled } from "@/lib/invest/satellite";
+import { setMarketEnabled } from "@/lib/invest";
 
 export const PATCH = handle(async (req: Request) => {
   const user = await customer({ tick: false });

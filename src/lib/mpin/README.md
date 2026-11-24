@@ -42,7 +42,7 @@ Both tables are created on first use, per database.
 | GET | `/api/v1/me` | | adds `mpin: { upgradeDue, lockedUntil, enforced }` (`enforced`: whether `MPIN_ENFORCED` is on; the phone copies a typed MPIN into its unlock PIN only when it is true) |
 | PATCH | `/api/v1/me` | `{ pin, currentPin }` | the same rules as `POST /mpin` |
 
-Every money route in `src/lib/money-routes.ts` accepts `pin` in its body (a form field for `POST /limits/emergency`).
+Every money route in `src/lib/money-routes.ts` with `mpin: true` accepts `pin` in its body (a form field for `POST /limits/emergency`). `POST /invest/core/sip` (`invest_sip`) checks it only when setting a SIP up or moving more money (`sipNeedsMpin()` in `src/lib/invest`); `POST /invest/satellite/opt-in` (`satellite_opt_in`) always. The money-in actions (`moneyIn: true`: `wallet_top_up`, `vault_deposit`, `bank_simulate`, `roundup_sweep`) take only the ID gate and no MPIN; `requireMpin()` returns false for them without checking anything.
 
 | Code | Status | Extra (in `MpinError.extra`) | When |
 |---|---|---|---|
@@ -59,9 +59,10 @@ The birth-date rule needs a full `YYYY-MM-DD` date of birth from a verified ID. 
 
 | File | What |
 |---|---|
-| `src/lib/money-routes.ts` | the action → `{ mpin, kyc }` map (part of this feature) |
-| `src/lib/api.ts` | `customer({ money })` applies the map's KYC gate |
-| `src/app/api/v1/vaults/[id]/withdrawals`, `wallet/{spend,cash-out,move,settings}`, `emergency/withdrawals`, `limits`, `limits/emergency`, `invest/core/buy`, `reset` | `requireMpin()` with the body's `pin` |
+| `src/lib/money-routes.ts` | the action → `{ mpin, kyc, moneyIn? }` map (part of this feature) |
+| `src/lib/api.ts` | `customer({ money })` applies the map's KYC gate; `moneyGate(user, action)` applies it after the body is read (POST /vaults with an opening deposit) |
+| `src/app/api/v1/vaults/[id]/withdrawals`, `wallet/{spend,cash-out,move,settings}`, `emergency/withdrawals`, `limits`, `limits/emergency`, `invest/core/buy`, `invest/core/sip`, `invest/satellite/opt-in`, `reset` | `requireMpin()` with the body's `pin` |
+| `src/app/api/v1/wallet/top-up`, `vaults/[id]/deposits`, `vaults` (opening deposit), `accounts/simulate`, `accounts/sweep` | money in: the map's ID gate only |
 | `src/app/api/v1/mpin/route.ts`, `mpin/reset/route.ts` | change, and reset with a texted code (plan 06) |
 | `src/app/api/v1/me/phone/route.ts`, `devices/trust`, `devices/[id]/revoke` | `requireMpin(..., { always: true })` for the phone number and devices |
 | `src/app/api/v1/me/route.ts` | `mpin` on GET; PIN change on PATCH through `changeMpin()` |

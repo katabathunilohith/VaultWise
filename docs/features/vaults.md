@@ -19,11 +19,11 @@
 
 ### Vault lifecycle
 
-1. **Create.** `POST /api/v1/vaults` validates the body with zod, then calls `createVault()` inside one transaction. It makes a `vlt_` id, a `vault` ledger account (`ensureAccount` with `refId` = vault id), and a `vaults` row with status `locked`. Only the columns for the chosen rule are kept. A `fixed` rule defaults to `monthly` and gets `next_run_at = nextRun(createdAt)`. A joint vault adds the owner and up to 4 co-savers to `vault_members`. The audit log gets `vault.created`. The route then saves a custom rule (see [custom-rules.md](custom-rules.md)) and makes an optional opening deposit.
-2. **Category and template.** The category is the purpose. The template decides which proof verifies a withdrawal. For non-custom vaults the template equals the category. A custom vault either borrows a category's template or keeps `custom`, the strictest tier: a person confirms every withdrawal ([pipeline.ts](../../src/lib/verification/pipeline.ts) around line 673).
+1. **Create.** `POST /api/v1/vaults` validates the body with zod, then calls `createVault()` inside one transaction. It makes a `vlt_` id, a `vault` ledger account (`ensureAccount` with `refId` = vault id), and a `vaults` row with status `locked`. Only the columns for the chosen rule are kept. A `fixed` rule defaults to `monthly` and gets `next_run_at = nextRun(createdAt)`. A joint vault adds the owner and up to 4 co-savers to `vault_members`. The audit log gets `vault.created`. The route saves a custom rule (see [custom-rules.md](custom-rules.md)) and makes an optional opening deposit in the same transaction as the vault, so a deposit the bank can't cover leaves no empty vault behind (2026-11-24; before, the vault and rule were kept and only the deposit failed). An opening deposit is money in from the bank, so with `initialDeposit` the route first applies the `vault_deposit` ID gate (`moneyGate(user, "vault_deposit")` in [api.ts](../../src/lib/api.ts)): without a verified ID it answers 403 `kyc_required` before anything is written. A vault with no opening deposit needs no ID check.
+2. **Category and template.** The category is the purpose. The template decides which proof verifies a withdrawal. For non-custom vaults the template equals the category. A custom vault either borrows a category's template or keeps `custom`, the strictest tier: a person confirms every withdrawal (`strictest` in `runDecision()`, [stages/decision.ts](../../src/lib/verification/stages/decision.ts)).
 3. **Target.** `target_amount` (minor units) and an optional `target_date` (`YYYY-MM-DD`). `toView()` derives `progress = min(1, balance / target)` and `monthlyNeeded = max(0, round((target - balance) / months))`, where `months = max(1, daysLeft / 30.44)`.
 4. **Edit.** `PATCH /api/v1/vaults/{id}` changes name, target, date or rule. Changing the rule resets `next_run_at` to `nextRun(now)`.
-5. **Deposit.** `deposit()` posts a transfer from the customer's `bank` account to the vault account. Rule-driven kinds (`contribution_rule`, `roundup`) are audited as `system`, others as `user`. On a joint vault the owner's (or the given member's) `contributed` total goes up.
+5. **Deposit.** `POST /api/v1/vaults/{id}/deposits` passes `customer({ money: "vault_deposit" })`: money in from the bank needs a verified ID and no MPIN (403 `kyc_required` otherwise; since 2026-11-24, security review gap 7). `deposit()` posts a transfer from the customer's `bank` account to the vault account. Rule-driven kinds (`contribution_rule`, `roundup`) are audited as `system`, others as `user`. On a joint vault the owner's (or the given member's) `contributed` total goes up.
 6. **Withdraw.** See the flow below.
 7. **Close.** Not built on the server. `listVaults()` hides `closed` vaults and `deposit()` refuses them, but no code sets that status. The phone's "Close vault" menu sends the customer to support.
 
@@ -47,7 +47,7 @@ stateDiagram-v2
 
 1. `createWithdrawal()` checks the amount is positive and not above `available` (balance minus held), then calls `assertWithinWithdrawalLimits()` (see [limits.md](limits.md)). It inserts a `withdrawals` row with status `awaiting_proof` and audits `withdrawal.requested` with the template's proof hint. No ledger entry is made yet.
 2. The hold is computed, not posted. `heldFor()` adds the amounts of withdrawals in `awaiting_proof`, `verifying`, `in_review` or `appealed`, plus unsettled legs of emergency releases in `processing` or `cooling_off` (read from the JSON `plan` of `emergency_requests`).
-3. `POST /api/v1/vaults/{id}/proofs` (multipart) creates a proof, moves the request to `verifying`, and runs the pipeline in the background with Next's `after()`. The pipeline is documented with the verification feature; its code is [pipeline.ts](../../src/lib/verification/pipeline.ts).
+3. `POST /api/v1/vaults/{id}/proofs` (multipart) creates a proof, moves the request to `verifying`, and runs the pipeline in the background with Next's `after()`. The pipeline is documented with the verification feature ([proof-verification.md](proof-verification.md)); `runPipeline()` in [pipeline.ts](../../src/lib/verification/pipeline.ts) runs the stages in [stages/](../../src/lib/verification/stages/).
 4. On approval the pipeline calls `payoutWithdrawal()`, which posts vault → bank (kind `withdrawal`) and sets the row to `paid` with its `journal_id`.
 5. `cancelWithdrawal()` works only from `awaiting_proof`; anything else returns 409.
 6. `expireStaleWithdrawals()` (run by `tick`) marks `awaiting_proof` rows older than `PROOF_WINDOW_MS` (24 h) as `expired` and audits `withdrawal.expired`.
@@ -77,11 +77,12 @@ stateDiagram-v2
 
 ### The lazy scheduler
 
-`tick(user)` in [scheduler.ts](../../src/lib/scheduler.ts) runs, in order: auto-saves (wallet or bank), `expireStaleWithdrawals`, `revertExpiredLimitIncreases`, `settleEmergencies`, then `runDueSips` (market-data errors are swallowed and retried next tick). `customer()` in [api.ts](../../src/lib/api.ts) calls it before every route unless the route passes `tick: false`. Most write routes pass `tick: false`; most read routes run it.
+`tick(user)` in [scheduler.ts](../../src/lib/scheduler.ts) runs, in order: auto-saves (wallet or bank), `expireStaleWithdrawals`, `revertExpiredLimitIncreases`, `settleEmergencies`, `anchorAuditIfDue` (the daily audit anchor, global and at most once a day; see [fraud-and-audit.md](fraud-and-audit.md#audit-anchors)), then `runDueSips` (market-data errors are swallowed and retried next tick). `customer()` in [api.ts](../../src/lib/api.ts) calls it before every route unless the route passes `tick: false`. Most write routes pass `tick: false`; most read routes run it.
 
 ### Simulated bank account
 
 - `createUser()` opens a `bank` ledger account for every customer. It stands in for an open-banking link.
+- Both bank simulation routes count as money in from the bank: `POST /api/v1/accounts/simulate` is the money action `bank_simulate` and `POST /api/v1/accounts/sweep` is `roundup_sweep`. Each needs a verified ID and no MPIN (they passed `kyc: true` directly before 2026-11-24; the rule is the same).
 - `POST /api/v1/accounts/simulate` with `salary` credits `2150 × CURRENCY_SCALE` major units from "Acme Analytics Inc." (which fires percent rules). With `spend` it records 3 random purchases from 6 merchants, scaled the same way.
 - `GET /api/v1/accounts` returns `external_accounts` (the seed adds Harbor Federal checking ····4821 as primary, a Northwind credit card and savings account). The primary row shows the ledger bank balance. With no rows it returns a placeholder "Everyday Checking ····0000". It also returns the last 60 bank transactions, pending round-ups, the round-up vault and 30-day spend by category.
 
@@ -96,7 +97,7 @@ stateDiagram-v2
 
 ### Phone app
 
-The phone calls the same endpoints through [client.ts](../../mobile/src/lib/api/client.ts). In Practice mode, [demo/vaults.ts](../../mobile/src/lib/api/demo/vaults.ts) simulates vaults, deposits, withdrawals and limits on the device. It copies the single and daily limit checks and the one-proof-per-request rule, but it has no scheduler: fixed auto-saves never run there and requests never expire. Home's "Coming up" list ([schedule.ts](../../mobile/src/features/home/schedule.ts)) computes upcoming moves on the device. Its "Pause all auto-saves" and per-move skips are stored on the phone only; the server does not know about them.
+The phone calls the same endpoints through [client.ts](../../mobile/src/lib/api/client.ts). In Practice mode, [demo/vaults.ts](../../mobile/src/lib/api/demo/vaults.ts) simulates vaults, deposits, withdrawals and limits on the device. It copies the single and daily limit checks, the one-proof-per-request rule and the server's ID gate (`assertPracticeIdVerified()` on deposits, a new vault's opening deposit and withdrawals; Add money shows "Verify your ID" on `kyc_required`), but it has no scheduler: fixed auto-saves never run there and requests never expire. Home's "Coming up" list ([schedule.ts](../../mobile/src/features/home/schedule.ts)) computes upcoming moves on the device. Its "Pause all auto-saves" and per-move skips are stored on the phone only; the server does not know about them.
 
 ## Where the code is
 
@@ -149,21 +150,21 @@ The phone calls the same endpoints through [client.ts](../../mobile/src/lib/api/
 
 ## API endpoints
 
-"Customer" means the signed-in person's wallet (firebase mode) or the first user (prototype mode). "ID check" means the route passes `kyc: true`.
+"Customer" means the signed-in person's wallet (firebase mode) or the first user (prototype mode). "ID check" means the route needs a verified ID (403 `kyc_required`, off with `KYC_ENFORCED=false`): it passes `kyc: true`, or a money action whose `kyc` column is on in [money-routes.ts](../../src/lib/money-routes.ts). Money in from the bank needs the ID check and never the MPIN.
 
 | Method | Path | Who can call | Purpose |
 |---|---|---|---|
 | GET | `/api/v1/vaults` | Customer (read; recovery access allowed) | List open vaults; runs `tick` |
-| POST | `/api/v1/vaults` | Customer | Create a vault (+ optional custom rule, opening deposit) |
+| POST | `/api/v1/vaults` | Customer; ID check when `initialDeposit` is set (`vault_deposit`) | Create a vault (+ optional custom rule, opening deposit), all in one transaction |
 | GET | `/api/v1/vaults/{id}` | Customer (read) | Vault view, last 100 postings, balance series (`balanceSeries()`, starting from the balance before the oldest posting shown), last 30 withdrawals |
 | PATCH | `/api/v1/vaults/{id}` | Customer | Edit name, target, date, rule |
-| POST | `/api/v1/vaults/{id}/deposits` | Customer | Deposit from the bank (`amount` in major units, `memo` ≤ 80) |
-| POST | `/api/v1/vaults/{id}/withdrawals` | Customer, ID check | Request a proof-gated withdrawal (`amount`, `payee` 2–80, `note` ≤ 200) |
+| POST | `/api/v1/vaults/{id}/deposits` | Customer, ID check (`vault_deposit`) | Deposit from the bank (`amount` in major units, `memo` ≤ 80) |
+| POST | `/api/v1/vaults/{id}/withdrawals` | Customer, ID check, MPIN (`withdraw`) | Request a proof-gated withdrawal (`amount`, `payee` 2–80, `note` ≤ 200) |
 | POST | `/api/v1/vaults/{id}/proofs` | Customer, ID check | Upload proof for a request in `awaiting_proof`; returns 202 |
 | DELETE | `/api/v1/withdrawals/{id}` | Customer | Cancel a request still waiting for proof |
 | GET | `/api/v1/accounts` | Customer (read) | Linked accounts, bank transactions, round-ups |
-| POST | `/api/v1/accounts/simulate` | Customer, ID check | `{type: "salary" \| "spend"}` |
-| POST | `/api/v1/accounts/sweep` | Customer, ID check | Sweep pending round-ups |
+| POST | `/api/v1/accounts/simulate` | Customer, ID check (`bank_simulate`) | `{type: "salary" \| "spend"}` |
+| POST | `/api/v1/accounts/sweep` | Customer, ID check (`roundup_sweep`) | Sweep pending round-ups |
 | GET | `/api/v1/dashboard` | Customer (read; recovery access allowed) | Home screen data |
 | GET | `/api/v1/activity` | Customer (read) | Audit log and journals |
 | GET | `/api/v1/badges` | Customer (read) | Streak and badges |
@@ -212,9 +213,10 @@ Phone storage keys (SecureStore on device, localStorage on web): `vw.milestone.<
 | [tests/vaults.test.ts](../../tests/vaults.test.ts) | Fixed rules run and record misses; percent of income; round-up sweep; holds block double-spend; cancel releases; 24 h expiry |
 | [tests/ledger.test.ts](../../tests/ledger.test.ts) | Balanced posts, unbalanced and overdraft rejection with rollback, append-only entries, reconcile, audit hash chain |
 | [tests/fuzz.test.ts](../../tests/fuzz.test.ts) | 400 random operations × 3 seeds; after each step journals balance, no drift, currencies net to zero, no asset account negative, holds ≤ balance |
-| [tests/scheduler.test.ts](../../tests/scheduler.test.ts) | Emergency cooling-off and overdue receipts; SIP catch-up (not vault rules) |
+| [tests/scheduler.test.ts](../../tests/scheduler.test.ts) | Emergency cooling-off and overdue receipts; SIP catch-up (not vault rules), with prices from the test price provider |
+| [tests/money-in.test.ts](../../tests/money-in.test.ts) | Deposits, an opening deposit, simulate and sweep refused with 403 `kyc_required` without a verified ID (moving nothing) and allowed with one and no MPIN; `KYC_ENFORCED=false`; an empty vault needs no ID; a vault whose opening deposit the bank can't cover is not created |
 
-The phone app has no automated tests.
+On the phone, the Practice simulator's ID gate on deposits and withdrawals is held to the server's money table by `mobile/src/lib/api/demo/__tests__/contract-money-actions.test.ts` (`tests/contract/vectors/money-actions.json`).
 
 ## Known limits and open issues
 
@@ -230,6 +232,6 @@ The phone app has no automated tests.
 - **Good seams.** `post()` is the single write path for money, and the fuzz test guards its invariants. `toView()` is the one place that derives held, available and progress. `customer({ tick })` centralises the scheduler call.
 - **Coupling.** `heldFor()` reads the JSON plan inside `emergency_requests`, so vaults depend on the emergency module's storage format. `tick()` hard-codes every job, so each new feature edits it.
 - **Business logic in routes.** The PATCH route rebuilds rule columns and `next_run_at` itself instead of reusing the normalisation in `createVault()`. The dashboard, accounts, activity, vault detail and tax routes run raw SQL directly.
-- **Atomicity.** `deposit()` posts the journal in its own transaction and updates `vault_members` after it. `runDueContributions()` now commits each run together with its `next_run_at` (fixed 2026-11-22, item B4 in the [maintainability review](../maintainability.md)).
+- **Atomicity.** `deposit()` posts the journal in its own transaction and updates `vault_members` after it (inside the caller's transaction when there is one, as in `POST /vaults`, which creates the vault, its custom rule and the opening deposit in one `tx()` since 2026-11-24; `saveCustomRule()` doesn't remember its table as made while inside a transaction, because a rollback would undo the `CREATE` too). `runDueContributions()` now commits each run together with its `next_run_at` (fixed 2026-11-22, item B4 in the [maintainability review](../maintainability.md)).
 - **Duplication.** The web `VaultView` interface copies the server's; `PROOF_WINDOW_MS`, `nextRun()` and `weekIndex()` are copied in the phone app; the "pending review" status list appears in `vaults.ts`, the dashboard route and the Practice state.
 - **Performance.** `toView()` makes several queries per vault, and one dashboard request calls `listVaults()` three times (dashboard, badges, nudges).

@@ -146,8 +146,8 @@ Read [deploy/README.md](../../deploy/README.md) for the full, step-by-step guide
 | [deploy/vaultwise.service](../../deploy/vaultwise.service) | systemd unit: `npm start` as user `vaultwise` on `127.0.0.1:3000`, `NODE_ENV=production`, `VAULTWISE_DATA_DIR=/var/lib/vaultwise`, secrets from `/etc/vaultwise.env`, restart on failure, write access only to the data folder and `.next/cache` |
 | [deploy/Caddyfile](../../deploy/Caddyfile) | HTTPS with an automatic Let's Encrypt certificate, compression, a 25 MB body limit, `X-Real-IP` set, `Cf-Connecting-Ip` dropped, `Server` removed |
 | [deploy/update.sh](../../deploy/update.sh) | Installed as `/usr/local/sbin/vaultwise-update` (root:root, 0755) and run as `sudo vaultwise-update [--no-pull]`: pull, `npm ci --include=dev` and `npm run build` as the `vaultwise` user with `/etc/vaultwise.env` loaded, restart, wait up to 30 s for `/api/v1/region`. When the repository's `update.sh`, `backup.sh` or `vaultwise.service` differs from the installed copy, it prints the difference (lines starting `!!`, control characters made visible) and the `sudo install …` command, and keeps using the installed copy. It never installs them itself. |
-| [deploy/backup.sh](../../deploy/backup.sh) | Installed as `/usr/local/sbin/vaultwise-backup` (root:root, 0755); `/etc/cron.d/vaultwise-backup` runs that copy nightly (`30 21 * * *` UTC = 03:00 IST): `sqlite3 .backup`, `PRAGMA integrity_check`, `uploads.tar.gz`, keeps `KEEP_DAYS` (14) in `BACKUP_DIR` (`/var/backups/vaultwise`). With `BACKUP_S3_URI` set (a line in the cron file) it also copies each backup to S3 with server-side encryption. |
-| [deploy/restore.md](../../deploy/restore.md) | A monthly test restore into a scratch folder, a real restore, and rebuilding from a Lightsail snapshot |
+| [deploy/backup.sh](../../deploy/backup.sh) | Installed as `/usr/local/sbin/vaultwise-backup` (root:root, 0755); `/etc/cron.d/vaultwise-backup` runs that copy nightly (`30 21 * * *` UTC = 03:00 IST): copies the audit anchors file first (`AUDIT_ANCHOR_FILE`, default `$VAULTWISE_DATA_DIR/audit-anchors.jsonl`), then `sqlite3 .backup`, `PRAGMA integrity_check`, a check that the newest anchor's row has the same hash in the copy (the run fails if not; it never runs app code), `uploads.tar.gz`, and keeps `KEEP_DAYS` (14) in `BACKUP_DIR` (`/var/backups/vaultwise`). With `BACKUP_S3_URI` set (a line in the cron file) it also copies each backup to S3 with server-side encryption. |
+| [deploy/restore.md](../../deploy/restore.md) | A monthly test restore into a scratch folder (checked with `npm run audit:verify -- --db ... --anchors ...` as the app user), a real restore that puts back the anchors from the same backup, and rebuilding from a Lightsail snapshot |
 
 **Why root-owned copies.** `/opt/vaultwise` belongs to the `vaultwise` user, and `npm ci` runs every package's install scripts as that user, so any file there could have been changed by a package. Root runs only the copies in `/usr/local/sbin`, which only root can write; the build still runs as `vaultwise`. A server set up the old way (cron or a person running `/opt/vaultwise/deploy/*.sh` as root) is moved over by reading the two scripts, checking `git status` and `git diff` show no local changes, and running the three `sudo install` lines and the new cron line (deploy/README.md, step 15).
 
@@ -191,7 +191,7 @@ No new routes. Every route now:
 | `TRUST_PROXY_HEADER` | unset | `cf-connecting-ip` or `x-real-ip`: believe only that header. |
 | `MOBILE_DEV_ORIGIN` | `http://localhost:8081` | The origin allowed by development CORS. |
 
-The deploy scripts read `VAULTWISE_DATA_DIR`, `BACKUP_DIR`, `KEEP_DAYS` and `BACKUP_S3_URI` (see [commands.md](../reference/commands.md)); the backup's settings go as lines in `/etc/cron.d/vaultwise-backup`, so neither copy of `backup.sh` is edited.
+The deploy scripts read `VAULTWISE_DATA_DIR`, `BACKUP_DIR`, `KEEP_DAYS`, `BACKUP_S3_URI` and `AUDIT_ANCHOR_FILE` (see [commands.md](../reference/commands.md)); the backup's settings go as lines in `/etc/cron.d/vaultwise-backup`, so neither copy of `backup.sh` is edited.
 
 ## Tests
 
@@ -200,7 +200,7 @@ The deploy scripts read `VAULTWISE_DATA_DIR`, `BACKUP_DIR`, `KEEP_DAYS` and `BAC
 | [tests/server-hardening.test.ts](../../tests/server-hardening.test.ts) | The guard (refuses, allows with sign-in, allows the prototype on purpose, never blocks development, warnings); headers in production and CORS in development; no `X-Powered-By`; the generic 500 with an id in the log; deliberate errors keep their extra fields; `Retry-After`; proxy trust with and without `TRUST_PROXY_HOPS` and `TRUST_PROXY_HEADER`; the per-address and per-person limits; the upload limit before the file is read |
 | [tests/rate-limit.test.ts](../../tests/rate-limit.test.ts) | Windows, keys, `limit` 0, hashed keys, sweeping, wait text, several keys at once, `generalLimitPerMinute()` |
 | [tests/devices.test.ts](../../tests/devices.test.ts) | The per-person limit on `GET /me` too |
-| [tests/deploy.test.ts](../../tests/deploy.test.ts) | Reads the deploy files as text: `update.sh` and `backup.sh` installed to `/usr/local/sbin` as root and the cron line pointing at the installed backup; `update.sh` builds as the app user and never installs deploy files itself; `backup.sh` documents the root-owned copy and takes the S3 bucket as a setting |
+| [tests/deploy.test.ts](../../tests/deploy.test.ts) | Reads the deploy files as text: `update.sh` and `backup.sh` installed to `/usr/local/sbin` as root and the cron line pointing at the installed backup; `update.sh` builds as the app user and never installs deploy files itself; `backup.sh` documents the root-owned copy and takes the S3 bucket as a setting; it copies the anchors before the database and checks the newest anchor without running app code, with validated values; the README and `restore.md` run the checker as the app user and restore the matching anchors |
 | [scripts/e2e.mjs](../../scripts/e2e.mjs) | Runs the built server with `ALLOW_PROTOTYPE_IN_PRODUCTION=true` and `TRUST_PROXY_HEADER=x-real-ip`; one address gets 429 with `Retry-After` while another doesn't |
 
 On the live server, `deploy/README.md` step 14 checks the headers with `curl -I` and that `POST /api/v1/reset` is refused.
@@ -221,7 +221,7 @@ On the live server, `deploy/README.md` step 14 checks the headers with `curl -I`
 - **`'unsafe-inline'` scripts** are allowed. Nonces would remove it but make every page dynamic.
 - **Sign-in itself is not rate limited here.** Firebase handles password tries; the server only sees tokens.
 - **An upload counts once its route accepts it**, not when it is refused for the account or the request (an unknown withdrawal, a steps-flow account). A file that then fails `validateUpload()` (unreadable, too big) still counts.
-- The audit chain is still not anchored outside the database ([security](../security.md), gap 15).
+- The audit chain is anchored outside the database since 24 November 2026 (`src/lib/audit-anchors`, [security](../security.md) gap 15). Root on the server can still edit every copy kept there; the journal, the S3 copy and a check run elsewhere against a downloaded backup are what make that hard.
 
 ## Maintainability notes
 

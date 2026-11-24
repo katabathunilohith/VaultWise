@@ -16,6 +16,7 @@ export const ACTIONS: Record<string, { event: string; task?: TaskId }> = {
   walletCashOut: { event: "wallet_cashed_out" },
   buyCore: { event: "invested" },
   setSip: { event: "sip_set" },
+  satelliteOptIn: { event: "satellite_allocated" },
   confirmCheckout: { event: "checkout_paid" },
   assistant: { event: "assistant_asked" },
   setLimits: { event: "limits_changed" },

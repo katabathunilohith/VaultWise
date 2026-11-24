@@ -12,6 +12,12 @@ The version lives in `app.json` (`expo.version`). Build numbers count up by them
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.2.0 (2026-11-24)
+
+The version in `app.json`. Tag `v0.2.0` on the commit that releases it. The fingerprint runtime ignores the version, so a 0.1.0 APK built from the same native code still gets this as an over-the-air update.
+
 - Over-the-air updates through EAS Update, with a channel for each build profile.
 - The About screen shows the version, channel and update, for bug reports.
 - Practice data is saved on the phone (and in the browser), so vaults and withdrawals survive closing the app.
@@ -27,6 +33,10 @@ The version lives in `app.json` (`expo.version`). Build numbers count up by them
 - **ID check by steps** (PAN, Aadhaar through DigiLocker, bank account) when the server asks for it.
 - **The online tester build** (`tester-live` profile and `npm run update:tester-live`): live data and sign-in against the online server, with the ID check and recovery off.
 - Practice now saves its new parts (alerts, devices, the MPIN), keeping names and the MPIN in secure storage.
+- **MPIN for investing plans.** Starting a monthly Core plan or putting more into it asks for the MPIN (lowering or stopping doesn't). Satellite's "Turn on Practice" and "Set aside more" walk through the risk statements, the amount and the MPIN.
+- Practice applies the server's ID check to every money move (withdraw, emergency, investing, deposits, simulate, sweep), in the server's order: ID, then the new-phone cap, then the MPIN. Add money shows "Verify your ID" when a deposit is refused for it.
+- Practice now matches the server on the emergency Tier 2 order (by category, oldest vault first) and on how payday is worked out (the last 7 paydays).
+- Tests: Jest (`npm test`) with unit tests, and contract tests that run the same rule tables (`tests/contract/vectors`) against the phone and the server, so the two can't drift apart unnoticed.
 - Fixed after review: an offline wrong-PIN lockout could open a live account unlocked; signing out briefly showed the app unlocked; a money move could still go through after its PIN sheet said "cancelled"; a timed-out emergency request, withdrawal, investment or limit change could be sent twice; a successful payment could change the phone's unlock PIN to an unchecked PIN; moving the clock back could freeze the wrong-PIN wait.
 
 ## 0.1.0 (2026-11-22)

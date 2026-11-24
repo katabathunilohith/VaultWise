@@ -1,6 +1,6 @@
 # API reference (`/api/v1`)
 
-Every HTTP route the Next.js server exposes, as of commit `012a9fc` plus the server work for plans 03, 05, 06 and 07 (2026-11-22).
+Every HTTP route the Next.js server exposes, as of commit `012a9fc` plus the server work for plans 03, 05, 06 and 07 (2026-11-22) and the external review fixes (2026-11-24: the MPIN on SIPs and Satellite opt-in, the ID check on money in, per-customer strategies).
 The web app in `src/app` and the phone app in `mobile/` both call these routes.
 
 There are 82 route files under [`src/app/api/v1`](../../src/app/api/v1), which serve 93 method and path pairs.
@@ -42,7 +42,7 @@ Codes in use (grep `HttpError(`, `WalletError(`, `MpinError(`, `DeviceError(`, `
 | `signed_out` | 401 | | Firebase mode: no Bearer token, or the token is invalid; or a sign-in (the token's `auth_time`) older than the account's last device sign-out, from anything but a trusted signed-in device. Sign in again. |
 | `no_wallet` | 401 (prototype) / 404 (firebase) | | The caller has no wallet yet. Finish onboarding. |
 | `recovery_restricted` | 403 | | The sign-in has provisional recovery access, and this route doesn't allow it. |
-| `kyc_required` | 403 | | A route whose KYC gate is on, and the account's ID isn't verified. |
+| `kyc_required` | 403 | | A route whose KYC gate is on (money out, investing, and money in from the linked bank), and the account's ID isn't verified. |
 | `admin_only` | 403 | | Firebase mode: the email isn't verified or isn't in `ADMIN_EMAILS`. |
 | `name_locked` | 403 | | `PATCH /me`: the name matches a verified ID and can't change. |
 | `name_in_check` | 409 | | `PATCH /me`: an ID check is using the name (a check pending or with a person, or a steps-flow step that compared it). |
@@ -66,8 +66,8 @@ Codes in use (grep `HttpError(`, `WalletError(`, `MpinError(`, `DeviceError(`, `
 | `phone_required` | 409 | | A code for `device_trust` or `mpin_reset` without a verified number. |
 | `phone_recently_changed` | 403 | `allowedAt` (ms) | `POST /otp/send` (`mpin_reset`) or `POST /mpin/reset` within 72 hours of the verified number being added or changed. |
 | `ai_consent_required` | 403 | | `POST /assistant` without `x-ai-consent: yes`. |
-| `has_wallet` | 409 | | `POST /onboarding` or `POST /recovery/claim` (firebase): the sign-in already has a wallet. |
-| `claim_pending` | 409 | | A recovery claim is already waiting for this sign-in. |
+| `has_wallet` | 409 | | `POST /onboarding` or `POST /recovery/claim` (firebase): the sign-in already has a wallet. A claim checks again inside the transaction that records it, so a wallet opened while the card was being read is caught too. |
+| `claim_pending` | 409 | | A recovery claim is already waiting for this sign-in (checked again inside the claim's transaction, and by a unique index). |
 | `claimant_has_wallet` | 409 | | `POST /admin/recovery/[id]`: the claimant's sign-in got another wallet while the claim waited. |
 | `no_claim` | 404 | | `DELETE /recovery/claim`: nothing to cancel. |
 | `no_match` | 404 | | Recovery claim: no verified wallet matches the ID. |
@@ -93,6 +93,8 @@ Codes in use (grep `HttpError(`, `WalletError(`, `MpinError(`, `DeviceError(`, `
 | `bad_limit` | 400 | | `?limit=` on `/activity`, `/audit/[userId]` or `/alerts` isn't a whole number from 1 (`limitParam()` in `src/lib/api.ts`). |
 | `missing_answer` | 400 | | `POST /invest/profile`: not every risk question has a valid answer. |
 | `already_appealed` | 409 | | `POST /proofs/{id}/appeal`: this check was already appealed once. |
+| `appeal_funds_unavailable` | 409 | | `POST /proofs/{id}/appeal`: the vault no longer has the withdrawal's amount available, so it can't be held again for another look. Add the money back, then appeal. |
+| `bad_start_date` | 400 | | `POST /invest/core/sip`: `startDate` isn't a date (for example `2026-12-01`). |
 | `flag_not_found` / `flag_closed` | 404 / 409 | | `POST /admin/flags/{id}`: unknown flag, or one already resolved or dismissed. |
 
 The codes `current_pin_required` and `pin_mismatch` are gone: a PIN change now answers the MPIN codes above.
@@ -119,12 +121,12 @@ The server runs in one of two modes ([`src/lib/auth/config.ts`](../../src/lib/au
 | customer read + recovery | `customer({ access: "read", recovery: true })` | As above, but a sign-in with provisional recovery access is let in (read-only summary). |
 | customer write | `customer()` (access defaults to `"write"`) | Needs a wallet with full access. |
 | KYC gate | `customer({ kyc: true })` | Customer write, plus `kyc_status = 'verified'`. The ID check is skipped only when `KYC_ENFORCED=false`. |
-| money: `<action>` | `customer({ money: "<action>" })` | Customer write, plus the KYC gate when the action's entry in [`src/lib/money-routes.ts`](../../src/lib/money-routes.ts) says `kyc: true`. The route then checks the body's `pin` with `requireMpin()` (see "The `pin` field" below). |
+| money: `<action>` | `customer({ money: "<action>" })` | Customer write, plus the KYC gate when the action's entry in [`src/lib/money-routes.ts`](../../src/lib/money-routes.ts) says `kyc: true`. When the entry says `mpin: true`, the route then checks the body's `pin` with `requireMpin()` (see "The `pin` field" below). Money in from the linked bank (`moneyIn: true`) takes the KYC gate only, never the MPIN. A route that moves money on some requests only (`POST /vaults` with `initialDeposit`) applies the gate with `moneyGate(user, "<action>")` from `src/lib/api.ts` once it has read the body. |
 | admin | `admin()` | Prototype: open, and the reviewer is `ops.reviewer@vaultwise`. Firebase: a verified email in `ADMIN_EMAILS`; the reviewer is that email. |
 
 **tick** in the table means the route runs the lazy scheduler (`tick()` in [`src/lib/scheduler.ts`](../../src/lib/scheduler.ts)) before it answers.
 `customer()` ticks unless the route passes `tick: false`. A tick runs due auto-saves (from the bank or the wallet), expires stale withdrawals,
-reverts expired emergency limit increases, settles held emergency releases and runs due SIPs.
+reverts expired emergency limit increases, settles held emergency releases, writes the daily audit anchor when one is due (`anchorAuditIfDue()`, [`src/lib/audit-anchors`](../../src/lib/audit-anchors/README.md)) and runs due SIPs. Each auto-save run from the wallet commits together with its move of `next_run_at`.
 
 Every request that finds a wallet with full access also records the calling device (`touchDevice()` from `session()`; not for a recovery claimant). A signed-out device gets `401 device_revoked` on every route, and in firebase mode a sign-in older than the account's last device sign-out gets `401 signed_out` unless it comes from a trusted device. In firebase mode `session()` also applies the general rate limit per person before the device is recorded, so it covers every customer route and `GET /me` (a recovery claimant is counted under its own sign-in); `admin()` applies it per reviewer.
 
@@ -142,11 +144,17 @@ Money routes accept the MPIN as `pin` in the JSON body (a form field on `POST /l
 | `emergency` | `POST /emergency/withdrawals` | every tier | KYC gate; new-device cap |
 | `limits_loosen` | `PUT /limits`, `POST /limits/emergency` | any limit going up; every emergency limit request | |
 | `invest_buy` | `POST /invest/core/buy` | always | KYC gate |
+| `invest_sip` | `POST /invest/core/sip` | setting a plan up, or a change that moves more money: more per month (weekly counts as 52/12 a month) or a `startDate` before the next debit (`sipNeedsMpin()` in [`src/lib/invest/sip-rule.ts`](../../src/lib/invest/sip-rule.ts)). Lowering it needs none; nor does pausing it (`DELETE`) | KYC gate |
+| `satellite_opt_in` | `POST /invest/satellite/opt-in` | always (opting in and every later allocation) | KYC gate |
 | `close_account` | `POST /reset` | firebase mode only | |
 | `mpin_change` | `POST /mpin` (`currentPin`), `PATCH /me` (`currentPin`) | always | |
 | `device_trust` | `POST /devices/trust` | always, even in rollback mode | |
 | `device_revoke` | `POST /devices/[id]/revoke` | always, even in rollback mode | |
 | `phone_change` | `POST /me/phone` | always, even in rollback mode | replacing a verified number needs a trusted device |
+| `wallet_top_up` | `POST /wallet/top-up` | never (money in) | KYC gate |
+| `vault_deposit` | `POST /vaults/[id]/deposits`; `POST /vaults` with `initialDeposit` | never (money in) | KYC gate |
+| `bank_simulate` | `POST /accounts/simulate` | never (money in) | KYC gate |
+| `roundup_sweep` | `POST /accounts/sweep` | never (money in) | KYC gate |
 
 The **new-device cap** (`assertDeviceMayMove()`, checked before the MPIN) answers `403 device_untrusted` with `trustableAt` when a device that isn't trusted yet moves more than about USD 50 in one go ([devices-alerts-otp.md](../features/devices-alerts-otp.md)).
 
@@ -209,10 +217,10 @@ Paths below are relative to `/api/v1`.
 | Method | Path | Who can call | Body or query (key fields) | Returns (shape summary) | File |
 |---|---|---|---|---|---|
 | GET | `/vaults` | customer read + recovery · tick | none | `{ vaults: VaultView[], currency }`. A `VaultView` has `id, name, category, template, customRule, target, targetDate, balance, held, available, progress, monthlyNeeded, rule { type, amount, percent, frequency, nextRunAt }, isJoint, members[], status, createdAt, lastContributionAt, currency`. | [vaults/route.ts](../../src/app/api/v1/vaults/route.ts) |
-| POST | `/vaults` | customer write | `{ name, category (health \| education \| housing \| emergency \| retirement \| custom), template?, customRule?: { uses[1–5], proof }, target, targetDate? (YYYY-MM-DD), ruleType (none \| fixed \| percent_income \| roundup), ruleAmount?, rulePercent? (1–50), ruleFrequency? (weekly \| biweekly \| monthly), initialDeposit?, isJoint?, members?[≤4] }` | `201 { id }` | [vaults/route.ts](../../src/app/api/v1/vaults/route.ts) |
+| POST | `/vaults` | customer write; with `initialDeposit`, the KYC gate of `vault_deposit` (no MPIN) | `{ name, category (health \| education \| housing \| emergency \| retirement \| custom), template?, customRule?: { uses[1–5], proof }, target, targetDate? (YYYY-MM-DD), ruleType (none \| fixed \| percent_income \| roundup), ruleAmount?, rulePercent? (1–50), ruleFrequency? (weekly \| biweekly \| monthly), initialDeposit?, isJoint?, members?[≤4] }` | `201 { id }`. With `initialDeposit` and an unverified ID: `403 kyc_required`, before anything is written. The vault, its custom rule and the opening deposit commit in one transaction, so a deposit the bank can't cover leaves no empty vault behind. | [vaults/route.ts](../../src/app/api/v1/vaults/route.ts) |
 | GET | `/vaults/[id]` | customer read · tick | none | `{ vault: VaultView, history[] (100 ledger lines), series: [{ t, balance }], withdrawals[] (30, with verification decision and confidence), currency, userName }` | [vaults/\[id\]/route.ts](../../src/app/api/v1/vaults/[id]/route.ts) |
 | PATCH | `/vaults/[id]` | customer write | `{ name?, target?, targetDate? (or null), ruleType?, ruleAmount?, rulePercent?, ruleFrequency? }` | `{ ok: true }`. Writes audit `vault.updated`. | [vaults/\[id\]/route.ts](../../src/app/api/v1/vaults/[id]/route.ts) |
-| POST | `/vaults/[id]/deposits` | customer write | `{ amount, memo? (≤80) }` | `201 { journalId }` (bank → vault) | [vaults/\[id\]/deposits/route.ts](../../src/app/api/v1/vaults/[id]/deposits/route.ts) |
+| POST | `/vaults/[id]/deposits` | money: `vault_deposit` (KYC gate, no MPIN) | `{ amount, memo? (≤80) }` | `201 { journalId }` (bank → vault) | [vaults/\[id\]/deposits/route.ts](../../src/app/api/v1/vaults/[id]/deposits/route.ts) |
 | POST | `/vaults/[id]/withdrawals` | money: `withdraw` (KYC gate, new-device cap, MPIN) | `{ amount, payee (2–80), note? (≤200), pin }` | `201 { id, status: "awaiting_proof" }`. The money is held until a proof is verified. | [vaults/\[id\]/withdrawals/route.ts](../../src/app/api/v1/vaults/[id]/withdrawals/route.ts) |
 | POST | `/vaults/[id]/proofs` | KYC gate, upload limit | multipart: `file`, `withdrawalId` (reads `x-ai-consent`) | `202 { id, status: "processing" }`. 404 if the withdrawal isn't this vault's; 409 if it already has a proof (neither counts as an upload). 429 `rate_limited` after 20 uploads in the hour. | [vaults/\[id\]/proofs/route.ts](../../src/app/api/v1/vaults/[id]/proofs/route.ts) |
 | DELETE | `/withdrawals/[id]` | customer write | none | `{ ok: true }`. Only a withdrawal still `awaiting_proof` can be cancelled; that releases the hold. | [withdrawals/\[id\]/route.ts](../../src/app/api/v1/withdrawals/[id]/route.ts) |
@@ -223,7 +231,7 @@ Paths below are relative to `/api/v1`.
 |---|---|---|---|---|---|
 | GET | `/proofs/[id]` | customer read (own proofs only) | none | `{ id, purpose, customRule, category, fileName, createdAt, hasEla, exif, extracted, vault, withdrawal, emergencyId, verification: { status, stages[], confidence, decision, finalDecision, reasons[], modelVersion, reviewer, reviewerNote, appealNote, queuedAt, decidedAt, durationMs } }` | [proofs/\[id\]/route.ts](../../src/app/api/v1/proofs/[id]/route.ts) |
 | GET | `/proofs/[id]/file` | Prototype: customer read (any proof, no owner check). Firebase: admin (any proof) or customer read (own proof only). | `?kind=ela` for the error-level-analysis image, else the original | The image bytes (`Cache-Control: private, max-age=3600`). | [proofs/\[id\]/file/route.ts](../../src/app/api/v1/proofs/[id]/file/route.ts) |
-| POST | `/proofs/[id]/appeal` | customer write | `{ note (5–500) }` | `{ ok: true }` | [proofs/\[id\]/appeal/route.ts](../../src/app/api/v1/proofs/[id]/appeal/route.ts) |
+| POST | `/proofs/[id]/appeal` | customer write | `{ note (5–500) }` | `{ ok: true }`: the declined withdrawal goes back on hold for a person. 409 `already_appealed` (one appeal per check); 409 if the check isn't declined; 409 `appeal_funds_unavailable` if the vault no longer has the amount available. | [proofs/\[id\]/appeal/route.ts](../../src/app/api/v1/proofs/[id]/appeal/route.ts) |
 | GET | `/samples` | public | none | `{ samples: [{ key, label, category, expect }] }` (7 sample bills) | [samples/route.ts](../../src/app/api/v1/samples/route.ts) |
 | GET | `/samples/[key]` | public (uses the signed-in name if there is one, else "Alex Morgan") | none | A rendered JPEG sample bill. 404 for an unknown key. | [samples/\[key\]/route.ts](../../src/app/api/v1/samples/[key]/route.ts) |
 
@@ -242,7 +250,7 @@ Paths below are relative to `/api/v1`.
 |---|---|---|---|---|---|
 | GET | `/limits` | customer read · tick | none | `{ currency, limits: { singleWithdrawal, dailyWithdrawal, monthlyEmergency }, bounds, usage: { withdrawnToday, dailyRemaining }, quota: { perMonth, used, available, lastUsedAt, nextAvailableAt, resetsAt }, emergency: { perMonth, used, increaseDays, maxIncreaseRatio }, active[], history[] }` | [limits/route.ts](../../src/app/api/v1/limits/route.ts) |
 | PUT | `/limits` | customer write; MPIN (`limits_loosen`) when any limit goes up | `{ singleWithdrawal?, dailyWithdrawal?, monthlyEmergency?, pin? }` (major units, 0 to 1e9) | `{ id, kind (tighten \| standard), limits, overview }`. Tightening works any time with no MPIN; loosening uses the monthly allowance and needs the MPIN. | [limits/route.ts](../../src/app/api/v1/limits/route.ts) |
-| POST | `/limits/emergency` | money: `limits_loosen` (MPIN), upload limit (only when `file` is sent) | multipart: `singleWithdrawal?`, `dailyWithdrawal?`, `monthlyEmergency?` (major units), `reasonCode`, `explanation`, `file?`, `pin` (reads `x-ai-consent`) | `201 { id, decision (approved \| denied \| in_review), reasons[], message, expiresAt, limits, overview }`. The MPIN is checked before the file is read and before the AI assessment. | [limits/emergency/route.ts](../../src/app/api/v1/limits/emergency/route.ts) |
+| POST | `/limits/emergency` | money: `limits_loosen` (MPIN), upload limit (only when `file` is sent) | multipart: `singleWithdrawal?`, `dailyWithdrawal?`, `monthlyEmergency?` (major units), `reasonCode`, `explanation`, `file?`, `pin` (reads `x-ai-consent`) | `201 { id, decision (approved \| denied \| in_review), reasons[], message, expiresAt, limits, overview }`. The MPIN is checked before the file is read and before the AI assessment. 429 when this month's emergency requests are used up, checked before the assessment and again in the transaction that records the request. An approved increase is applied on top of the limits as they are then ([limits.md](../features/limits.md)). | [limits/emergency/route.ts](../../src/app/api/v1/limits/emergency/route.ts) |
 
 ### Wallet
 
@@ -252,7 +260,7 @@ Bodies are validated by [`wallet/schemas.ts`](../../src/app/api/v1/wallet/schema
 | Method | Path | Who can call | Body or query (key fields) | Returns (shape summary) | File |
 |---|---|---|---|---|---|
 | GET | `/wallet` | customer read · tick | none | `WalletView`: `{ enabled, currency, balance, bankBalance, safeToSpendToday, daysToPayday, nextPayday, paydayBasis, dailyLimit, spentToday, limitLeftToday, limitRaiseAvailable, nextRaiseAt, autoSaveSource, upcomingFromWallet, recent[] }` | [wallet/route.ts](../../src/app/api/v1/wallet/route.ts) |
-| POST | `/wallet/top-up` | KYC gate | `{ amount }` | `201 { journalId, wallet: WalletView }` (bank → wallet) | [wallet/top-up/route.ts](../../src/app/api/v1/wallet/top-up/route.ts) |
+| POST | `/wallet/top-up` | money: `wallet_top_up` (KYC gate, no MPIN) | `{ amount }` | `201 { journalId, wallet: WalletView }` (bank → wallet) | [wallet/top-up/route.ts](../../src/app/api/v1/wallet/top-up/route.ts) |
 | POST | `/wallet/move` | money: `wallet_move` (KYC gate, MPIN) | `{ vaultId, amount, pin }` | `201 { journalId, wallet }` (wallet → vault, one way) | [wallet/move/route.ts](../../src/app/api/v1/wallet/move/route.ts) |
 | POST | `/wallet/spend` | money: `wallet_spend` (KYC gate, new-device cap, MPIN) | `{ amount, payee (2–80), note? (≤200, nullable), pin }` | `201 { journalId, wallet }`. Counts toward the daily limit. | [wallet/spend/route.ts](../../src/app/api/v1/wallet/spend/route.ts) |
 | POST | `/wallet/cash-out` | money: `wallet_cash_out` (KYC gate, new-device cap, MPIN) | `{ amount, pin }` | `201 { journalId, wallet }` (wallet → bank). Counts toward the daily limit. Works with the wallet switched off. | [wallet/cash-out/route.ts](../../src/app/api/v1/wallet/cash-out/route.ts) |
@@ -263,8 +271,8 @@ Bodies are validated by [`wallet/schemas.ts`](../../src/app/api/v1/wallet/schema
 | Method | Path | Who can call | Body or query (key fields) | Returns (shape summary) | File |
 |---|---|---|---|---|---|
 | GET | `/accounts` | customer read · tick | none | `{ accounts[] (a placeholder "Linked bank" if none), transactions[] (60), roundups: { s, n }, roundupVault, spendByCategory[] (30 days), currency }` | [accounts/route.ts](../../src/app/api/v1/accounts/route.ts) |
-| POST | `/accounts/simulate` | KYC gate | `{ type: "salary" \| "spend" }` | Salary: `{ ok: true, swept }`. Spend: `{ ok: true, created[] }` (3 random card purchases). | [accounts/simulate/route.ts](../../src/app/api/v1/accounts/simulate/route.ts) |
-| POST | `/accounts/sweep` | KYC gate | none | `{ swept, count, vaultId }`. 400 if no vault has the round-up rule. | [accounts/sweep/route.ts](../../src/app/api/v1/accounts/sweep/route.ts) |
+| POST | `/accounts/simulate` | money: `bank_simulate` (KYC gate, no MPIN) | `{ type: "salary" \| "spend" }` | Salary: `{ ok: true, swept }`. Spend: `{ ok: true, created[] }` (3 random card purchases). | [accounts/simulate/route.ts](../../src/app/api/v1/accounts/simulate/route.ts) |
+| POST | `/accounts/sweep` | money: `roundup_sweep` (KYC gate, no MPIN) | none | `{ swept, count, vaultId }`. 400 if no vault has the round-up rule. | [accounts/sweep/route.ts](../../src/app/api/v1/accounts/sweep/route.ts) |
 
 ### Investing: risk profile and portfolio
 
@@ -280,8 +288,8 @@ Bodies are validated by [`wallet/schemas.ts`](../../src/app/api/v1/wallet/schema
 |---|---|---|---|---|---|
 | GET | `/invest/core` | customer read · tick | none | `{ profile: null }` without a risk profile. Otherwise `{ profile, band, allocations[], quotes[] (price or null), holdings: { holdings[], total, cost, pnl, cash }, sips[], orders[] (40), currency }` | [invest/core/route.ts](../../src/app/api/v1/invest/core/route.ts) |
 | POST | `/invest/core/buy` | money: `invest_buy` (KYC gate, MPIN) | `{ amount, pin }` | `201 { fills }` | [invest/core/buy/route.ts](../../src/app/api/v1/invest/core/buy/route.ts) |
-| POST | `/invest/core/sip` | KYC gate | `{ amount, frequency: "weekly" \| "monthly", startDate? }` | `{ ok: true }` (creates or changes the recurring SIP) | [invest/core/sip/route.ts](../../src/app/api/v1/invest/core/sip/route.ts) |
-| DELETE | `/invest/core/sip` | customer write | none | `{ ok: true }` | [invest/core/sip/route.ts](../../src/app/api/v1/invest/core/sip/route.ts) |
+| POST | `/invest/core/sip` | money: `invest_sip` (KYC gate; MPIN when `sipNeedsMpin()` says so) | `{ amount, frequency: "weekly" \| "monthly", startDate?, pin? }` | `{ ok: true }` (creates or changes the recurring SIP). 400 `bad_start_date`; the MPIN errors when setting a plan up or moving more money. Debits the scheduler makes later need no PIN. | [invest/core/sip/route.ts](../../src/app/api/v1/invest/core/sip/route.ts) |
+| DELETE | `/invest/core/sip` | customer write | none | `{ ok: true }`: pauses the SIP. No MPIN (it stops money moving). | [invest/core/sip/route.ts](../../src/app/api/v1/invest/core/sip/route.ts) |
 | GET | `/invest/core/history` | customer read | `?monthly=` (default 300, must be > 0), `?band=` | `{ band, allocations[], points[], sources[], totalContributed, finalValue, startMonth, currency }` (historical illustration) | [invest/core/history/route.ts](../../src/app/api/v1/invest/core/history/route.ts) |
 | GET | `/invest/core/projection` | customer read | `?band=` (default: the profile's band; 400 without a profile), `?monthly=` (300), `?initial=` (0), `?years=` (15, clamped 1–40) | `{ bandName, assumptions: { expReturn, vol, paths }, years: [{ year, contributed, p10, p25, p50, p75, p90 }], currency }` (Monte Carlo) | [invest/core/projection/route.ts](../../src/app/api/v1/invest/core/projection/route.ts) |
 
@@ -290,12 +298,12 @@ Bodies are validated by [`wallet/schemas.ts`](../../src/app/api/v1/wallet/schema
 | Method | Path | Who can call | Body or query (key fields) | Returns (shape summary) | File |
 |---|---|---|---|---|---|
 | GET | `/invest/satellite` | customer read · tick | none | `{ optedIn, optedAt, eligibility, disclosures, rules, equity, positions[], stats, markets[], governance: { stages[] }, currency }`. When opted in, it also runs the paper engine after responding (`after()`). | [invest/satellite/route.ts](../../src/app/api/v1/invest/satellite/route.ts) |
-| POST | `/invest/satellite/opt-in` | KYC gate | `{ amount, acknowledged (int ≥ 0) }` | `201 { ok: true }` | [invest/satellite/opt-in/route.ts](../../src/app/api/v1/invest/satellite/opt-in/route.ts) |
+| POST | `/invest/satellite/opt-in` | money: `satellite_opt_in` (KYC gate, MPIN always) | `{ amount, acknowledged (int ≥ 0), pin }` | `201 { ok: true }`: opts in, or adds to the allocation (bank → Satellite). The MPIN is checked first; then 400 unless every risk disclosure is acknowledged, 403 if not eligible, 400 over the allocation cap. | [invest/satellite/opt-in/route.ts](../../src/app/api/v1/invest/satellite/opt-in/route.ts) |
 | POST | `/invest/satellite/opt-out` | customer write | none | `{ ok: true }` | [invest/satellite/opt-out/route.ts](../../src/app/api/v1/invest/satellite/opt-out/route.ts) |
 | PATCH | `/invest/satellite/markets` | customer write | `{ symbol, enabled: boolean }` | `{ ok: true }` | [invest/satellite/markets/route.ts](../../src/app/api/v1/invest/satellite/markets/route.ts) |
 | GET | `/invest/satellite/analysis` | customer read | `?symbol=` (default `BTC-USD`), `?tf=` (1h \| 4h \| 1d, default 4h), `?bars=` (60–400, default 160) | `{ symbol, name, assetClass, interval, source, currency, candles[], swings[], structure[], orderBlocks[], fvgs[], sweeps[], profile, latest, weights, signals[] }`. 404 for an unknown market. | [invest/satellite/analysis/route.ts](../../src/app/api/v1/invest/satellite/analysis/route.ts) |
-| POST | `/invest/satellite/backtest` | customer write | `{ symbol, tf: "1h" \| "4h" \| "1d" }` | `{ params, risk, bars, from, to, full, oos, decay, folds, gate, buyHoldPct, equity[], trades[], ranAt, source }` | [invest/satellite/backtest/route.ts](../../src/app/api/v1/invest/satellite/backtest/route.ts) |
-| POST | `/invest/satellite/run` | KYC gate | none | `{ processed, opened, closed }` | [invest/satellite/run/route.ts](../../src/app/api/v1/invest/satellite/run/route.ts) |
+| POST | `/invest/satellite/backtest` | customer write | `{ symbol, tf: "1h" \| "4h" \| "1d" }` | `{ params, risk, bars, from, to, full, oos, decay, folds, gate, buyHoldPct, equity[], trades[], ranAt, source }`. Saved as this customer's own strategy row only. `source` is the price provider's name (`yahoo`), `cache` or `synthetic`. | [invest/satellite/backtest/route.ts](../../src/app/api/v1/invest/satellite/backtest/route.ts) |
+| POST | `/invest/satellite/run` | KYC gate (no MPIN: it records paper positions and moves no ledger money) | none | `{ processed, opened, closed }` | [invest/satellite/run/route.ts](../../src/app/api/v1/invest/satellite/run/route.ts) |
 
 ### Identity (KYC)
 
@@ -352,19 +360,19 @@ Rate limits are in [`src/lib/recovery/limits.ts`](../../src/lib/recovery/limits.
 |---|---|---|---|---|---|
 | POST | `/recovery/find` | public, rate-limited | multipart `{ docType, file?, idNumber? }`, or JSON `{ docType, idNumber }` | `{ found, maskedEmail?, canReset, findToken? }` | [recovery/find/route.ts](../../src/app/api/v1/recovery/find/route.ts) |
 | POST | `/recovery/reset` | public, rate-limited | `{ email? }` or `{ findToken? }` (one is required) | Always `{ ok: true }`, so it never says whether the account exists. Prototype mode adds `simulated: true`. | [recovery/reset/route.ts](../../src/app/api/v1/recovery/reset/route.ts) |
-| GET | `/recovery/claim` | signed-in (firebase); prototype returns `{ claim: null }` | none | `{ claim: ClaimView \| null }`. A `ClaimView` has `id, status, access (read_only \| after_approval), docType, idLast4, notifiedEmail, reasons[], createdAt, expiresAt, decidedAt`. | [recovery/claim/route.ts](../../src/app/api/v1/recovery/claim/route.ts) |
-| POST | `/recovery/claim` | signed-in (firebase only), rate-limited | multipart `{ docType, file (required), idNumber? }` | `201 { claim }`. Prototype: `400 not_available`. | [recovery/claim/route.ts](../../src/app/api/v1/recovery/claim/route.ts) |
+| GET | `/recovery/claim` | signed-in (firebase); prototype returns `{ claim: null }` | none | `{ claim: ClaimView \| null }`. A `ClaimView` has `id, status, access (read_only \| after_approval), docType, idLast4, notifiedEmail, reasons[], createdAt, expiresAt, decidedAt`. `notifiedEmail` is the masked address the "recovery started" notice went to, stored on the claim (null when the account had none; claims from before 2026-11-24 show the account's current email). | [recovery/claim/route.ts](../../src/app/api/v1/recovery/claim/route.ts) |
+| POST | `/recovery/claim` | signed-in (firebase only), rate-limited | multipart `{ docType, file (required), idNumber? }` | `201 { claim }`. 404 `no_match`; 409 `has_wallet` or `claim_pending`, checked before the card is read and again inside the transaction that records the claim (then nothing is bound and the photo is deleted). Prototype: `400 not_available`. | [recovery/claim/route.ts](../../src/app/api/v1/recovery/claim/route.ts) |
 | DELETE | `/recovery/claim` | signed-in (firebase only) | none | `{ claim }` (now `cancelled`). `404 no_claim` if nothing is pending. | [recovery/claim/route.ts](../../src/app/api/v1/recovery/claim/route.ts) |
 
 ### Admin (operations console)
 
 | Method | Path | Who can call | Body or query (key fields) | Returns (shape summary) | File |
 |---|---|---|---|---|---|
-| GET | `/admin/overview` | admin | none | `{ queue[] (proofs waiting for a person or appealed, with slaDueAt), limitRequests[], flags[], metrics: { total, autoApproved, autoDenied, humanReview, automationRate, reviewerAgreement, reviewedCount, appeals, overturned, falseDeclineRate, slaCompliance, avgPipelineMs, daily[] }, reconciliation, auditChain, strategies[] }` | [admin/overview/route.ts](../../src/app/api/v1/admin/overview/route.ts) |
+| GET | `/admin/overview` | admin | none | `{ queue[] (proofs waiting for a person or appealed, with slaDueAt), limitRequests[], flags[], metrics: { total, autoApproved, autoDenied, humanReview, automationRate, reviewerAgreement, reviewedCount, appeals, overturned, falseDeclineRate, slaCompliance, avgPipelineMs, daily[] }, reconciliation, auditChain, strategies[] }`. Strategies are per customer: each row is `{ id ("<userId>:<strategyId>"), strategyId, userId, customer (name), name, stage, last_backtest }`. | [admin/overview/route.ts](../../src/app/api/v1/admin/overview/route.ts) |
 | GET | `/admin/reviews/[proofId]` | admin | none | The `proofView` shape plus `{ user, history[], flags[] }` | [admin/reviews/\[proofId\]/route.ts](../../src/app/api/v1/admin/reviews/[proofId]/route.ts) |
 | POST | `/admin/reviews/[proofId]` | admin | `{ decision: "approved" \| "denied", note (3–500) }` | `{ ok: true }` | [admin/reviews/\[proofId\]/route.ts](../../src/app/api/v1/admin/reviews/[proofId]/route.ts) |
 | POST | `/admin/flags/[id]` | admin | `{ status: "resolved" \| "dismissed", resolution (3–300) }` | `{ ok: true }` | [admin/flags/\[id\]/route.ts](../../src/app/api/v1/admin/flags/[id]/route.ts) |
-| POST | `/admin/limit-requests/[id]` | admin | `{ decision: "approved" \| "denied", note (3–500) }` | `{ ok: true }` | [admin/limit-requests/\[id\]/route.ts](../../src/app/api/v1/admin/limit-requests/[id]/route.ts) |
+| POST | `/admin/limit-requests/[id]` | admin | `{ decision: "approved" \| "denied", note (3–500) }` | `{ ok: true }`. An approval applies the increase on top of the customer's limits as they are now. 404 unknown request; 409 not awaiting review. | [admin/limit-requests/\[id\]/route.ts](../../src/app/api/v1/admin/limit-requests/[id]/route.ts) |
 | GET | `/admin/kyc` | admin | none | `{ queue[] (checks waiting for a person, oldest first, with userEmail and market), recent[] (last 20 decisions) }` | [admin/kyc/route.ts](../../src/app/api/v1/admin/kyc/route.ts) |
 | POST | `/admin/kyc/[id]` | admin | `{ decision: "verified" \| "rejected", note (3–500) }`. A rejection's note is shown to the customer. | `{ ok: true, status }` | [admin/kyc/\[id\]/route.ts](../../src/app/api/v1/admin/kyc/[id]/route.ts) |
 | GET | `/admin/kyc/[id]/file` | admin | none | The ID photo (`Cache-Control: private, no-store`). 404 once deleted. | [admin/kyc/\[id\]/file/route.ts](../../src/app/api/v1/admin/kyc/[id]/file/route.ts) |
@@ -379,4 +387,4 @@ Rate limits are in [`src/lib/recovery/limits.ts`](../../src/lib/recovery/limits.
 - Tables behind these routes: [data-model.md](data-model.md)
 - Running the server and the phone app: [commands.md](commands.md)
 - Feature docs for the newer routes: [mpin.md](../features/mpin.md), [devices-alerts-otp.md](../features/devices-alerts-otp.md), [running-online.md](../features/running-online.md), [identity.md](../features/identity.md) (the KYC steps flow)
-- Module notes: [`src/lib/auth/README.md`](../../src/lib/auth/README.md), [`src/lib/kyc/README.md`](../../src/lib/kyc/README.md), [`src/lib/kyc/checks/README.md`](../../src/lib/kyc/checks/README.md), [`src/lib/mpin/README.md`](../../src/lib/mpin/README.md), [`src/lib/devices/README.md`](../../src/lib/devices/README.md), [`src/lib/alerts/README.md`](../../src/lib/alerts/README.md), [`src/lib/otp/README.md`](../../src/lib/otp/README.md), [`src/lib/recovery/README.md`](../../src/lib/recovery/README.md), [`src/lib/wallet/README.md`](../../src/lib/wallet/README.md)
+- Module notes: [`src/lib/auth/README.md`](../../src/lib/auth/README.md), [`src/lib/kyc/README.md`](../../src/lib/kyc/README.md), [`src/lib/kyc/checks/README.md`](../../src/lib/kyc/checks/README.md), [`src/lib/mpin/README.md`](../../src/lib/mpin/README.md), [`src/lib/devices/README.md`](../../src/lib/devices/README.md), [`src/lib/alerts/README.md`](../../src/lib/alerts/README.md), [`src/lib/otp/README.md`](../../src/lib/otp/README.md), [`src/lib/recovery/README.md`](../../src/lib/recovery/README.md), [`src/lib/wallet/README.md`](../../src/lib/wallet/README.md), [`src/lib/limits/README.md`](../../src/lib/limits/README.md), [`src/lib/verification/README.md`](../../src/lib/verification/README.md), [`src/lib/invest/README.md`](../../src/lib/invest/README.md)

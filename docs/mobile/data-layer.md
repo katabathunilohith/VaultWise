@@ -54,15 +54,20 @@ units ([`api/types.ts`](../../mobile/src/lib/api/types.ts) header comment).
 
 `live` is an object literal with one method per endpoint. It spreads `walletLive`, `identityLive`
 and `securityLive` in, then adds the rest: `/me`, onboarding, dashboard, vaults, deposits,
-withdrawals, proofs and appeals, emergency, limits, portfolio and Core investing, `changeMpin`,
-region, reset, export, insight, activity, accounts, badges, samples, the assistant, and Pay with
-Vaultwise.
+withdrawals, proofs and appeals, emergency, limits, portfolio, Core investing and Satellite
+allocations, `changeMpin`, region, reset, export, insight, activity, accounts, badges, samples, the
+assistant, and Pay with Vaultwise.
 
 Every money move out takes the MPIN as a last, optional `pin` argument and sends it in the body:
 `withdraw`, `walletSpend`, `walletCashOut`, `walletMove`, `walletSettings` (in `input.pin`),
-`emergencyWithdraw` (in `input.pin`), `setLimits`, `buyCore` and `reset`. Screens get the MPIN from
-`withMpin()` in [`features/mpin`](../../mobile/src/features/mpin/README.md); see
-[mpin.md](../features/mpin.md#on-the-phone).
+`emergencyWithdraw` (in `input.pin`), `setLimits`, `buyCore`, `setSip(amount, frequency, pin?)`
+(only when the plan starts or moves more money: `sipNeedsMpin()` in `lib/invest.ts`),
+`satelliteOptIn(amount, acknowledged, pin?)` and `reset`. `setSip` and `satelliteOptIn` gained the
+`pin` on 2026-11-24, with the server's `invest_sip` and `satellite_opt_in` actions. Money in from
+the bank (`deposit`, `walletTopUp`, `simulate`, `sweep`, `createVault` with an opening deposit)
+takes no `pin`, but the server answers 403 `kyc_required` until the ID is verified. Screens get the
+MPIN from `withMpin()` or `MpinPanel` in [`features/mpin`](../../mobile/src/features/mpin/README.md);
+see [mpin.md](../features/mpin.md#on-the-phone).
 `export type Api = typeof live` makes that object the contract. The simulator in
 [`demo/index.ts`](../../mobile/src/lib/api/demo/index.ts) ends with `satisfies Api`, so a missing
 or mismatched method fails the type check.
@@ -210,8 +215,9 @@ an error.
 
 `mayHaveGoneThrough(e)` is true for status 0 (no answer, or a timeout) and 504: the move may have
 reached the server. The money flows that use it (the wallet's flows, the emergency request,
-withdraw, Core buy and limit changes in `LimitEditor`) never send it again by themselves; they
-re-read the data and show "We couldn't confirm this" with a way to look.
+withdraw, Core buy, the Core plan (`PlanModal`), a Satellite allocation (`AllocateModal`) and limit
+changes in `LimitEditor`) never send it again by themselves; they re-read the data and show "We
+couldn't confirm this" with a way to look.
 
 ### observe.ts
 
@@ -228,7 +234,13 @@ It exports `PRACTICE_PIN` (`"246810"`, the Practice MPIN), `isPracticeMode()` (c
 device tools on Your devices come through `client.ts` (`practiceDeviceTools`), so still no file
 outside `lib/api/` imports `lib/api/demo`. In the other direction, `demo/mpin.ts` and
 `demo/devices.ts` import the pure `features/mpin/policy.ts`, so the simulator and the screens share
-one copy of the MPIN policy.
+one copy of the MPIN policy, and `demo/invest.ts` imports `sipNeedsMpin()` from `lib/invest.ts`, the
+same rule `PlanModal` uses.
+
+Every simulated money move checks what the server would, in the server's order: a verified ID
+(`assertPracticeIdVerified()` in `demo/identity.ts`, 403 `kyc_required`, money in from the bank
+included), then the new-phone cap, then the MPIN. A contract test holds each Practice money move to
+the server's `MONEY_ROUTES` ([practice-mode.md](../features/practice-mode.md#tests)).
 
 A few files still read `getConnection().mode` or `useConnection().mode` directly instead of
 `practice.ts`: the root layout, `features/ai-consent/ask.ts`, `features/auth/gate.ts` and
@@ -367,7 +379,7 @@ saved id.
 | [`pending-checkout.ts`](../../mobile/src/lib/pending-checkout.ts) | One merchant intent id waiting to open (see [deep links](app-structure.md#deep-links)). Only the latest is kept. | `setPendingCheckout`, `takePendingCheckout`, `usePendingCheckout` |
 | [`media/camera.ts`](../../mobile/src/lib/media/camera.ts) | Camera permission for the in-app camera: `unsupported` (web), `checking`, `granted`, `needs-permission`, `blocked`. Optional re-check when the app returns from Settings. | `useCameraAccess` |
 | [`media/pick.ts`](../../mobile/src/lib/media/pick.ts) | One photo from the system picker or camera, or a sample bill, in one upload shape. iOS picks are asked for as JPEG. | `pickImage`, `takePhoto`, `sampleUpload`, `PickResult`, `PickedImage` |
-| [`invest.ts`](../../mobile/src/lib/invest.ts) | Core plan timing and lump-sum split, using the server's rounding. | `nextRunFrom`, `splitByWeight` |
+| [`invest.ts`](../../mobile/src/lib/invest.ts) | Core plan timing, lump-sum split (the server's rounding), and when saving a plan needs the MPIN (the server's `src/lib/invest/sip-rule.ts`, held to it by `tests/contract/vectors/sip-mpin.json`). | `nextRunFrom`, `splitByWeight`, `perMonth`, `sipNeedsMpin` |
 | [`build.ts`](../../mobile/src/lib/build.ts), [`version.ts`](../../mobile/src/lib/version.ts) | Build and version info. | `PRACTICE_ONLY`, `TESTER_LIVE`; see [app-structure.md](app-structure.md#build-profiles-and-practice_only). |
 | [`screen-capture.ts`](../../mobile/src/lib/screen-capture.ts) | Adapter for `expo-screen-capture` (plan 02): blocks screenshots while any key is held; the iOS app-switcher blur. Loaded lazily; does nothing on the web or without the package. | `useSensitiveScreen`, `preventScreenCapture`, `allowScreenCapture`, `coverAppSwitcher` |
 | [`device-integrity.ts`](../../mobile/src/lib/device-integrity.ts) | Adapter for `expo-device`'s root check (plan 02), once per launch. `rooted: null` on the web or on failure. | `checkDeviceIntegrity`, `DeviceIntegrity` |
@@ -404,5 +416,9 @@ URL. In Practice the simulator reads only the file name to decide the outcome.
   `hooks.ts` must change by hand if the server's rulebook changes.
 - **`observe.ts` holds a single listener.** A second `observeApi` call replaces the first without
   warning.
-- **No automated tests.** `errorMessage`, `keys.ts`, `money.ts`, `categories.ts` and the storage
-  index are pure or nearly pure and could be tested without a device.
+- **Tests (since 2026-11-24).** Jest (`npm test`): `lib/api/__tests__/errors.test.ts`
+  (`mayHaveGoneThrough`, `errorMessage`, `isRecoveryHold`), `contract-id-numbers.test.ts`
+  (`identity-ids.ts` against the server's vectors), `lib/__tests__/invest.test.ts` and
+  `contract-sip-mpin.test.ts`, and the Practice simulator's tests in `lib/api/demo/__tests__/`. The
+  Jest setup (`src/test/setup.ts`) runs `lib/storage.ts` on in-memory stores. Still untested:
+  `keys.ts`, `money.ts`, `categories.ts`, `http.ts` and the storage index.

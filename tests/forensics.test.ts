@@ -16,6 +16,18 @@ describe("document forensics", () => {
     expect(forged.largestCluster).toBeGreaterThan(clean.largestCluster);
   });
 
+  it("calls ELA inconclusive when the image re-compresses unchanged (saved at the ELA quality), instead of edited", async () => {
+    // Found by the evaluation (docs/evaluation/README.md): a genuine bill re-saved at JPEG q75 scored 100% "anomaly"
+    // because the block-error spread was zero and every colour edge became an outlier.
+    const genuine = await renderSample("medical-invoice", user);
+    const resaved = (await errorLevelAnalysis(await sharp(genuine).jpeg({ quality: 75 }).toBuffer()))!;
+    expect(resaved.errorSpread).toBe(0);
+    expect(resaved.inconclusive).toBe(true);
+    const original = (await errorLevelAnalysis(genuine))!;
+    expect(original.inconclusive).toBe(false);
+    expect(original.errorSpread).toBeGreaterThan(0.1);
+  });
+
   it("renders samples deterministically, so a resubmission is a byte-identical duplicate", async () => {
     const a = await renderSample("pharmacy-receipt", user);
     const b = await renderSample("pharmacy-receipt", user);

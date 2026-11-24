@@ -52,6 +52,25 @@ flowchart LR
 | 7 | Setu sandbox keys (`KYC_CHECKS_PROVIDER=setu`, the `SETU_` values) to try the real checks; `KYC_FLOW=steps` turns the steps on for India |
 | 8 | Install MobSF (Docker) or use its hosted scanner, and scan the new APK; record the result next to [the baseline](../security/baseline-2026-11-22.md) |
 
+## External review (24 November 2026)
+
+An outside reviewer read the repository after step 8. What was done about each point:
+
+| Point | Status |
+|---|---|
+| Rotate the Groq key, scan git history, enable secret scanning | History scanned: clean. The README line is gone. Rotating the key and turning on GitHub secret scanning are yours (below). |
+| README out of date; screenshots, diagram, live link | Rewritten with screenshots and an architecture diagram; the live link waits for step 5's deploy. |
+| Package name, releases, CI, `engines` | Package `vaultwise`, version 0.2.0, release sections in both changelogs, `.github/workflows/ci.yml`, Node 22.18 or later. Tags are yours (below). |
+| Open bugs: stale sample dates, live Yahoo in tests, shared strategies, SIP/Satellite with no MPIN | Fixed (B20, B21, B9, `invest_sip` / `satellite_opt_in`). |
+| Phone test runner and contract tests | Jest in `mobile/`, shared vectors in `tests/contract/` (they found and fixed four Practice drifts). |
+| Split big files | `runPipeline`, `limits.ts` and `recovery/service.ts` split, no behaviour change; the split found six real bugs, all fixed. |
+| Open security items | Money-in ID gating and audit anchoring fixed. Device attestation (Play Integrity / App Attest) stays open: see [security.md](../security.md). |
+| Evaluation of the verification pipeline | `npm run eval:verification` with results in [docs/evaluation](../evaluation/README.md). |
+| How this was built; walkthroughs; demo backup | [how-this-was-built.md](../how-this-was-built.md), [walkthroughs](../walkthroughs/), [demo-script.md](../demo-script.md). |
+| Smaller commits | From now on: one change per commit ([development process](../process/development-process.md)). |
+
+Left for you: rotate the Groq key; turn on secret scanning and push protection (GitHub → Settings → Code security); fill in the repository's About box; tag `v0.1.0` on `012a9fc` and `v0.2.0` on the commit that releases this round; deploy (step 5) and build the tester APK; run the MobSF after-scan; try Setu and Twilio in their sandboxes; re-run `npm run eval:verification -- --live` on a fresh day's Groq quota; record a backup video of the demo.
+
 ## Keeping this current
 
 When a step finishes, mark it **Done** here, record what was built in the matching feature doc, and add a line to `mobile/CHANGELOG.md` under **Unreleased**.

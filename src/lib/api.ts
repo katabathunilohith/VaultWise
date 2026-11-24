@@ -5,7 +5,7 @@ import { LedgerError } from "./ledger";
 import { tick } from "./scheduler";
 import { AiError } from "./groq";
 import { clientIp, withRequest } from "./auth/context"; // identity
-import { reload, requireAdmin, resolveCustomer } from "./auth/session"; // identity
+import { assertKycGate, reload, requireAdmin, resolveCustomer } from "./auth/session"; // identity
 import { moneyPolicy, type MoneyAction } from "./money-routes"; // mpin
 import { checkRateLimit, generalLimitPerMinute } from "./rate-limit"; // rate-limit
 
@@ -72,7 +72,7 @@ export function handle<A extends unknown[]>(fn: (...args: A) => Promise<Response
 /**
  * Resolves the customer and runs the lazy scheduler first.
  * `access` says whether the route only reads ("read") or changes something ("write", the default);
- * `kyc: true` marks a route that moves money out and needs a verified ID. (Enforced by the identity module.)
+ * `kyc: true` marks a route that needs a verified ID (money out, or money in from the bank; the money-routes map sets it per action). (Enforced by the identity module.)
  * `money: "<action>"` marks a money route: the policy map in money-routes.ts decides its ID gate, and
  * the route then checks the body's `pin` with `requireMpin()` from lib/mpin.
  */
@@ -86,6 +86,15 @@ export async function customer(
   const { user } = await resolveCustomer({ access: opts.access, kyc, recovery: opts.recovery });
   if (opts.tick !== false) await tick(user);
   return reload(user);
+}
+
+/**
+ * mpin: a money action's ID gate, for a route that moves money only on some requests (POST /vaults with an
+ * `initialDeposit` takes it from the bank: `vault_deposit`). Call it after reading the body, before anything is
+ * written. Routes that always move money use `customer({ money })` instead.
+ */
+export function moneyGate(user: User, action: MoneyAction) {
+  if (moneyPolicy(action).kyc) assertKycGate(user);
 }
 
 /**

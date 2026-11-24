@@ -1,0 +1,381 @@
+{
+  "rule": "wallet-maths",
+  "about": "The wallet's numbers: payday (last income + the median gap between the last 7 paydays, credits on one day counting once, rolled forward past today; 30 days with no income), the daily limit (what is left today; raising or turning it off once per 30 days) and safe to spend today ((balance - auto-saves due from the wallet before payday) / days to payday, capped by what the limit leaves, rounded down). Times are ms; every time is 11:30-12:00 UTC so the day maths answers the same in any time zone.",
+  "server": "src/lib/wallet/plan.ts (paydayEstimate over real income credits: the runner books them; limitState, safeToSpend)",
+  "phone": "mobile/src/lib/api/demo/wallet.ts (paydayFrom, limitState, safeToSpend, the Practice simulator)",
+  "cases": {
+    "payday": [
+      {
+        "why": "no income yet: 30 days from now",
+        "input": {
+          "now": 1792065600000,
+          "incomes": []
+        },
+        "expected": {
+          "nextPayday": 1794657600000,
+          "daysToPayday": 30,
+          "basis": "default"
+        }
+      },
+      {
+        "why": "one income: 30 days after it",
+        "input": {
+          "now": 1792065600000,
+          "incomes": [
+            1791633600000
+          ]
+        },
+        "expected": {
+          "nextPayday": 1794225600000,
+          "daysToPayday": 25,
+          "basis": "income"
+        }
+      },
+      {
+        "why": "paid every 30 days: the next is 30 days after the last",
+        "input": {
+          "now": 1792065600000,
+          "incomes": [
+            1791201600000,
+            1788609600000,
+            1786017600000,
+            1783425600000
+          ]
+        },
+        "expected": {
+          "nextPayday": 1793793600000,
+          "daysToPayday": 20,
+          "basis": "income"
+        }
+      },
+      {
+        "why": "the gap is the median of the gaps (28, 31, 30 ? 30 days)",
+        "input": {
+          "now": 1792065600000,
+          "incomes": [
+            1791720000000,
+            1789300800000,
+            1786622400000,
+            1784030400000
+          ]
+        },
+        "expected": {
+          "nextPayday": 1794312000000,
+          "daysToPayday": 26,
+          "basis": "income"
+        }
+      },
+      {
+        "why": "an even number of gaps: the middle two averaged (28 and 32 ? 30 days)",
+        "input": {
+          "now": 1792065600000,
+          "incomes": [
+            1791547200000,
+            1789128000000,
+            1786363200000
+          ]
+        },
+        "expected": {
+          "nextPayday": 1794139200000,
+          "daysToPayday": 24,
+          "basis": "income"
+        }
+      },
+      {
+        "why": "two credits on one day count as one payday, keeping the earlier",
+        "input": {
+          "now": 1792065600000,
+          "incomes": [
+            1791199800000,
+            1791201600000,
+            1788609600000
+          ]
+        },
+        "expected": {
+          "nextPayday": 1793790000000,
+          "daysToPayday": 20,
+          "basis": "income"
+        }
+      },
+      {
+        "why": "a payday that passed without income rolls forward by whole gaps",
+        "input": {
+          "now": 1792065600000,
+          "incomes": [
+            1788177600000,
+            1785585600000,
+            1782993600000
+          ]
+        },
+        "expected": {
+          "nextPayday": 1793361600000,
+          "daysToPayday": 15,
+          "basis": "income"
+        }
+      },
+      {
+        "why": "only the last 7 paydays are measured (gaps 10,10,10,20,20,20 ? 15 days; the older 20s don't count)",
+        "input": {
+          "now": 1792065600000,
+          "incomes": [
+            1791806400000,
+            1790942400000,
+            1790078400000,
+            1789214400000,
+            1787486400000,
+            1785758400000,
+            1784030400000,
+            1782302400000,
+            1780574400000
+          ]
+        },
+        "expected": {
+          "nextPayday": 1793102400000,
+          "daysToPayday": 12,
+          "basis": "income"
+        }
+      },
+      {
+        "why": "a credit dated after now is ignored",
+        "input": {
+          "now": 1792065600000,
+          "incomes": [
+            1792238400000,
+            1791201600000,
+            1788609600000
+          ]
+        },
+        "expected": {
+          "nextPayday": 1793793600000,
+          "daysToPayday": 20,
+          "basis": "income"
+        }
+      },
+      {
+        "why": "payday today counts as 1 day to go",
+        "input": {
+          "now": 1792065600000,
+          "incomes": [
+            1789473600000,
+            1786881600000
+          ]
+        },
+        "expected": {
+          "nextPayday": 1792065600000,
+          "daysToPayday": 1,
+          "basis": "income"
+        }
+      }
+    ],
+    "limitState": [
+      {
+        "why": "no limit: nothing to count down, raising allowed",
+        "input": {
+          "settings": {
+            "dailyLimit": null,
+            "limitRaisedAt": null
+          },
+          "spentToday": 5000,
+          "now": 1792065600000
+        },
+        "expected": {
+          "dailyLimit": null,
+          "spentToday": 5000,
+          "limitLeftToday": null,
+          "limitRaiseAvailable": true,
+          "nextRaiseAt": null
+        }
+      },
+      {
+        "why": "a limit with some spent today",
+        "input": {
+          "settings": {
+            "dailyLimit": 10000,
+            "limitRaisedAt": null
+          },
+          "spentToday": 3000,
+          "now": 1792065600000
+        },
+        "expected": {
+          "dailyLimit": 10000,
+          "spentToday": 3000,
+          "limitLeftToday": 7000,
+          "limitRaiseAvailable": true,
+          "nextRaiseAt": null
+        }
+      },
+      {
+        "why": "spent past the limit (a lower limit set later): nothing left, never negative",
+        "input": {
+          "settings": {
+            "dailyLimit": 10000,
+            "limitRaisedAt": null
+          },
+          "spentToday": 12000,
+          "now": 1792065600000
+        },
+        "expected": {
+          "dailyLimit": 10000,
+          "spentToday": 12000,
+          "limitLeftToday": 0,
+          "limitRaiseAvailable": true,
+          "nextRaiseAt": null
+        }
+      },
+      {
+        "why": "raised 10 days ago: the next raise waits until 30 days after it",
+        "input": {
+          "settings": {
+            "dailyLimit": 20000,
+            "limitRaisedAt": 1791201600000
+          },
+          "spentToday": 0,
+          "now": 1792065600000
+        },
+        "expected": {
+          "dailyLimit": 20000,
+          "spentToday": 0,
+          "limitLeftToday": 20000,
+          "limitRaiseAvailable": false,
+          "nextRaiseAt": 1793793600000
+        }
+      },
+      {
+        "why": "one millisecond short of 30 days: still waiting",
+        "input": {
+          "settings": {
+            "dailyLimit": 20000,
+            "limitRaisedAt": 1789473600001
+          },
+          "spentToday": 0,
+          "now": 1792065600000
+        },
+        "expected": {
+          "dailyLimit": 20000,
+          "spentToday": 0,
+          "limitLeftToday": 20000,
+          "limitRaiseAvailable": false,
+          "nextRaiseAt": 1792065600001
+        }
+      },
+      {
+        "why": "exactly 30 days on: raising is allowed again",
+        "input": {
+          "settings": {
+            "dailyLimit": 20000,
+            "limitRaisedAt": 1789473600000
+          },
+          "spentToday": 0,
+          "now": 1792065600000
+        },
+        "expected": {
+          "dailyLimit": 20000,
+          "spentToday": 0,
+          "limitLeftToday": 20000,
+          "limitRaiseAvailable": true,
+          "nextRaiseAt": null
+        }
+      },
+      {
+        "why": "turned off 3 days ago: no limit now, and the 30-day window still counts from then",
+        "input": {
+          "settings": {
+            "dailyLimit": null,
+            "limitRaisedAt": 1791806400000
+          },
+          "spentToday": 800,
+          "now": 1792065600000
+        },
+        "expected": {
+          "dailyLimit": null,
+          "spentToday": 800,
+          "limitLeftToday": null,
+          "limitRaiseAvailable": false,
+          "nextRaiseAt": 1794398400000
+        }
+      }
+    ],
+    "safeToSpend": [
+      {
+        "why": "the balance spread over the days to payday",
+        "input": {
+          "balance": 100000,
+          "upcoming": 0,
+          "daysToPayday": 10,
+          "limitLeftToday": null
+        },
+        "expected": 10000
+      },
+      {
+        "why": "auto-saves due from the wallet come off first",
+        "input": {
+          "balance": 100000,
+          "upcoming": 30000,
+          "daysToPayday": 7,
+          "limitLeftToday": null
+        },
+        "expected": 10000
+      },
+      {
+        "why": "rounded down to a minor unit",
+        "input": {
+          "balance": 100005,
+          "upcoming": 0,
+          "daysToPayday": 10,
+          "limitLeftToday": null
+        },
+        "expected": 10000
+      },
+      {
+        "why": "auto-saves bigger than the balance: nothing, never negative",
+        "input": {
+          "balance": 50000,
+          "upcoming": 80000,
+          "daysToPayday": 5,
+          "limitLeftToday": null
+        },
+        "expected": 0
+      },
+      {
+        "why": "payday today still counts as one day",
+        "input": {
+          "balance": 100000,
+          "upcoming": 0,
+          "daysToPayday": 0,
+          "limitLeftToday": null
+        },
+        "expected": 100000
+      },
+      {
+        "why": "capped by what the daily limit leaves",
+        "input": {
+          "balance": 100000,
+          "upcoming": 0,
+          "daysToPayday": 10,
+          "limitLeftToday": 4000
+        },
+        "expected": 4000
+      },
+      {
+        "why": "the limit is used up",
+        "input": {
+          "balance": 100000,
+          "upcoming": 0,
+          "daysToPayday": 10,
+          "limitLeftToday": 0
+        },
+        "expected": 0
+      },
+      {
+        "why": "a limit above the daily share changes nothing",
+        "input": {
+          "balance": 100000,
+          "upcoming": 0,
+          "daysToPayday": 10,
+          "limitLeftToday": 50000
+        },
+        "expected": 10000
+      }
+    ]
+  }
+}

@@ -17,7 +17,8 @@ export interface AuditRow {
   hash: string;
 }
 
-const GENESIS = "0".repeat(64);
+/** The `prev_hash` of the first row. */
+export const GENESIS = "0".repeat(64); // audit-anchors: exported for the checker
 
 function digest(prev: string, row: Omit<AuditRow, "id" | "hash" | "prev_hash">) {
   const canonical = JSON.stringify([row.ts, row.user_id, row.actor, row.actor_type, row.action, row.entity_type, row.entity_id, row.details]);
@@ -66,15 +67,35 @@ export function audit(entry: {
   );
 }
 
-export function verifyAuditChain() {
-  const rows = all<AuditRow>("SELECT * FROM audit_log ORDER BY id ASC");
+/**
+ * Re-walks rows in id order and recomputes every hash. Pure (no database), so the offline checker
+ * (`npm run audit:verify`, src/lib/audit-anchors) walks a read-only copy with exactly the same rule.
+ */
+export function walkAuditRows(rows: readonly AuditRow[]) {
+  // audit-anchors
   let prev = GENESIS;
   for (const r of rows) {
     const expected = digest(prev, r);
     if (r.prev_hash !== prev || r.hash !== expected) {
-      return { ok: false, checked: rows.length, brokenAt: r.id, headHash: rows.at(-1)?.hash ?? GENESIS };
+      return { ok: false, checked: rows.length, brokenAt: r.id as number | null, headHash: rows.at(-1)?.hash ?? GENESIS };
     }
     prev = r.hash;
   }
   return { ok: true, checked: rows.length, brokenAt: null as number | null, headHash: prev };
+}
+
+export function verifyAuditChain() {
+  return walkAuditRows(all<AuditRow>("SELECT * FROM audit_log ORDER BY id ASC"));
+}
+
+/**
+ * The chain's head as it stands: the last row's id and hash, and how many rows there are (0, GENESIS and 0
+ * when empty). This is what an anchor records (src/lib/audit-anchors). One query, so the three agree.
+ */
+export function auditHead(): { lastId: number; headHash: string; count: number } {
+  // audit-anchors
+  const last = get<{ id: number; hash: string; n: number }>(
+    "SELECT id, hash, (SELECT COUNT(*) FROM audit_log) AS n FROM audit_log ORDER BY id DESC LIMIT 1",
+  );
+  return last ? { lastId: last.id, headHash: last.hash, count: last.n } : { lastId: 0, headHash: GENESIS, count: 0 };
 }

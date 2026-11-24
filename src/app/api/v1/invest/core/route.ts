@@ -1,8 +1,6 @@
 import { customer, handle, json } from "@/lib/api";
 import { all } from "@/lib/db";
-import { coreHoldings, riskProfile, sipPlans } from "@/lib/invest/core";
-import { latestPrice } from "@/lib/invest/market";
-import { bandInfo, modelPortfolio } from "@/lib/invest/profile";
+import { coreHoldings, riskProfile, sipPlans, latestPrice, bandInfo, modelPortfolio } from "@/lib/invest";
 
 export const GET = handle(async () => {
   const user = await customer({ access: "read" });

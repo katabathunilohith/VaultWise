@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { AmountKeypad, Button, Chip, ModalScreen, PracticeBadge, Press, Stack, Txt } from "@/components/ui";
+import { AmountKeypad, Banner, Button, Chip, ModalScreen, PracticeBadge, Press, Stack, Txt } from "@/components/ui";
+import { MPIN_ENABLED, MpinPanel, readMpinError } from "@/features/mpin"; // mpin
 import { api } from "@/lib/api/client";
+import { mayHaveGoneThrough } from "@/lib/api/errors";
 import type { Minor } from "@/lib/api/types";
-import { nextRunFrom } from "@/lib/invest";
+import { nextRunFrom, sipNeedsMpin } from "@/lib/invest";
 import { parseAmount } from "@/lib/money";
+import { useSensitiveScreen } from "@/lib/screen-capture"; // protection
 import { layout, space } from "@/theme";
 import { everyWord, fmtDay, fmtMoney, type Frequency } from "../format";
 import { useInvalidateInvest } from "../use-invest";
@@ -17,12 +20,16 @@ export interface CurrentPlan {
   frequency: Frequency;
 }
 
-type Step = "edit" | "confirmStop" | "saved" | "stopped";
+/** mpin: a plan that moves more money asks for the MPIN on a step of its own (this flow is a React Native Modal, so no sheet route). */
+type Step = "edit" | "mpin" | "confirmStop" | "saved" | "stopped";
 
 /**
  * Change (or start) the regular plan: frequency chips, amount keypad, Save in the main-button
  * slot. Each step's buttons have their own `key`, so they mount fresh and re-arm. Stopping lives in the header and is always confirmed; on the confirm step the safe
  * choice ("Keep my plan") holds the main slot and "Stop plan" sits above it.
+ * mpin (`invest_sip`): starting a plan, or a change that takes more money per month, needs the MPIN
+ * (sipNeedsMpin, the server's rule); lowering it or stopping it doesn't. A save that gets no answer
+ * may have gone through, so it isn't offered again until the flow is opened afresh.
  * Mount with a fresh `key` on each open so every visit starts clean.
  */
 export function PlanModal({
@@ -50,21 +57,45 @@ export function PlanModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [savedNext, setSavedNext] = useState(0);
+  /** The save got no answer and may have gone through: it isn't offered again until the flow is opened afresh. */
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  // protection: an MPIN pad inside the Invest tab (a Modal, not a route of its own) blocks screenshots itself.
+  useSensitiveScreen(visible && step === "mpin");
 
   const amount = parseAmount(text);
   const changed = !plan || amount !== plan.amount || frequency !== plan.frequency;
 
+  const saved = () => {
+    setSavedNext(nextRunFrom(frequency));
+    setStep("saved");
+    void invalidate();
+  };
+
+  const failed = (e: unknown) => {
+    setError(e);
+    // No answer: the plan may have changed, so it's read again and Save isn't offered twice.
+    if (mayHaveGoneThrough(e)) {
+      setUnconfirmed(true);
+      void invalidate();
+    }
+    setStep("edit");
+  };
+
   const save = async () => {
-    if (!amount || busy) return;
-    setBusy(true);
+    if (!amount || busy || unconfirmed) return;
     setError(null);
+    if (MPIN_ENABLED && sipNeedsMpin(plan, { amount, frequency })) {
+      setStep("mpin");
+      return;
+    }
+    setBusy(true);
     try {
       await api.setSip(amount / 100, frequency);
-      setSavedNext(nextRunFrom(frequency));
-      setStep("saved");
-      void invalidate();
+      saved();
     } catch (e) {
-      setError(e);
+      // The server knows the plan better (say it changed on the web): if it wants the MPIN, ask for it.
+      if (readMpinError(e)?.kind === "required") setStep("mpin");
+      else failed(e);
     } finally {
       setBusy(false);
     }
@@ -96,14 +127,30 @@ export function PlanModal({
   };
 
   return (
-    <FlowModal visible={visible} onRequestClose={busy ? () => {} : step === "confirmStop" ? backToEdit : onClose}>
-      {step === "edit" ? (
+    <FlowModal visible={visible} onRequestClose={busy ? () => {} : step === "confirmStop" || step === "mpin" ? backToEdit : onClose}>
+      {step === "mpin" && amount ? (
+        <ModalScreen title={plan ? "Change your plan" : "Start a plan"} back={busy ? undefined : backToEdit} hideLeading={busy} scroll={false}>
+          <MpinPanel
+            reason={`${plan ? "Change your plan to" : "Invest"} ${fmtMoney(amount, currency)} ${everyWord(frequency)} in your ${bandName} mix`}
+            run={(pin) => api.setSip(amount / 100, frequency, pin)}
+            onDone={saved}
+            onError={failed}
+            onBusy={setBusy}
+          />
+        </ModalScreen>
+      ) : step === "edit" ? (
         <ModalScreen
           title={plan ? "Change your plan" : "Start a plan"}
           onClose={busy ? () => {} : onClose}
           scroll={false}
           headerRight={plan ? <StopLink disabled={busy} onPress={() => setStep("confirmStop")} /> : undefined}
-          footer={<Button key="save" label={plan ? "Save plan" : "Start plan"} onPress={save} disabled={!amount || !changed} loading={busy} armOnMount />}
+          footer={
+            unconfirmed ? (
+              <Button key="check" label="Check your plan" onPress={onClose} armOnMount />
+            ) : (
+              <Button key="save" label={plan ? "Save plan" : "Start plan"} onPress={save} disabled={!amount || !changed} loading={busy} armOnMount />
+            )
+          }
         >
           <View style={styles.fill}>
             <ScrollView contentContainerStyle={styles.top} showsVerticalScrollIndicator={false}>
@@ -113,7 +160,13 @@ export function PlanModal({
                 <Chip label="Monthly" selected={frequency === "monthly"} onPress={() => setFrequency("monthly")} />
               </View>
               <AmountDisplay text={text} currency={currency} />
-              {error ? (
+              {unconfirmed ? (
+                <Banner
+                  tone="warning"
+                  title="We couldn't confirm this change"
+                  body="Vaultwise didn't answer in time, so your plan may have changed. Check your plan before you save it again."
+                />
+              ) : error ? (
                 <FlowError error={error} nothingChanged={plan ? "Your plan hasn't changed." : "No plan was started."} onAskPerson={askPerson} />
               ) : (
                 <Txt v="bodyM" color="textMuted">

@@ -1,6 +1,6 @@
 # 03. MPIN checked by the server
 
-**Status:** server, web and phone built (22 November 2026); the phone's biometric shortcut still needs a check on a real phone · **Owner:** Claude (code), Shaik (review) · **Size:** L
+**Status:** server, web and phone built (22 November 2026); SIP set-up and Satellite opt-in added, and money in given one ID-check rule (24 November 2026, [below](#sip-satellite-and-money-in-24-november-2026)); the phone's biometric shortcut still needs a check on a real phone · **Owner:** Claude (code), Shaik (review) · **Size:** L
 
 ## Goal
 
@@ -89,7 +89,7 @@ Built 22 November 2026. The feature doc is [features/mpin.md](../features/mpin.m
 
 ### Decisions
 
-- **One map, two calls.** A money route adds a line to `MONEY_ROUTES`, calls `customer({ money })` and `requireMpin()`. The KYC column keeps today's gates exactly; the uneven money-in gate ([security](../security.md) gap 7) is unchanged.
+- **One map, two calls.** A money route adds a line to `MONEY_ROUTES`, calls `customer({ money })` and `requireMpin()`. The KYC column kept the gates of the time exactly, so the uneven money-in gate ([security](../security.md) gap 7) was left as it was; it was fixed on 24 November 2026 with four money-in actions ([below](#sip-satellite-and-money-in-24-november-2026)).
 - **`requireMpin()` throws inside a transaction**, so a wrong try's audit row can't be rolled back again (the B1 bug, made impossible rather than just fixed once).
 - **PIN length in a table, not a column.** `mpin_meta` records the length when a PIN is set or typed correctly, because a scrypt hash doesn't reveal it. `upgradeDue` is true until a 6-digit PIN has been seen.
 - **Both tables are created on first use** by the module, not in `db.ts`, so the module can be removed.
@@ -114,7 +114,7 @@ Built 22 November 2026. The feature doc is [features/mpin.md](../features/mpin.m
 ### Left open
 
 - Turn enforcement on for a live server only once the phone build that sends the MPIN is out. It is on by default; public builds are Practice-only, so nothing breaks today.
-- Not covered by the map: setting up a SIP, Satellite opt-in and the round-up sweep (the contract lists only `invest_buy`).
+- ~~Not covered by the map: setting up a SIP, Satellite opt-in and the round-up sweep (the contract lists only `invest_buy`).~~ **Done 24 November 2026:** `invest_sip`, `satellite_opt_in` and `roundup_sweep` are in the map ([below](#sip-satellite-and-money-in-24-november-2026)).
 - Nothing here needs an account or a key from the owner.
 
 ### Review findings and fixes
@@ -161,7 +161,7 @@ Built 22 November 2026. The phone side is described in [features/mpin.md](../fea
 - **Delete account:** only closing a signed-in account needs the MPIN (the server's `close_account`). Practice and a server without sign-in keep the phone's PIN check.
 - **Pay with Vaultwise** keeps its own 6-digit pad, because checkouts are still simulated on the phone; it reads MPIN answers with `readMpinError()`. In Practice a biometric works only through the shortcut.
 - **Policy shared with the simulator.** `features/mpin/policy.ts` is pure and imported by `lib/api/demo/mpin.ts` and `demo/devices.ts`, so the screens and Practice can't disagree.
-- **Not wired:** the emergency limit request (`POST /limits/emergency`, on the web app only) and SIP set-up (not in the server map).
+- **Not wired:** the emergency limit request (`POST /limits/emergency`, on the web app only). SIP set-up was here too until 24 November 2026, when it joined the server map; the phone's `PlanModal` asks for the MPIN by the same rule.
 
 ### How it was checked
 
@@ -202,3 +202,24 @@ The two phone security reviews of 22 November 2026 ([security.md](../security.md
 
 
 The phone also follows the server's new contract: in rollback mode the `always` checks now lock and send `triesLeft`, which the prompt already reads by code; changing the phone number asks for the MPIN (`phone_change`, `MpinPanel` in `PhoneVerifyScreen`); and Forgot your MPIN shows "Resetting your MPIN is paused" on `phone_recently_changed`.
+
+## SIP, Satellite and money in (24 November 2026)
+
+An external review pointed out that setting up a SIP and opting in to Satellite moved money from the bank with no MPIN. Both are money actions now, and money in got one ID-check rule (security gap 7). Everything below is built on the server, the web app, the phone and Practice.
+
+| Action | Route | MPIN | ID gate |
+|---|---|---|---|
+| `invest_sip` | `POST /invest/core/sip` `{ amount, frequency, startDate?, pin }` | Setting one up, or a change that moves more money: `sipNeedsMpin(current, next)` in `src/lib/invest/sip-rule.ts` | yes |
+| `satellite_opt_in` | `POST /invest/satellite/opt-in` `{ amount, acknowledged, pin }` | Always (opting in and every later allocation) | yes |
+| `wallet_top_up` | `POST /wallet/top-up` | no (money in) | yes |
+| `vault_deposit` | `POST /vaults/{id}/deposits`; `POST /vaults` with `initialDeposit` | no (money in) | yes |
+| `bank_simulate` | `POST /accounts/simulate` | no (money in) | yes |
+| `roundup_sweep` | `POST /accounts/sweep` | no (money in) | yes |
+
+- **When a SIP needs the MPIN.** No active plan: yes. More per month than now (weekly counts as 52/12 a month, so turning a monthly plan weekly at the same amount is a raise): yes. A `startDate` before the current next debit (a past date runs missed debits at once): yes. Lowering it, keeping it, or moving the next debit later: no. Pausing it (`DELETE /invest/core/sip`) never does, and nor do the debits the scheduler makes later (`runDueSips()`): they were authorised when the plan was set up or raised. `sip-rule.ts` has no imports, so the web form (`src/app/invest/core/page.tsx`) shows the MPIN box by the same rule; the server's check is the one that counts. A `startDate` that isn't a date is 400 `bad_start_date`.
+- **`POST /invest/satellite/run` needs no MPIN.** It records paper positions only and never moves ledger money; the allocation already moved, with the MPIN, at opt-in. Its ID gate is unchanged.
+- **Money in** (`moneyIn: true`): money entering from the linked bank needs a verified ID (403 `kyc_required`, subject to `KYC_ENFORCED`) and never the MPIN, so those routes only call `customer({ money })`. Vault deposits were ungated before. `POST /vaults` takes money from the bank only with an `initialDeposit`, so it calls `moneyGate(user, "vault_deposit")` (`src/lib/api.ts`, using `assertKycGate()` from `src/lib/auth/session.ts`) before anything is written, and creates the vault, its custom rule and the opening deposit in one transaction. Wallet → vault stays `wallet_move` (MPIN and ID).
+- **Phone.** `setSip(amount, frequency, pin?)` and `satelliteOptIn(amount, acknowledged, pin?)` in `mobile/src/lib/api/client.ts`. `PlanModal.tsx` asks for the MPIN when `sipNeedsMpin()` (`mobile/src/lib/invest.ts`) says so, and opens the step if the server answers `mpin_required`; `AllocateModal.tsx` walks through every risk statement, the amount and the MPIN. Practice checks the same rules and applies the ID gate to every money move, in the server's order: ID, then the device cap, then the MPIN (`assertPracticeIdVerified()` in `mobile/src/lib/api/demo/identity.ts`).
+- **Tests.** `tests/invest-money.test.ts` (the SIP rule and route, opt-in, the paper run, the ID gate first), `tests/money-in.test.ts` (the money-in rule, `POST /vaults` all or nothing), `tests/mpin.test.ts`; contract vectors `sip-mpin.json` and `money-actions.json` in `tests/contract/vectors/`, run against the server and the phone ([tests/contract/README.md](../../tests/contract/README.md)).
+
+The feature doc is [features/mpin.md](../features/mpin.md); the contract's action table is updated in [contracts.md](contracts.md#which-actions-need-it).

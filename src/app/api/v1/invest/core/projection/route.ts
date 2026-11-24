@@ -1,5 +1,5 @@
 import { customer, handle, json } from "@/lib/api";
-import { projection, requireProfile } from "@/lib/invest/core";
+import { projection, requireProfile } from "@/lib/invest";
 
 export const GET = handle(async (req: Request) => {
   const user = await customer({ tick: false, access: "read" });

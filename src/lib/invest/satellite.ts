@@ -7,6 +7,7 @@ import { coreHoldings, riskProfile } from "./core";
 import { getSeries, SATELLITE_UNIVERSE, type Interval } from "./market";
 import { analyze, COST_BPS, DEFAULT_PARAMS, WEIGHTS, type Components } from "./smc";
 import { runBacktest, type BacktestResult } from "./backtest";
+import { saveStrategyBacktest, strategyFor } from "./strategies";
 
 export const PAPER_TIMEFRAME: Interval = "1h";
 const HOUR = 3_600_000;
@@ -346,10 +347,7 @@ export async function satelliteOverview(user: User) {
       m.symbol,
       PAPER_TIMEFRAME,
     );
-    const strat = get<{ last_backtest: string | null; stage: string }>(
-      "SELECT last_backtest, stage FROM strategies WHERE id = ?",
-      strategyId(m.symbol, PAPER_TIMEFRAME),
-    );
+    const strat = strategyFor(user.id, strategyId(m.symbol, PAPER_TIMEFRAME)); // this customer's own backtest (B9)
     const bt = parseJson<{
       gate: { passed: boolean };
       full: { trades: number; expectancyR: number };
@@ -406,6 +404,7 @@ export async function satelliteOverview(user: User) {
   };
 }
 
+/** The strategy's id for a market and timeframe. Each customer has their own row per id (strategies.ts). */
 export function strategyId(symbol: string, tf: string) {
   return `smc:${symbol}:${tf}`;
 }
@@ -426,16 +425,14 @@ export async function backtestMarket(user: User, symbol: string, tf: Interval): 
   );
   const out = { ...result, ranAt: Date.now(), source: series.source };
   const id = strategyId(symbol, tf);
-  run(
-    `INSERT INTO strategies (id, name, params, stage, last_backtest, created_at) VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET last_backtest = excluded.last_backtest, stage = excluded.stage, params = excluded.params`,
+  // B9: saved for this customer only, so it never overwrites anyone else's result.
+  saveStrategyBacktest(user.id, {
     id,
-    `SMC confluence v1 · ${symbol} ${tf}`,
-    JSON.stringify(result.params),
-    result.gate.passed ? "paper-eligible" : "research",
-    JSON.stringify({ gate: result.gate, full: result.full, oos: result.oos, ranAt: out.ranAt }),
-    Date.now(),
-  );
+    name: `SMC confluence v1 · ${symbol} ${tf}`,
+    params: result.params,
+    stage: result.gate.passed ? "paper-eligible" : "research",
+    lastBacktest: { gate: result.gate, full: result.full, oos: result.oos, ranAt: out.ranAt },
+  });
   audit({
     userId: user.id,
     actor: "strategy-governance",

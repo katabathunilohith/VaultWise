@@ -21,7 +21,7 @@ import { appealProof, proofById } from "./proofs";
 import { checkouts, settleDue } from "./settle";
 import { clone, PENDING_REVIEW, S, wait } from "./state";
 import { vaultsApi } from "./vaults";
-import { assertPracticeCanMove, identityDemo, withIdentity } from "./identity";
+import { assertPracticeCanMove, assertPracticeIdVerified, identityDemo, withIdentity } from "./identity";
 import { walletDemo } from "./wallet";
 import { changePracticeMpin, practiceMpinStatus } from "./mpin"; // mpin
 import { alertsDemo, practiceAlert } from "./alerts"; // alerts
@@ -91,11 +91,14 @@ export const demo = savingAfterEachCall({
     return { ...(clone(activityFx) as unknown as Activity), journals: clone(S.journals) };
   },
   accounts: async () => clone(accountsFx) as unknown as Accounts,
+  // Nothing moves in Practice, but the gate is the server's (`bank_simulate`, `roundup_sweep`: money in needs a verified ID).
   simulate: async () => {
+    assertPracticeIdVerified(); // identity
     await wait(400);
     return { ok: true as const };
   },
   sweep: async () => {
+    assertPracticeIdVerified(); // identity
     await wait(400);
     return { ok: true as const };
   },

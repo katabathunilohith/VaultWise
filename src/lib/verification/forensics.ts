@@ -105,6 +105,14 @@ export interface ElaResult {
   suspiciousBlocks: number;
   largestCluster: number;
   texturedBlocks: number;
+  /** Median absolute deviation of the per-block error (0 when nearly every block re-compresses identically). */
+  errorSpread: number;
+  /**
+   * True when the block-error spread is zero: the image re-compresses almost unchanged (typically it was already saved
+   * at about ELA_QUALITY), so the outlier test divides by its 1e-6 floor and any colour edge looks anomalous. The score
+   * is still reported, but it says nothing about edits; the verification pipeline treats it as no evidence.
+   */
+  inconclusive: boolean;
   heatmap: Buffer; // PNG
 }
 
@@ -179,16 +187,19 @@ export async function errorLevelAnalysis(buf: Buffer): Promise<ElaResult | null>
     const sorted = [...v].sort((a, b) => a - b);
     const median = sorted[Math.floor(sorted.length / 2)];
     const devs = v.map((x) => Math.abs(x - median)).sort((a, b) => a - b);
-    return { median, scale: 1.4826 * (devs[Math.floor(devs.length / 2)] || 1e-6) };
+    const mad = devs[Math.floor(devs.length / 2)];
+    return { median, mad, scale: 1.4826 * (mad || 1e-6) };
   };
 
   let suspicious = 0;
   let largestCluster = 0;
+  let errorSpread = 0;
   if (ratios.length >= 16) {
     // A block is anomalous if its error is out of line with its own edge
     // energy, or simply far above the page's typical error level.
     const rStat = robust(ratios);
     const eStat = robust(errs);
+    errorSpread = eStat.mad;
     const flagged = new Uint8Array(GW * GH);
     for (let k = 0; k < ratio.length; k++) {
       if (Number.isNaN(ratio[k])) continue;
@@ -245,5 +256,6 @@ export async function errorLevelAnalysis(buf: Buffer): Promise<ElaResult | null>
     .png()
     .toBuffer();
 
-  return { score, meanError: sum / (W * H), suspiciousBlocks: suspicious, largestCluster, texturedBlocks: ratios.length, heatmap };
+  const inconclusive = ratios.length >= 16 && errorSpread === 0;
+  return { score, meanError: sum / (W * H), suspiciousBlocks: suspicious, largestCluster, texturedBlocks: ratios.length, errorSpread, inconclusive, heatmap };
 }

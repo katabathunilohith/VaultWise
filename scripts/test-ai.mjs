@@ -1,6 +1,8 @@
 // npm run test:ai: checks the AI bill reader against Groq for real, using GROQ_API_KEY from .env.local.
 // Runs tests/ai-verification.test.ts with GROQ_LIVE_KEY set, then prints how each sample bill was decided.
-// The normal `npm test` never calls Groq.
+// The seven sample bills are rendered at run time with dates relative to today (renderSample in src/lib/samples.ts),
+// so this check can't go stale the way the fixed-date copies in mobile/assets/samples would (maintainability B20).
+// The normal `npm test` never calls Groq. For the full labelled evaluation: npm run eval:verification -- --live.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -15,7 +17,7 @@ if (!key) {
 
 const report = path.join(os.tmpdir(), "vaultwise-ai-check.txt");
 fs.rmSync(report, { force: true });
-console.log("Sending the 7 sample bills to Groq. This takes about 3 minutes...");
+console.log("Sending the 7 sample bills (dated relative to today) to Groq. This takes about 3 minutes...");
 
 const run = spawnSync("npx", ["vitest", "run", "tests/ai-verification.test.ts"], {
   stdio: "inherit",

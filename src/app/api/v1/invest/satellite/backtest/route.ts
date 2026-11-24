@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { body, customer, handle, json } from "@/lib/api";
-import { backtestMarket } from "@/lib/invest/satellite";
+import { backtestMarket } from "@/lib/invest";
 
 export const maxDuration = 90;
 

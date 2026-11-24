@@ -27,7 +27,7 @@ In-app alerts are always on.
 | `device_trusted` | `src/lib/devices/service.ts` `trustDevice()` |
 | `device_revoked` | `src/lib/devices/service.ts` `revokeDevice()` (it doesn't promise the device is out for good: it can sign in again, as a limited new device) |
 | `money_out` | `src/lib/vaults.ts` `payoutWithdrawal()`; `src/lib/wallet/moves.ts` `spend()` and `cashOut()`; `src/lib/emergency.ts` `executeEmergency()` (released, or started with a hold) and `settleEmergencies()` (released) |
-| `limit_loosened` | `src/lib/limits.ts` `changeLimits()` (a standard raise), `requestEmergencyLimitChange()` when approved, `reviewLimitChange()` when approved; `src/lib/wallet/moves.ts` `updateWalletSettings()` (daily limit raised or turned off) |
+| `limit_loosened` | `src/lib/limits/change.ts` `changeLimits()` (a standard raise), `src/lib/limits/emergency-request.ts` `requestEmergencyLimitChange()` when approved, `src/lib/limits/review.ts` `reviewLimitChange()` when approved; `src/lib/wallet/moves.ts` `updateWalletSettings()` (daily limit raised or turned off) |
 | `mpin_locked` | `src/lib/mpin/attempts.ts` `recordFailure()` when a wrong try starts a lock (also with `MPIN_ENFORCED=false`, when the lock holds for the `always` checks; the text says so) |
 | `mpin_changed` | `src/lib/mpin/change.ts` `setMpin()` (change and reset) |
 | `phone_verified` | `src/lib/otp/phone.ts` `setVerifiedPhone()`, when a number is added or replaced (it says the number can't reset the MPIN for 72 hours) |

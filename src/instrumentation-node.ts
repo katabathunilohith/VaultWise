@@ -1,4 +1,5 @@
 import { productionStartupProblem, productionStartupWarnings } from "./lib/auth/config";
+import { anchorAuditOnStartup } from "./lib/audit-anchors"; // audit-anchors
 
 /**
  * The Node-only half of src/instrumentation.ts. It lives in its own file so the Edge build never sees
@@ -12,4 +13,9 @@ export function checkProductionStartup() {
     process.exit(1);
   }
   for (const warning of productionStartupWarnings()) console.warn(`[vaultwise] ${warning}`);
+}
+
+/** audit-anchors: writes the audit chain's head to the anchors file and the journal once per start. Never throws. */
+export function anchorAuditAtStartup() {
+  anchorAuditOnStartup();
 }

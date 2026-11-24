@@ -1,6 +1,5 @@
 import { customer, handle, json } from "@/lib/api";
-import { coreHoldings, riskProfile } from "@/lib/invest/core";
-import { paperEquity } from "@/lib/invest/satellite";
+import { coreHoldings, riskProfile, paperEquity } from "@/lib/invest";
 
 /** Combined Core + Satellite portfolio summary. */
 export const GET = handle(async () => {

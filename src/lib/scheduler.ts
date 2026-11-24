@@ -1,14 +1,16 @@
 import { expireStaleWithdrawals, runDueContributions } from "./vaults";
 import { settleEmergencies } from "./emergency";
 import { revertExpiredLimitIncreases } from "./limits";
-import { runDueSips } from "./invest/core";
+import { runDueSips } from "./invest";
 import type { User } from "./users";
 import { autoSaveSource, runDueWalletContributions } from "./wallet"; // wallet
+import { anchorAuditIfDue } from "./audit-anchors"; // audit-anchors
 
 /**
  * Lazy scheduler: due recurring contributions, held emergency releases and
  * SIP debits are processed whenever the customer's data is read, so the
- * prototype behaves like an always-on backend without a separate worker.
+ * prototype behaves like an always-on backend without a separate worker. The daily audit anchor rides on the
+ * same tick (it is global, not per customer, and runs at most once a day).
  */
 export async function tick(user: User) {
   const now = Date.now();
@@ -18,6 +20,7 @@ export async function tick(user: User) {
   expireStaleWithdrawals(user, now);
   revertExpiredLimitIncreases(user, now);
   settleEmergencies(user, now);
+  anchorAuditIfDue(now); // audit-anchors: once a day (and at start-up, src/instrumentation.ts); never throws
   try {
     await runDueSips(user, now);
   } catch {

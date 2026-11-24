@@ -30,6 +30,8 @@ import { POST as emergencyRoute } from "@/app/api/v1/emergency/withdrawals/route
 import { PUT as limitsRoute } from "@/app/api/v1/limits/route";
 import { POST as emergencyLimitRoute } from "@/app/api/v1/limits/emergency/route";
 import { POST as investBuyRoute } from "@/app/api/v1/invest/core/buy/route";
+import { POST as investSipRoute } from "@/app/api/v1/invest/core/sip/route";
+import { POST as satelliteOptInRoute } from "@/app/api/v1/invest/satellite/opt-in/route";
 import { POST as mpinRoute } from "@/app/api/v1/mpin/route";
 import { POST as mpinResetRoute } from "@/app/api/v1/mpin/reset/route";
 import { POST as phoneRoute } from "@/app/api/v1/me/phone/route";
@@ -211,6 +213,12 @@ const ROUTES: { action: string; send: (pin?: string) => Promise<Response> }[] = 
   },
   { action: "limits_loosen (emergency request)", send: (pin) => call(emergencyLimitRoute, req("/api/v1/limits/emergency", { form: emergencyForm(pin) })) },
   { action: "invest_buy", send: (pin) => call(investBuyRoute, req("/api/v1/invest/core/buy", { body: { amount: 10, pin } })) },
+  // Setting up a SIP (raising and lowering one: tests/invest-money.test.ts).
+  { action: "invest_sip", send: (pin) => call(investSipRoute, req("/api/v1/invest/core/sip", { body: { amount: 10, frequency: "monthly", pin } })) },
+  {
+    action: "satellite_opt_in",
+    send: (pin) => call(satelliteOptInRoute, req("/api/v1/invest/satellite/opt-in", { body: { amount: 10, acknowledged: 4, pin } })),
+  },
   { action: "mpin_change", send: (pin) => call(mpinRoute, req("/api/v1/mpin", { body: { currentPin: pin, newPin: NEW_PIN } })) },
   // otp: adding the first phone number (replacing one also needs a trusted device: tests/otp.test.ts).
   { action: "phone_change", send: (pin) => call(phoneRoute, req("/api/v1/me/phone", { body: { verificationToken: "not-checked-yet", pin } })) },
@@ -225,10 +233,15 @@ describe("every money route", () => {
     before = { journals: journals(), withdrawals: withdrawals() };
   });
 
-  it("covers every action in the policy map, each needing the MPIN", () => {
-    expect(MONEY_ACTIONS.every((a) => MONEY_ROUTES[a].mpin)).toBe(true);
+  it("covers every action in the policy map, each needing the MPIN except money in", () => {
+    // Money in from the linked bank takes the ID gate only (tests/money-in.test.ts); everything else needs the MPIN.
+    for (const a of MONEY_ACTIONS) {
+      const p: { mpin: boolean; moneyIn?: boolean } = MONEY_ROUTES[a];
+      expect(p.mpin).toBe(!p.moneyIn);
+    }
     // devices: device_trust and device_revoke (MPIN always checked) are covered in tests/devices.test.ts.
-    for (const a of MONEY_ACTIONS) expect(ROUTES.some((r) => r.action.split(" ")[0] === a || a === "close_account" || a.startsWith("device_"))).toBe(true);
+    for (const a of MONEY_ACTIONS.filter((x) => MONEY_ROUTES[x].mpin))
+      expect(ROUTES.some((r) => r.action.split(" ")[0] === a || a === "close_account" || a.startsWith("device_"))).toBe(true);
   });
 
   it.each(ROUTES)("$action: refuses without an MPIN, with a wrong one, and while locked", async ({ send }) => {

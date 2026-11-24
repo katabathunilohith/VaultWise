@@ -38,7 +38,7 @@ export function kycEnforced(): boolean {
 }
 
 /**
- * Whether money-out routes check the ID (the `kyc: true` gate). Always on unless KYC_ENFORCED is
+ * Whether money routes check the ID (the `kyc: true` gate: money out, and money coming in from the bank; see src/lib/money-routes.ts). Always on unless KYC_ENFORCED is
  * exactly "false", so switching KYC off also lets accounts that started "pending" move money again.
  */
 export function kycGateOn(): boolean {

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
 import { get, run } from "@/lib/db";
 import { customer } from "@/lib/api";
@@ -281,17 +281,13 @@ describe("firebase mode", () => {
   });
 
   it("practice-data sign-ups also start with KYC pending", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new Error("offline")))); // synthetic market data
-    try {
-      const t = await token("demo-uid");
-      const r = await call(onboard, req("/api/v1/onboarding", { token: t, body: { name: "Dee Mo", country: "US", pin: PIN, demo: true } }));
-      expect(r.status).toBe(200);
-      const user = get<User>("SELECT * FROM users WHERE id = ?", identityByUid("demo-uid")!.user_id!)!;
-      // Level 1 while waiting for an ID check: one rule for every sign-up (src/lib/kyc/levels.ts).
-      expect(user).toMatchObject({ kyc_status: "pending", kyc_level: 1 });
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    // Market data comes from the test setup's fake price provider (tests/setup.ts), so no stub is needed here.
+    const t = await token("demo-uid");
+    const r = await call(onboard, req("/api/v1/onboarding", { token: t, body: { name: "Dee Mo", country: "US", pin: PIN, demo: true } }));
+    expect(r.status).toBe(200);
+    const user = get<User>("SELECT * FROM users WHERE id = ?", identityByUid("demo-uid")!.user_id!)!;
+    // Level 1 while waiting for an ID check: one rule for every sign-up (src/lib/kyc/levels.ts).
+    expect(user).toMatchObject({ kyc_status: "pending", kyc_level: 1 });
   }, 60_000);
 
   it("admin routes need a verified email from ADMIN_EMAILS", async () => {

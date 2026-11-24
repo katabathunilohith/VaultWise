@@ -1,0 +1,90 @@
+{
+  "rule": "emergency-tiers",
+  "about": "The emergency cascade: Health vaults pay first (Tier 1, instant), then the other vaults (Tier 2, after the MPIN and a pause) in a fixed category order, emergency fund first and retirement last; within a category the oldest vault first. Each vault gives what it has available until the amount is covered; what's left over is the shortfall. Vaults are listed oldest first; amounts are minor units, all well under the monthly cap so only the cascade decides. The guardrails (cap, requests per week, cooling-off) aren't covered here.",
+  "server": "src/lib/emergency.ts (planEmergency over real vaults: the runner opens them in this order)",
+  "phone": "mobile/src/lib/api/demo/emergency.ts (planCascade, the Practice simulator)",
+  "cases": {
+    "cascade": [
+      {
+        "why": "the Health vault covers a small request on its own",
+        "input": { "vaults": [{ "name": "Health", "category": "health", "available": 50000 }, { "name": "Rainy day", "category": "emergency", "available": 100000 }], "amount": 30000 },
+        "expected": { "items": [{ "vault": "Health", "tier": 1, "amount": 30000 }], "tier1": 30000, "tier2": 0, "shortfall": 0 }
+      },
+      {
+        "why": "the rest cascades to Tier 2 only once Health is empty",
+        "input": { "vaults": [{ "name": "Health", "category": "health", "available": 50000 }, { "name": "Rainy day", "category": "emergency", "available": 100000 }], "amount": 80000 },
+        "expected": { "items": [{ "vault": "Health", "tier": 1, "amount": 50000 }, { "vault": "Rainy day", "tier": 2, "amount": 30000 }], "tier1": 50000, "tier2": 30000, "shortfall": 0 }
+      },
+      {
+        "why": "Tier 2 goes by category (emergency, custom, housing, education, retirement), not by which vault holds most",
+        "input": {
+          "vaults": [
+            { "name": "Retirement", "category": "retirement", "available": 900000 },
+            { "name": "School", "category": "education", "available": 500000 },
+            { "name": "Rent", "category": "housing", "available": 300000 },
+            { "name": "Wedding", "category": "custom", "available": 200000 },
+            { "name": "Rainy day", "category": "emergency", "available": 10000 },
+            { "name": "Health", "category": "health", "available": 10000 }
+          ],
+          "amount": 100000
+        },
+        "expected": {
+          "items": [{ "vault": "Health", "tier": 1, "amount": 10000 }, { "vault": "Rainy day", "tier": 2, "amount": 10000 }, { "vault": "Wedding", "tier": 2, "amount": 80000 }],
+          "tier1": 10000,
+          "tier2": 90000,
+          "shortfall": 0
+        }
+      },
+      {
+        "why": "the whole category order, each vault emptied before the next",
+        "input": {
+          "vaults": [
+            { "name": "Retirement", "category": "retirement", "available": 5000 },
+            { "name": "School", "category": "education", "available": 4000 },
+            { "name": "Rent", "category": "housing", "available": 3000 },
+            { "name": "Wedding", "category": "custom", "available": 2000 },
+            { "name": "Rainy day", "category": "emergency", "available": 1000 }
+          ],
+          "amount": 14000
+        },
+        "expected": {
+          "items": [
+            { "vault": "Rainy day", "tier": 2, "amount": 1000 },
+            { "vault": "Wedding", "tier": 2, "amount": 2000 },
+            { "vault": "Rent", "tier": 2, "amount": 3000 },
+            { "vault": "School", "tier": 2, "amount": 4000 },
+            { "vault": "Retirement", "tier": 2, "amount": 4000 }
+          ],
+          "tier1": 0,
+          "tier2": 14000,
+          "shortfall": 0
+        }
+      },
+      {
+        "why": "two vaults in one category: the older one first, even though it holds less",
+        "input": { "vaults": [{ "name": "Old fund", "category": "emergency", "available": 20000 }, { "name": "New fund", "category": "emergency", "available": 50000 }], "amount": 30000 },
+        "expected": { "items": [{ "vault": "Old fund", "tier": 2, "amount": 20000 }, { "vault": "New fund", "tier": 2, "amount": 10000 }], "tier1": 0, "tier2": 30000, "shortfall": 0 }
+      },
+      {
+        "why": "two Health vaults: both are Tier 1, oldest first",
+        "input": { "vaults": [{ "name": "Clinic", "category": "health", "available": 1000 }, { "name": "Dental", "category": "health", "available": 2000 }], "amount": 2500 },
+        "expected": { "items": [{ "vault": "Clinic", "tier": 1, "amount": 1000 }, { "vault": "Dental", "tier": 1, "amount": 1500 }], "tier1": 2500, "tier2": 0, "shortfall": 0 }
+      },
+      {
+        "why": "empty vaults are skipped, not listed with nothing",
+        "input": { "vaults": [{ "name": "Health", "category": "health", "available": 0 }, { "name": "Rainy day", "category": "emergency", "available": 0 }, { "name": "Rent", "category": "housing", "available": 5000 }], "amount": 3000 },
+        "expected": { "items": [{ "vault": "Rent", "tier": 2, "amount": 3000 }], "tier1": 0, "tier2": 3000, "shortfall": 0 }
+      },
+      {
+        "why": "more than every vault holds: all of it, and the rest as the shortfall",
+        "input": { "vaults": [{ "name": "Health", "category": "health", "available": 1000 }, { "name": "Rent", "category": "housing", "available": 2000 }], "amount": 5000 },
+        "expected": { "items": [{ "vault": "Health", "tier": 1, "amount": 1000 }, { "vault": "Rent", "tier": 2, "amount": 2000 }], "tier1": 1000, "tier2": 2000, "shortfall": 2000 }
+      },
+      {
+        "why": "no vaults at all: everything is short",
+        "input": { "vaults": [], "amount": 5000 },
+        "expected": { "items": [], "tier1": 0, "tier2": 0, "shortfall": 5000 }
+      }
+    ]
+  }
+}

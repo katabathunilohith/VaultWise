@@ -25,6 +25,8 @@ export interface ClaimRow {
   file_path: string | null;
   /** 1 when the automated checks passed and the claimant got read-only access at once; 0 = access only after approval. */
   provisional: number;
+  /** The account's address the "recovery started" notice went to; "" = the account had none; null = a claim from before this was stored. */
+  notified_email: string | null;
   created_at: number;
   decided_at: number | null;
   decided_by: string | null;
@@ -49,6 +51,7 @@ export function ensureRecoveryTables() {
     reasons TEXT,
     file_path TEXT,
     provisional INTEGER NOT NULL DEFAULT 0,
+    notified_email TEXT,
     created_at INTEGER NOT NULL,
     decided_at INTEGER,
     decided_by TEXT
@@ -64,6 +67,7 @@ export function ensureRecoveryTables() {
   CREATE INDEX IF NOT EXISTS idx_attempts ON recovery_attempts(bucket, client_key, ts);`);
   const cols = (d.prepare("PRAGMA table_info(recovery_claims)").all() as { name: string }[]).map((c) => c.name);
   if (!cols.includes("provisional")) d.exec("ALTER TABLE recovery_claims ADD COLUMN provisional INTEGER NOT NULL DEFAULT 0");
+  if (!cols.includes("notified_email")) d.exec("ALTER TABLE recovery_claims ADD COLUMN notified_email TEXT");
   // One pending claim per sign-in, enforced by the database so parallel requests can't both succeed.
   d.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_claims_one_pending ON recovery_claims(claimant_uid) WHERE status = 'pending'");
   ready.add(d);

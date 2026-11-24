@@ -274,4 +274,4 @@ All the `tick` tokens except `emergency.tick` and `emergency.finalTick` are touc
 - `money.tsx` ends with `export { fonts }`, a re-export nothing in the kit needs.
 - Some files require Phosphor icons inline rather than through an `icons.ts`, so the "one place per area" rule is not followed everywhere.
 - A few kit files use hex values directly (`Button.tsx` uses `#FFFFFF` for danger text in light mode; `ToggleRow` uses `#FFFFFF` for the switch thumb).
-- The kit, the theme and the haptics engine have no tests. `mobile/` has no test runner.
+- The kit, the theme and the haptics engine have no tests. `mobile/` has a test runner since 24 November 2026 (Jest with jest-expo, `npm test`); the kit's pure helpers are the place to start.

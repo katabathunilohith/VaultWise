@@ -2,7 +2,7 @@
  * Emergency money, simulated: Tier 1 vaults pay at once, Tier 2 after the PIN and the safety
  * pause, within the same guardrails the server checks (monthly cap, requests per week, funds).
  */
-import { assertPracticeCanMove } from "./identity"; // identity
+import { assertPracticeIdVerified } from "./identity"; // identity
 import { emergencyTier } from "../../categories";
 import { ApiError } from "../errors";
 import type { EmergencyHistoryItem, EmergencyInput, EmergencyOverview, EmergencyPlanItem, EmergencyPreview, EmergencyResult, Guardrail, UploadFile, Vault } from "../types";
@@ -15,7 +15,44 @@ import { submitReceiptProof } from "./proofs";
 import { settleDue } from "./settle";
 import { applyEmergencyCap, clone, currency, DAY, findVault, newId, recompute, record, S, toMinor, wait } from "./state"; // alerts: currency
 
-const tierVaults = (tier: 1 | 2) => S.vaults.filter((v) => emergencyTier(v.category) === tier);
+/**
+ * The order Tier 2 vaults pay in, by category, as the server's TIER2_ORDER (src/lib/emergency.ts):
+ * the emergency fund first, the long-term goals last. Within a category, oldest vault first.
+ */
+const TIER2_ORDER = ["emergency", "custom", "housing", "education", "retirement"];
+
+/** A vault's place in the cascade: Tier 1 (Health) vaults in their own order, then Tier 2 by TIER2_ORDER. */
+function cascadeOrder<V extends { category: string }>(vaults: readonly V[], tier: 1 | 2): V[] {
+  const inTier = vaults.filter((v) => emergencyTier(v.category) === tier);
+  if (tier === 1) return inTier;
+  const rank = (c: string) => (TIER2_ORDER.includes(c) ? TIER2_ORDER.indexOf(c) : TIER2_ORDER.length);
+  // Array.prototype.sort is stable, so vaults in one category keep their order (oldest first, as listed).
+  return [...inTier].sort((a, b) => rank(a.category) - rank(b.category));
+}
+
+const tierVaults = (tier: 1 | 2) => cascadeOrder(S.vaults, tier);
+
+/**
+ * The server's cascade (planEmergency): Health vaults first (Tier 1), then the others in TIER2_ORDER,
+ * each giving what it has available until the amount is covered. Pure; the contract vectors in
+ * tests/contract/vectors/emergency-tiers.json hold both copies to the same answers.
+ */
+export function planCascade(vaults: readonly Pick<Vault, "id" | "name" | "category" | "available">[], amount: number) {
+  const items: EmergencyPlanItem[] = [];
+  let left = amount;
+  for (const tier of [1, 2] as const) {
+    for (const v of cascadeOrder(vaults, tier)) {
+      if (left <= 0) break;
+      const take = Math.min(left, Math.max(0, v.available));
+      if (take > 0) {
+        items.push({ vaultId: v.id, vaultName: v.name, category: v.category, amount: take, tier, settled: false });
+        left -= take;
+      }
+    }
+  }
+  const sum = (tier: 1 | 2) => items.filter((i) => i.tier === tier).reduce((s, i) => s + i.amount, 0);
+  return { items, tier1: sum(1), tier2: sum(2), shortfall: Math.max(0, left) };
+}
 
 /** Releases Tier 2 payouts whose safety pause is over and keeps the weekly count current. */
 export function refreshEmergency() {
@@ -34,22 +71,7 @@ export function refreshEmergency() {
 function plan(amount: number): EmergencyPreview {
   settleDue();
   refreshEmergency();
-  const tier2Pool = tierVaults(2).sort((a, b) => b.available - a.available);
-  const items: EmergencyPlanItem[] = [];
-  let left = amount;
-  for (const v of tierVaults(1)) {
-    const take = Math.min(left, v.available);
-    if (take > 0) items.push({ vaultId: v.id, vaultName: v.name, category: v.category, amount: take, tier: 1, settled: false });
-    left -= take;
-  }
-  const tier1 = amount - left;
-  for (const v of tier2Pool) {
-    if (left <= 0) break;
-    const take = Math.min(left, v.available);
-    if (take > 0) items.push({ vaultId: v.id, vaultName: v.name, category: v.category, amount: take, tier: 2, settled: false });
-    left -= take;
-  }
-  const tier2 = amount - tier1 - left;
+  const { items, tier1, tier2, shortfall: left } = planCascade(S.vaults, amount);
   const e = S.emergency;
   const overCap = amount > e.remainingCap;
   const tooMany = e.requestsLast7d >= e.rules.maxRequestsPer7d;
@@ -72,7 +94,8 @@ function plan(amount: number): EmergencyPreview {
     tier1,
     tier2,
     shortfall: left,
-    needsPin: tier2 > 0,
+    // mpin: every tier needs the MPIN (the server says so while MPIN_ENFORCED is on).
+    needsPin: true,
     needsNote: repeat,
     coolingOff: false,
     releaseEstimate: tier2 > 0 ? `in ${e.rules.tier2HoldSeconds} seconds` : "instantly",
@@ -104,7 +127,7 @@ export const emergencyApi = {
     return plan(toMinor(amountMajor));
   },
   emergencyWithdraw: async (input: EmergencyInput): Promise<EmergencyResult> => {
-    assertPracticeCanMove(); // identity: read-only while a Practice recovery request waits
+    assertPracticeIdVerified(); // identity: a verified ID first, as on the server (and read-only while a recovery request waits)
     await wait(700);
     assertPracticeDeviceCap(toMinor(input.amount)); // devices: the amount asked for, before the MPIN (as on the server)
     // mpin: every tier needs the MPIN, checked before anything moves (as on the server).

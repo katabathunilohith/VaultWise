@@ -86,7 +86,7 @@ function cardReads(name: string, number: string) {
 }
 
 /** Opens a wallet for `uid` (bound identity) and verifies its Aadhaar. */
-async function verifiedWallet(uid: string, email: string, name: string, number: string) {
+async function verifiedWallet(uid: string, email: string | null, name: string, number: string) {
   const r = await call(onboard, authed("/api/v1/onboarding", await token(uid, email), { body: { name, country: "IN", pin: "482915", demo: false } }));
   expect(r.status).toBe(200);
   const userId = identityByUid(uid)!.user_id!;
@@ -389,6 +389,57 @@ describe("recovery claims", () => {
     expect(status.claim.status).toBe("expired");
     expect(get("SELECT 1 FROM audit_log WHERE action = 'recovery.claim_expired' AND entity_id = ?", c.id)).toBeTruthy();
     expect(fs.existsSync(photo)).toBe(false);
+  });
+
+  it("a wallet opened by the same sign-in while the card is read stops the claim cleanly", async () => {
+    const number = aadhaar(7);
+    const jayaId = await verifiedWallet("j-owner-uid", "jaya@example.com", "Jaya Iyer", number);
+    // Without and with provisional access (the card reads a different number, or the matched one).
+    for (const [uid, readsNumber, ip] of [
+      ["j-claimant-uid", aadhaar(79), "10.2.1.1"],
+      ["k-claimant-uid", number, "10.2.1.2"],
+    ] as const) {
+      const t = await token(uid);
+      // While the vision model reads the card, the same person finishes opening a new wallet.
+      setIdExtractor(async () => {
+        const opened = await call(onboard, authed("/api/v1/onboarding", t, { body: { name: "Jaya", country: "IN", pin: "482915", demo: false } }));
+        expect(opened.status).toBe(200);
+        return { is_id_document: true, doc_type: "aadhaar", name: "Jaya Iyer", dob: null, id_number: readsNumber, expiry: null, legibility: 0.9 };
+      });
+      const res = await call(claim, await claimReq(t, number, ip));
+      expect(res.status, uid).toBe(409);
+      expect((await res.json()).code).toBe("has_wallet");
+      const identity = identityByUid(uid)!;
+      expect(identity.status).toBe("active");
+      expect(identity.user_id).toBeTruthy(); // still on the wallet just opened
+      expect(identity.user_id).not.toBe(jayaId);
+      expect(get<{ n: number }>("SELECT COUNT(*) AS n FROM recovery_claims WHERE claimant_uid = ?", uid)!.n).toBe(0);
+    }
+  });
+
+  it("the claim shows the address that was told, also after approval changes the account's email", async () => {
+    const number = aadhaar(8);
+    await verifiedWallet("l-owner-uid", "lata@example.com", "Lata Rao", number);
+    cardReads("Lata Rao", number);
+    const t = await token("l-claimant-uid", "lata.new@example.com");
+    const { claim: c } = await (await call(claim, await claimReq(t, number, "10.2.1.3"))).json();
+    expect(c.notifiedEmail).toBe("l***a@example.com");
+    const decided = await call(adminDecide, authed(`/api/v1/admin/recovery/${c.id}`, ops, { body: { decision: "approved", note: "Checked" } }), ctx(c.id));
+    expect((await decided.json()).claim.notifiedEmail).toBe("l***a@example.com");
+    expect((await (await call(getClaim, authed("/api/v1/recovery/claim", t))).json()).claim.notifiedEmail).toBe("l***a@example.com");
+    // A claim made before the address was stored still shows the account's email, as it always did.
+    run("UPDATE recovery_claims SET notified_email = NULL WHERE id = ?", c.id);
+    expect((await (await call(getClaim, authed("/api/v1/recovery/claim", t))).json()).claim.notifiedEmail).toBe("l***w@example.com");
+
+    // An account with no email: nobody was told, and approval doesn't change that.
+    const other = aadhaar(9);
+    await verifiedWallet("m-owner-uid", null, "Meera Das", other);
+    cardReads("Meera Das", other);
+    const t2 = await token("m-claimant-uid", "meera.new@example.com");
+    const { claim: c2 } = await (await call(claim, await claimReq(t2, other, "10.2.1.4"))).json();
+    expect(c2.notifiedEmail).toBeNull();
+    const decided2 = await call(adminDecide, authed(`/api/v1/admin/recovery/${c2.id}`, ops, { body: { decision: "approved", note: "Checked" } }), ctx(c2.id));
+    expect((await decided2.json()).claim.notifiedEmail).toBeNull();
   });
 
   it("two claims at once from one sign-in: only one is created", async () => {

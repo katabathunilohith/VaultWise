@@ -67,7 +67,8 @@ npx next dev -H 0.0.0.0
 The app uses the computer that's serving the app on port 3000 automatically. To point it somewhere
 else, set `EXPO_PUBLIC_API_URL` (for example `http://192.168.1.20:3000`) before starting Expo, or change
 it in the app: **Profile → Data source**. If the API can't be reached the app switches to demo data and
-says so. The demo PIN is `1234`.
+says so. In Practice (demo data) the MPIN is `246810` (`PRACTICE_PIN` in `src/lib/api/practice.ts`), and
+every texted code is `123456`.
 
 ## Releases and updates
 
@@ -93,12 +94,18 @@ removal steps are in [`src/features/tester/README.md`](src/features/tester/READM
 ## Checks
 
 ```bash
-npm run typecheck
+npm run typecheck   # the app, then the tests (tsconfig.test.json adds Jest's and Node's types)
+npm run lint
+npm test            # Jest with jest-expo: unit tests and the contract tests
 ```
 
-```bash
-npm run lint
-```
+**Tests** live in a `__tests__` folder next to the code they test, named `<what>.test.ts` (never under
+`src/app/`, where every file is a screen). `src/test/` holds the Jest setup (in-memory storage) and helpers:
+`practice.ts` runs Practice calls under fake timers, `contract.ts` reads the shared vectors.
+`contract-<rule>.test.ts` files check the phone's copy of a rule the server also implements against
+`../tests/contract/vectors/<rule>.json`, the same file the server's suite reads (`npx vitest run tests/contract`
+from the repo root): change a rule, change its vector, and both suites must pass. See
+[`tests/contract/README.md`](../tests/contract/README.md). One file: `npx jest src/features/mpin`.
 
 ## Where things are
 
@@ -110,4 +117,5 @@ npm run lint
 | `src/theme/` | Colours, type scale, spacing, motion. |
 | `src/lib/haptics/` | The 29 named haptics and the engine that plays them. |
 | `src/lib/api/` | API client, demo simulator, React Query hooks. |
+| `src/test/` | Jest setup and test helpers (not part of the app). |
 | `assets/emoji3d/` | Fluent 3D emoji (MIT, Microsoft) used for vault objects and celebrations. |

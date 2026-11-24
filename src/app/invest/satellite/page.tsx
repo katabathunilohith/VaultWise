@@ -8,6 +8,7 @@ import { InvestNav } from "@/components/invest-nav";
 import { useMe } from "@/components/shell";
 import { CandleChart, type Layer, type Overlays } from "@/components/candle-chart";
 import { TwoLineChart } from "@/components/charts";
+import { moneyErrorText, MpinField, mpinReady } from "@/components/mpin"; // mpin
 import {
   Badge,
   Button,
@@ -240,6 +241,7 @@ function OptIn({ ov }: { ov: Overview }) {
   const allDisclosures = [...ov.disclosures, ...rules.disclosures.filter((d) => /crypto|invest|trading|lose|high-risk|VDA|DPT/i.test(d))];
   const [ack, setAck] = useState<boolean[]>(allDisclosures.map(() => false));
   const [amount, setAmount] = useState("");
+  const [pin, setPin] = useState(""); // mpin: opting in moves money from the bank
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const e = ov.eligibility;
@@ -288,21 +290,23 @@ function OptIn({ ov }: { ov: Overview }) {
           <Field label="Amount to allocate" hint={`Up to ${fmtMoney(e.headroom, ov.currency)} — from your linked bank account`}>
             <MoneyInput currency={ov.currency} value={amount} onChange={(ev) => setAmount(ev.target.value.replace(/[^\d.]/g, ""))} />
           </Field>
+          <MpinField value={pin} onChange={setPin} />
           {err && <ErrorNote>{err}</ErrorNote>}
           <Button
             className="w-full"
             variant="brand"
-            disabled={!e.eligible || ack.some((a) => !a) || !Number(amount)}
+            disabled={!e.eligible || ack.some((a) => !a) || !Number(amount) || !mpinReady(pin)}
             loading={busy}
             onClick={async () => {
               setBusy(true);
               setErr(null);
               try {
-                await api.post("/api/v1/invest/satellite/opt-in", { amount: Number(amount), acknowledged: ack.filter(Boolean).length });
+                await api.post("/api/v1/invest/satellite/opt-in", { amount: Number(amount), acknowledged: ack.filter(Boolean).length, pin });
                 toast({ tone: "good", text: "Opted in — the engine starts paper trading now." });
+                setPin("");
                 refreshAll();
               } catch (x) {
-                setErr((x as Error).message);
+                setErr(moneyErrorText(x, () => setPin(""))); // mpin
               } finally {
                 setBusy(false);
               }

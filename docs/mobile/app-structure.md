@@ -5,7 +5,8 @@
 
 Written against commit `012a9fc` (2026-11-22) and updated for the phone side of plans 02 to 07
 (update banner, MPIN, phone protection, devices, alerts, texted codes, ID check steps, the
-`tester-live` build). The app runs on Expo SDK 58, React Native 0.88 and
+`tester-live` build), and on 2026-11-24 for the phone tests (Jest), version 0.2.0 and the MPIN
+on Core plans and Satellite allocations. The app runs on Expo SDK 58, React Native 0.88 and
 expo-router (see [`mobile/package.json`](../../mobile/package.json)). How to run it is in
 [`mobile/README.md`](../../mobile/README.md). Why screens look the way they do is in
 [`mobile/DESIGN.md`](../../mobile/DESIGN.md). The data layer has its own page:
@@ -28,6 +29,7 @@ All paths are under `mobile/`. The `@/` import alias points at `src/`, and `@/as
 | [`src/data/fixtures/`](../../mobile/src/data/fixtures) | A JSON snapshot of server responses that seeds Practice mode. | See [practice-mode.md](../features/practice-mode.md). |
 | [`assets/`](../../mobile/assets) | Icons, splash, Fluent 3D emoji (`emoji3d/`) and the sample bills (`samples/`). | |
 | [`scripts/`](../../mobile/scripts) | `update.mjs` (over-the-air updates) and `build-tester.mjs` (public test site). | See [Versioning](#versioning-and-over-the-air-updates). |
+| `__tests__/` folders, [`src/test/`](../../mobile/src/test) | Jest tests next to the code they test (`<what>.test.ts`), and the Jest setup and helpers (`setup.ts`, `practice.ts`, `contract.ts`). Not part of the app: [`tsconfig.json`](../../mobile/tsconfig.json) excludes them, [`tsconfig.test.json`](../../mobile/tsconfig.test.json) type-checks them. | Never put a test under `src/app/`: every file there is a screen. See [Checks](#checks). |
 
 `ios/` and `android/` are not in the repo. They are generated from `app.json` and config plugins
 (Continuous Native Generation), as [`mobile/AGENTS.md`](../../mobile/AGENTS.md) says.
@@ -316,7 +318,7 @@ real-money finance apps, and apps that collect ID documents, only from a license
 
 | Piece | Where | What it does |
 |---|---|---|
-| Version | `expo.version` in [`app.json`](../../mobile/app.json) (`0.1.0`) | `MAJOR.MINOR.PATCH`. Rules for each part are at the top of the changelog. |
+| Version | `expo.version` in [`app.json`](../../mobile/app.json) (`0.2.0` since 2026-11-24) | `MAJOR.MINOR.PATCH`. Rules for each part are at the top of the changelog. A release is tagged `v<version>` on the commit that releases it ([development process](../process/development-process.md)). |
 | Changelog | [`mobile/CHANGELOG.md`](../../mobile/CHANGELOG.md) | Notes go under **Unreleased**; on release they move under the new version and date. |
 | Runtime version | `runtimeVersion.policy: "fingerprint"` in `app.json` | An update only reaches builds whose native fingerprint matches, so a JS update can't land on a build missing a native module. |
 | Update server | `updates.url` in `app.json` | EAS Update for this project. |
@@ -365,12 +367,33 @@ with `eas deploy --prod`. Set-up, what is recorded, and how to remove it are in
 
 ## Checks
 
-There is still no test runner in `mobile/`. The checks are `npm run typecheck`
-(`tsc --noEmit`), `npm run lint` (`expo lint`), `npm run doctor` after package changes, and
-`npx expo export --platform android` (and `web`) before a build or update. `app.json` turns on typed
-routes and the React Compiler (`experiments.typedRoutes`, `experiments.reactCompiler`). Native
-behaviour (screen capture, the secure store, biometrics, push, the root check, the update banner)
-can only be checked on a release or development build on a real phone.
+| Command (in `mobile/`) | What it checks |
+|---|---|
+| `npm run typecheck` | `tsc --noEmit` for the app, then `tsc --noEmit -p tsconfig.test.json` for the tests (it adds Jest's and Node's types) |
+| `npm run lint` | `expo lint` (CI runs `npx eslint src scripts --max-warnings=0`) |
+| `npm test` | Jest with the `jest-expo` preset ([`jest.config.js`](../../mobile/jest.config.js)): unit tests and the contract tests. One area: `npx jest src/features/mpin`; the contract tests only: `npx jest contract` |
+| `npm run doctor` | After package changes |
+| `npx expo export --platform android` (and `web`) | Before a build or update; CI builds the web bundle |
+
+**Tests** (since 2026-11-24) match `src/**/__tests__/**/*.test.ts(x)`; `src/app/` is ignored.
+[`src/test/setup.ts`](../../mobile/src/test/setup.ts) runs after the preset's own setup: in-memory
+AsyncStorage (the package's own Jest mock) and secure store (a `Map`), so `lib/storage.ts` and the
+Practice save run for real. `src/test/practice.ts` (`settle()`) runs Practice calls under fake timers;
+`src/test/contract.ts` reads the shared vectors. `contract-<rule>.test.ts` files check the phone's
+copy of a rule the server also implements against `../tests/contract/vectors/<rule>.json`, the
+same file the server's suite reads, so CI checks out the whole repo
+([tests/contract/README.md](../../tests/contract/README.md)). Today's tests cover the MPIN policy
+and errors, the protection module (`routes.ts`, `pin-policy.ts`, `https.ts`), `lib/invest.ts`, API
+errors and ID numbers, and the Practice simulator (save and restore, devices, investing, every money
+move against the server's money table); see [practice-mode.md](../features/practice-mode.md#tests).
+
+CI ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), job "Phone app") runs the type
+check, lint, `npm test` and the web export on every push to `main` and every pull request.
+
+`app.json` turns on typed routes and the React Compiler (`experiments.typedRoutes`,
+`experiments.reactCompiler`). Native behaviour (screen capture, the secure store, biometrics, push,
+the root check, the update banner) can only be checked on a release or development build on a real
+phone.
 
 ## Maintainability notes
 
@@ -392,6 +415,6 @@ can only be checked on a release or development build on a real phone.
   `UpdateChrome`, `RecoveryChrome`, `PrivacyCover`) sit around the `Stack`, each marked
   with its module. Keep the order in the table above: the two bars both rewrite the top inset.
 - **The version is written twice.** `app.json` `expo.version` is the one the app reads;
-  `package.json` `version` is also `0.1.0` and is not updated by any script.
-- **No tests in the app.** `tab-swipe/model.ts`, `+native-intent.ts` and `lib/version.ts` are
-  pure enough to test without a device.
+  `package.json` `version` (also `0.2.0`) is set by hand and no script keeps the two together.
+- **Tests reach logic, not screens.** No component or route is tested. `tab-swipe/model.ts`,
+  `+native-intent.ts`, `lib/version.ts` and the guards in `Shell` are the next pure candidates.

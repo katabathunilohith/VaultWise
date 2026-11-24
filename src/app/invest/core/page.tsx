@@ -7,6 +7,7 @@ import { fmtDate, fmtMoney, fmtPct } from "@/lib/shared";
 import { InvestNav } from "@/components/invest-nav";
 import { FanChart, TwoLineChart } from "@/components/charts";
 import { moneyErrorText, MpinField, mpinReady } from "@/components/mpin"; // mpin
+import { sipNeedsMpin } from "@/lib/invest/sip-rule"; // mpin: the server's rule (pure; the module's barrel needs the database)
 import {
   Badge,
   Button,
@@ -53,7 +54,7 @@ interface CoreData {
     pnl: number;
     cash: number;
   };
-  sips: { id: string; amount: number; frequency: string; next_run_at: number; active: number }[];
+  sips: { id: string; amount: number; frequency: "weekly" | "monthly"; next_run_at: number; active: number }[];
   orders: { id: string; symbol: string; units: number; price: number; amount: number; source: string; created_at: number }[];
   currency: string;
 }
@@ -66,7 +67,7 @@ export default function CorePage() {
   const [modal, setModal] = useState<null | "buy" | "sip">(null);
   const [amount, setAmount] = useState("");
   const [freq, setFreq] = useState<"monthly" | "weekly">("monthly");
-  const [pin, setPin] = useState(""); // mpin: a one-off buy needs the MPIN
+  const [pin, setPin] = useState(""); // mpin: a one-off buy, and setting up or raising a SIP, need the MPIN
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [histMonthly, setHistMonthly] = useState(300);
@@ -117,13 +118,15 @@ export default function CorePage() {
   const cur = data.currency;
   const sip = data.sips.find((s) => s.active);
   const h = data.holdings;
+  // mpin: a one-off buy always needs the MPIN; a SIP only when it's new or moves more money (lowering it doesn't).
+  const needsPin = modal === "buy" || (modal === "sip" && sipNeedsMpin(sip, { amount: Math.round(Number(amount || 0) * 100), frequency: freq }));
 
   const act = async (kind: "buy" | "sip") => {
     setBusy(true);
     setErr(null);
     try {
       if (kind === "buy") await api.post("/api/v1/invest/core/buy", { amount: Number(amount), pin });
-      else await api.post("/api/v1/invest/core/sip", { amount: Number(amount), frequency: freq });
+      else await api.post("/api/v1/invest/core/sip", { amount: Number(amount), frequency: freq, ...(needsPin && { pin }) });
       toast({ tone: "good", text: kind === "buy" ? "Order filled across your model portfolio." : "Recurring SIP saved." });
       setModal(null);
       setAmount("");
@@ -150,6 +153,9 @@ export default function CorePage() {
               icon={<CalendarClock className="size-4" />}
               onClick={() => {
                 setAmount(sip ? String(sip.amount / 100) : "300");
+                setFreq(sip?.frequency ?? "monthly");
+                setPin("");
+                setErr(null);
                 setModal("sip");
               }}
             >
@@ -160,6 +166,8 @@ export default function CorePage() {
               icon={<ShoppingCart className="size-4" />}
               onClick={() => {
                 setAmount("");
+                setPin("");
+                setErr(null);
                 setModal("buy");
               }}
             >
@@ -405,7 +413,7 @@ export default function CorePage() {
                 Pause SIP
               </Button>
             )}
-            <Button onClick={() => modal && act(modal)} loading={busy} disabled={!Number(amount) || (modal === "buy" && !mpinReady(pin))}>
+            <Button onClick={() => modal && act(modal)} loading={busy} disabled={!Number(amount) || (needsPin && !mpinReady(pin))}>
               {modal === "buy" ? "Place order" : "Save SIP"}
             </Button>
           </>
@@ -438,6 +446,13 @@ export default function CorePage() {
             ))}
           </div>
           {modal === "buy" && <MpinField value={pin} onChange={setPin} />}
+          {modal === "sip" && needsPin && (
+            <MpinField
+              value={pin}
+              onChange={setPin}
+              hint={sip ? "Raising your SIP needs your MPIN. Lowering it doesn't." : "Setting up a SIP needs your MPIN."}
+            />
+          )}
           {err && <ErrorNote>{err}</ErrorNote>}
         </div>
       </Modal>

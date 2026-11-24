@@ -24,12 +24,13 @@ flowchart LR
   API -- "Live mode, HTTPS + JSON" --> ROUTES
   LIB -- "with permission" --> GROQ["Groq AI<br/>bills, IDs, assistant, tips"]
   LIB -- "sign-in on" --> FB["Firebase Auth<br/>tokens, reset emails"]
+  LIB -- "price provider, cached" --> YF["Yahoo Finance<br/>market prices"]
   UI -- "tester build, opt-in" --> PH["PostHog<br/>test activity"]
 ```
 
 | Part | Folder | Built with | Job |
 |---|---|---|---|
-| Server | `src/app/api/v1`, `src/lib` | Next.js 16 route handlers, Node's built-in SQLite, zod | All rules and all money moves. The single source of truth. |
+| Server | `src/app/api/v1`, `src/lib` | Next.js 16 route handlers on Node 24 (22.18 or later), Node's built-in SQLite, zod | All rules and all money moves. The single source of truth. |
 | Web app | `src/app/*` (pages), `src/components` | Next.js pages, React | The original prototype UI, the reviewer console and sign-in pages |
 | Phone app | `mobile/` | Expo SDK 58, React Native 0.88, expo-router, React Query | The main product. Runs live against the server, or in Practice mode on its own |
 
@@ -37,13 +38,13 @@ flowchart LR
 
 A request goes through the same layers every time.
 
-1. **Route** (`src/app/api/v1/.../route.ts`): parses input with zod, calls `customer()` or `admin()` to find who is asking and what they may do, then calls one function in `src/lib`. Routes hold no business rules.
+1. **Route** (`src/app/api/v1/.../route.ts`): parses input with zod, calls `customer()` or `admin()` to find who is asking and what they may do, then calls one function in `src/lib`. Routes hold no business rules. A money route names its action, `customer({ money: "<action>" })`, and the one money map (`MONEY_ROUTES` in `src/lib/money-routes.ts`) decides what it needs: the ID gate, the MPIN (`requireMpin()`, checked before any transaction), the new-device cap. Money in from the bank needs a verified ID and no MPIN.
 2. **Request wrapper** (`handle()` in `src/lib/api.ts`): turns thrown `HttpError`s and zod errors into `{ error, code }` JSON, and runs the request inside `withRequest()` so lower layers can read headers (the sign-in token, `x-ai-consent`).
-3. **Business logic** (`src/lib/*`): one module per area: `vaults.ts`, `emergency.ts`, `limits.ts`, `wallet/`, `kyc/`, `recovery/`, `verification/`, `invest/` and so on.
-4. **Ledger and audit** (`ledger.ts`, `audit.ts`): every money movement is a balanced double-entry journal, and every important action adds a row to a hash-chained audit log.
+3. **Business logic** (`src/lib/*`): one module per area: `vaults.ts`, `emergency.ts`, `limits/`, `wallet/`, `kyc/`, `recovery/`, `verification/`, `invest/` and so on. A folder module has a README with its file map, and an `index.ts` (or another named barrel, such as `verification/pipeline.ts` and `recovery/service.ts`) that other code imports from. Outside services sit behind a seam tests can swap: `setPriceProvider()` for market prices, `setBillReader()` for the AI bill read, `setIdExtractor()` for the ID read.
+4. **Ledger and audit** (`ledger.ts`, `audit.ts`): every money movement is a balanced double-entry journal, and every important action adds a row to a hash-chained audit log. The chain's head is also written outside the database (`audit-anchors/`, at start-up and daily), so `npm run audit:verify` can tell if the chain was rebuilt.
 5. **Storage** (`db.ts`): `get`, `all`, `run` and `tx` over one SQLite file. Modules that can be removed (wallet, custom rules, identity) create their own tables on first use.
 
-The lazy scheduler (`scheduler.ts`) runs due auto-saves, held emergency releases and SIP buys whenever a customer's data is read, so the prototype needs no background worker.
+The lazy scheduler (`scheduler.ts`) runs due auto-saves, held emergency releases, expired limit increases and SIP buys whenever a customer's data is read, so the prototype needs no background worker. The same `tick()` writes the daily audit anchor (global, at most once a day).
 
 ## The phone app
 
@@ -61,6 +62,8 @@ flowchart TD
 - **Features** (`mobile/src/features/*`) each own their screens, hooks and copy. Removable features have a `config.ts` switch, an `index.ts` barrel and a README listing every touch point.
 - **Shared code**: `mobile/src/components/ui` (the UI kit), `mobile/src/theme` (tokens), `mobile/src/lib` (API, storage, auth, haptics, money formatting).
 - **Data**: every screen calls `api.*` from `mobile/src/lib/api/client.ts`. A Proxy sends each call to the live server or to the Practice simulator, depending on the connection mode. React Query caches answers, keyed by mode so the two never mix.
+
+- **Tests**: Jest with jest-expo (`cd mobile && npm test`), in `__tests__` folders next to the code.
 
 Details: [app structure](mobile/app-structure.md), [data layer](mobile/data-layer.md).
 
@@ -85,15 +88,16 @@ Details: [app structure](mobile/app-structure.md), [data layer](mobile/data-laye
 | Shareable APK | `npm run build:apk` | Android testers | `npm run update:apk` over the air |
 | Store | `eas build --profile production` | App stores (later) | `npm run update:production` |
 
-Versions and over-the-air updates: [mobile/README.md](../mobile/README.md#releases-and-updates) and the [development process](process/development-process.md).
+One version for the server and the phone (0.2.0 today, tag `v0.2.0`; `v0.1.0` is commit `012a9fc`). Versions and over-the-air updates: [mobile/README.md](../mobile/README.md#releases-and-updates) and the [development process](process/development-process.md#6-release).
 
 ## Cross-cutting rules
 
-- **One source of truth.** The server decides every rule. The simulator copies the rules the screens need, and its files say which server code they mirror.
+- **One source of truth.** The server decides every rule. The simulator copies the rules the screens need, and its files say which server code they mirror. Where a rule exists on both sides, contract tests run the same vectors (`tests/contract/vectors/`) against both copies, so they can't drift apart unnoticed ([tests/contract/README.md](../tests/contract/README.md)).
+- **Checked on every change.** CI (`.github/workflows/ci.yml`) typechecks, lints, tests and builds the server and the phone on every push to `main` and every pull request.
 - **Switches, not forks.** Optional modules turn off with one flag and come out by deleting a folder plus the lines marked with their name (`// wallet`, `// identity`, `// tester`).
 - **Consent before AI.** No personal data goes to Groq unless the person said yes (`x-ai-consent`, see [AI](features/ai.md)).
 - **Least data.** ID numbers are kept as the last 4 digits plus a keyed hash. Proof photos are deleted when a check is rejected.
-- **Everything audited.** Money moves, decisions and identity events go into the hash-chained audit log.
+- **Everything audited.** Money moves, decisions and identity events go into the hash-chained audit log, anchored outside the database.
 
 ## Where to go next
 

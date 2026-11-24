@@ -235,7 +235,7 @@ function proofView(p: DemoProof): ProofView {
       decision: done ? decision : null,
       finalDecision: done ? finalDecision : null,
       reasons: done ? [p.reason ?? REASONS[p.outcome]] : [],
-      modelVersion: "vw-proof@1.4 · demo simulator",
+      modelVersion: "vw-proof@1.5 · demo simulator",
       reviewer: null,
       reviewerNote: null,
       appealNote: p.appealNote,
