@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 /**
  * deploy/: root must only ever run root-owned copies of the scripts. /opt/vaultwise belongs to the app user
- * ("vaultwise"), and `npm ci` runs package install scripts as that user, so a file there may have been changed.
+ * ("vaultwise"), and `npm install` runs package install scripts as that user, so a file there may have been changed.
  */
 
 const read = (f: string) => fs.readFileSync(path.join(__dirname, "..", "deploy", f), "utf8");
@@ -31,7 +31,7 @@ describe("deploy scripts run as root only from root-owned copies", () => {
   it("update.sh builds as the app user and never installs deploy files by itself", () => {
     const src = read("update.sh");
     const run = commands(src);
-    expect(run.some((l) => l.includes(`as_app "set -a`) && l.includes("npm ci"))).toBe(true);
+    expect(run.some((l) => l.includes(`as_app "set -a`) && l.includes("npm install") && l.includes("git checkout -- package-lock.json"))).toBe(true);
     // It shows a difference and prints the install command; it never runs install or cp on deploy files.
     expect(run.some((l) => /^(sudo\s+)?(install|cp)\s/.test(l))).toBe(false);
     expect(src).toContain('diff -u "$installed" "$repo" | cat -v');

@@ -22,12 +22,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      - name: Install dependencies
+        # Not `npm ci`: npm on Windows leaves two optional WebAssembly helpers (@emnapi/core and
+        # @emnapi/runtime, needed only by sharp's and the resolver's wasm builds) out of package-lock.json,
+        # and `npm ci` on Linux then refuses the lockfile as out of sync. `npm install` fills them in on the
+        # runner; every other version still comes from package-lock.json. The phone app's lockfile is fine.
+        run: npm install --no-audit --no-fund
       - name: Type check
         run: npm run typecheck
       - name: Lint
@@ -45,13 +50,14 @@ jobs:
       run:
         working-directory: mobile
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: mobile/package-lock.json
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
       - name: Type check (app and tests)
         run: npm run typecheck
       - name: Lint
