@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { withRequest } from "@/lib/auth/context";
 import { all, get } from "@/lib/db";
 import { JURISDICTIONS } from "@/lib/compliance";
 import { emergencyStatus } from "@/lib/emergency";
@@ -196,5 +197,102 @@ describe("emergency exception flow (AI disabled in tests)", () => {
     await ask();
     await ask();
     await expect(ask()).rejects.toMatchObject({ status: 429 });
+  });
+});
+
+describe("emergency increases meet later changes", () => {
+  const SURGERY = "My son needs surgery on Friday and the hospital deposit is $8,500.";
+  /** The model answers with these scores, after `during()` runs (a change made while it thinks). */
+  function modelAnswers(scores: LimitAssessment, during: () => void = () => {}) {
+    process.env.GROQ_API_KEY = "test-key";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        await new Promise((r) => setTimeout(r, 5));
+        during();
+        return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(scores) } }] }), { status: 200 });
+      }),
+    );
+  }
+  // The person said yes to the AI (without the header the AI isn't asked at all).
+  const consenting = <T>(fn: () => Promise<T>) => withRequest(new Request("http://localhost/api/v1/limits/emergency", { headers: { "x-ai-consent": "yes" } }), fn);
+
+  afterEach(() => {
+    delete process.env.GROQ_API_KEY;
+    vi.unstubAllGlobals();
+  });
+
+  it("approval keeps a limit lowered while the request waited; the raise falls back to the lowered value", async () => {
+    const fresh = customer("US");
+    const r = await requestEmergencyLimitChange(fresh(), { limits: { singleWithdrawal: 9_000_00 }, reasonCode: "medical", explanation: SURGERY });
+    expect(r.decision).toBe("in_review");
+    changeLimits(fresh(), { singleWithdrawal: 3_000_00, dailyWithdrawal: 4_000_00 }); // lowered while it waits
+    const t0 = Date.now();
+    reviewLimitChange(r.id, "approved", "test.reviewer", "Hospital letter confirmed", t0);
+    // The requested limit gets the requested value; the other one stays where the customer put it.
+    expect(getLimits(fresh())).toMatchObject({ singleWithdrawal: 9_000_00, dailyWithdrawal: 4_000_00 });
+    revertExpiredLimitIncreases(fresh(), t0 + 15 * DAY);
+    expect(getLimits(fresh())).toMatchObject({ singleWithdrawal: 3_000_00, dailyWithdrawal: 4_000_00 });
+  });
+
+  it("an approval right after the AI call doesn't undo a change made during it", async () => {
+    const fresh = customer("US");
+    modelAnswers(genuine, () => changeLimits(fresh(), { dailyWithdrawal: 4_000_00 }));
+    const r = await consenting(() =>
+      requestEmergencyLimitChange(fresh(), { limits: { singleWithdrawal: 9_000_00 }, reasonCode: "medical", explanation: SURGERY }),
+    );
+    expect(r.decision).toBe("approved");
+    expect(getLimits(fresh())).toMatchObject({ singleWithdrawal: 9_000_00, dailyWithdrawal: 4_000_00 });
+    expect(r.limits).toMatchObject({ singleWithdrawal: 9_000_00, dailyWithdrawal: 4_000_00 });
+  });
+
+  it("requests sent at once can't pass the monthly number of emergency requests", async () => {
+    const fresh = customer("US");
+    modelAnswers({ ...genuine, urgency: 0.4 }); // a person decides
+    const ask = () =>
+      consenting(() =>
+        requestEmergencyLimitChange(fresh(), {
+          limits: { dailyWithdrawal: 15_000_00 },
+          reasonCode: "home_repair",
+          explanation: "A burst pipe flooded the kitchen and the plumber needs paying today.",
+        }),
+      );
+    const results = await Promise.allSettled([ask(), ask(), ask()]);
+    expect(results.filter((x) => x.status === "fulfilled")).toHaveLength(2);
+    expect(results.find((x) => x.status === "rejected")).toMatchObject({ reason: { status: 429 } });
+    expect(get<{ n: number }>("SELECT COUNT(*) AS n FROM limit_changes WHERE user_id = ? AND kind = 'emergency'", fresh().id)!.n).toBe(2);
+  });
+
+  it("an expiring increase doesn't undo another one that is still active", async () => {
+    const fresh = customer("US");
+    const t0 = Date.now();
+    // A raises the single limit for 14 days.
+    const a = await requestEmergencyLimitChange(fresh(), { limits: { singleWithdrawal: 9_000_00 }, reasonCode: "medical", explanation: SURGERY }, t0);
+    reviewLimitChange(a.id, "approved", "test.reviewer", "Letter checked", t0);
+    // Two days later B raises the same limit further, and the daily limit.
+    const b = await requestEmergencyLimitChange(
+      fresh(),
+      {
+        limits: { singleWithdrawal: 12_000_00, dailyWithdrawal: 15_000_00 },
+        reasonCode: "medical",
+        explanation: "The surgeon needs a second payment and the pharmacy is waiting for the rest.",
+      },
+      t0 + 2 * DAY,
+    );
+    reviewLimitChange(b.id, "approved", "test.reviewer", "Second letter checked", t0 + 2 * DAY);
+    expect(getLimits(fresh())).toMatchObject({ singleWithdrawal: 12_000_00, dailyWithdrawal: 15_000_00 });
+
+    expect(revertExpiredLimitIncreases(fresh(), t0 + 15 * DAY)).toBe(1); // A is over, B isn't
+    expect(getLimits(fresh())).toMatchObject({ singleWithdrawal: 12_000_00, dailyWithdrawal: 15_000_00 });
+    expect(revertExpiredLimitIncreases(fresh(), t0 + 17 * DAY)).toBe(1); // B is over: back to before A, not to A's level
+    expect(getLimits(fresh())).toMatchObject({ singleWithdrawal: 5_000_00, dailyWithdrawal: 10_000_00 });
+  });
+
+  it("a reviewer's decision is audited at the decision time", async () => {
+    const fresh = customer("US");
+    const r = await requestEmergencyLimitChange(fresh(), { limits: { singleWithdrawal: 9_000_00 }, reasonCode: "medical", explanation: SURGERY });
+    const at = Date.now() - 3 * 60_000;
+    reviewLimitChange(r.id, "denied", "test.reviewer", "Not an emergency", at);
+    expect(get<{ ts: number }>("SELECT ts FROM audit_log WHERE action = 'limits.reviewed_denied' AND entity_id = ?", r.id)!.ts).toBe(at);
   });
 });

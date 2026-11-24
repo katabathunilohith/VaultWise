@@ -12,12 +12,36 @@ Three ways back in, from easiest to hardest:
 | Variable | Effect |
 |---|---|
 | `RECOVERY_ENABLED` | `"false"` turns off find, reset and claim (404 `recovery_off`). On by default. |
-| `FIREBASE_WEB_API_KEY` | Lets the server send reset emails (Identity Toolkit `accounts:sendOobCode`, `PASSWORD_RESET`). Unset: nothing is sent and a warning is logged; clients can still call Firebase's `sendPasswordResetEmail` directly. |
+| `FIREBASE_WEB_API_KEY` | Lets the server send reset emails (`reset-email.ts`: Identity Toolkit `accounts:sendOobCode`, `PASSWORD_RESET`). Unset: nothing is sent and a warning is logged; clients can still call Firebase's `sendPasswordResetEmail` directly. |
 | `IDENTITY_SECRET` | Also signs `findToken`s (see `src/lib/kyc/README.md`). Required in firebase mode. |
 | `TRUST_PROXY_HOPS` / `TRUST_PROXY_HEADER` | Which proxy headers hold the client IP (see `src/lib/auth/README.md`). With neither set there is no IP key: the device id and the server-wide cap still apply. |
 
 Claims need firebase mode (`FIREBASE_PROJECT_ID`). In prototype mode reset answers `{ ok: true, simulated: true }`,
 `GET /claim` answers `{ claim: null }` and `POST`/`DELETE /claim` answer 400 `not_available`.
+
+## Files
+
+Routes import the use cases from `service.ts`; the claim store, the switch and the rate limits from their own files.
+
+| File | Job | Main functions |
+|---|---|---|
+| `service.ts` | The use cases routes call (re-exports only) | `findAccount`, `requestReset`, `createClaim`, `claimStatus`, `cancelClaim`, `recoveryQueue`, `decideClaim`, `claimView`; types `FindAnswer`, `ClaimView` |
+| `config.ts` | The switch | `recoveryEnabled()`, `assertRecoveryEnabled()` (404 `recovery_off`) |
+| `id-form.ts` | Shared by find and claim: the ID form and its number | `IdForm`, `numberFrom(form)` (typed number, or read from the photo through `analyseId`), `userById()` |
+| `find.ts` | Find an account by its verified ID (no sign-in) | `findAccount(form, clientKeys)` → `FindAnswer` (masked email, `findToken`) |
+| `reset.ts` | Password reset (no sign-in, never says whether the account exists) | `requestReset({ email } \| { findToken }, clientKeys)` |
+| `reset-email.ts` | The reset email sender (Firebase Identity Toolkit) | `sendPasswordReset(email)`: never throws; warns once when the key is unset |
+| `claim-checks.ts` | Pure: the reviewer's checks and the provisional-access rule | `claimChecks({ analysis, user, token, docType, number, otherPending })` → `{ checks, reasons, provisional }` |
+| `claimant.ts` | The claimant's side | `createClaim(token, form, clientKeys)`, `claimStatus(uid)`, `cancelClaim(uid)` |
+| `admin.ts` | The reviewer's side | `recoveryQueue()`, `decideClaim(id, decision, reviewer, note)` |
+| `claim-view.ts` | A claim as the claimant sees it | `claimView(row)` → `ClaimView` (`notifiedEmail` from the claim's stored `notified_email`) |
+| `claims.ts` | Tables, claim queries, photo deletion, expiry | `ensureRecoveryTables()`, `claimById()`, `latestClaimFor()`, `pendingClaimFor()`, `deleteClaimPhoto()`, `expireClaims()`, `settleExpiredClaimFor()`, `CLAIM_TTL_MS` |
+| `limits.ts` | Rate limits for find, reset and claim | `spendTry(bucket, keys)`, `clientTag(keys)`, `LIMITS`, `GLOBAL_KEY` |
+| `tokens.ts` | Stateless `findToken` (HMAC, 10 minutes) | `makeFindToken()`, `readFindToken()` |
+| `notify.ts` | Account notices (log line plus audit entry) | `notifyAccount({ userId, email, kind, ref })` |
+
+Notices are sent from `claimant.ts` (`recovery_started`, `recovery_cancelled`) and `admin.ts` (`recovery_approved`,
+`recovery_rejected`; to the address the account had before approval).
 
 ## API
 
@@ -61,6 +85,13 @@ The IP comes only from headers a trusted proxy sets: with `TRUST_PROXY_HOPS` ≥
   mismatch) the claim still goes to a person, but the sign-in is **not bound** and sees nothing of the account until approval.
 - One pending claim per sign-in (checked in the transaction and by a unique index): 409 `claim_pending`. Onboarding is
   refused with `claim_pending` while a claim waits.
+- Reading the card takes seconds, so the transaction that records a claim reads the sign-in again: if it opened a wallet
+  meanwhile the claim is refused with 409 `has_wallet` (and `claim_pending` if it became `recovery_pending`), nothing is
+  bound and the photo is deleted. (Before 2026-11-24 the claim went ahead and could move the sign-in off the new wallet
+  or leave that wallet with no sign-in.)
+- `notifiedEmail` is the address the "recovery started" notice went to, stored on the claim (`notified_email`; `""`
+  when the account had no email, shown as `null`), so it doesn't change when approval makes the new sign-in's email the
+  account's. Claims made before 2026-11-24 have `NULL` there and show the account's current email, as before.
 - **Approve**: the new identity becomes `active`, every older identity for the wallet becomes `disabled`, other pending
   claims for that wallet are rejected, and the wallet's contact email becomes the new sign-in's email.
 - Approval answers 409 `claimant_has_wallet` if the claimant's sign-in is tied to a different open wallet.
@@ -78,7 +109,8 @@ Keep the audit entry.
 
 ## Tables (created on first use, per database)
 
-`recovery_claims` (as in the build plan, plus status `expired`) and `recovery_attempts (bucket, client_key hashed, ts)`.
+`recovery_claims` (as in the build plan, plus status `expired`, `provisional` and `notified_email`, both added to an
+existing table on first use) and `recovery_attempts (bucket, client_key hashed, ts)`.
 
 ## Touch points outside this folder (marked `// identity` / `// recovery`)
 
