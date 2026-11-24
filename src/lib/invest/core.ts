@@ -4,6 +4,7 @@ import { balanceOf, transfer, userAccount, LedgerError } from "../ledger";
 import { HttpError, type User } from "../users";
 import { getSeries, latestPrice, rng, type Candle } from "./market";
 import { bandInfo, modelPortfolio, type RiskProfile } from "./profile";
+import type { SipFrequency } from "./sip-rule";
 
 export function riskProfile(user: User): RiskProfile | null {
   return parseJson<RiskProfile | null>(user.risk_profile, null);
@@ -156,7 +157,15 @@ export function sipPlans(user: User) {
   );
 }
 
-export function upsertSip(user: User, amount: number, frequency: "weekly" | "monthly", startAt?: number) {
+/** The customer's active SIP, or undefined. */
+export function activeSip(user: User) {
+  return get<{ id: string; amount: number; frequency: SipFrequency; next_run_at: number }>(
+    "SELECT id, amount, frequency, next_run_at FROM sip_plans WHERE user_id = ? AND active = 1",
+    user.id,
+  );
+}
+
+export function upsertSip(user: User, amount: number, frequency: SipFrequency, startAt?: number) {
   requireProfile(user);
   if (amount <= 0) throw new HttpError(400, "Amount must be positive");
   const existing = get<{ id: string }>("SELECT id FROM sip_plans WHERE user_id = ? AND active = 1", user.id);

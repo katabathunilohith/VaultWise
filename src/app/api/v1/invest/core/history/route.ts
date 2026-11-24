@@ -1,5 +1,5 @@
 import { customer, handle, json, minor } from "@/lib/api";
-import { historicalIllustration } from "@/lib/invest/core";
+import { historicalIllustration } from "@/lib/invest";
 
 export const GET = handle(async (req: Request) => {
   const user = await customer({ tick: false, access: "read" });

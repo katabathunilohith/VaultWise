@@ -1,6 +1,5 @@
 import { customer, handle, json } from "@/lib/api";
-import { marketAnalysis } from "@/lib/invest/satellite";
-import type { Interval } from "@/lib/invest/market";
+import { marketAnalysis, type Interval } from "@/lib/invest";
 
 export const GET = handle(async (req: Request) => {
   await customer({ tick: false, access: "read" });

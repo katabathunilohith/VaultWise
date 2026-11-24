@@ -4,8 +4,7 @@ import { balanceOf, userAccount } from "@/lib/ledger";
 import { listVaults, pendingRoundups } from "@/lib/vaults";
 import { emergencyStatus } from "@/lib/emergency";
 import { badges, nudges } from "@/lib/engagement";
-import { coreHoldings } from "@/lib/invest/core";
-import { paperEquity } from "@/lib/invest/satellite";
+import { coreHoldings, paperEquity } from "@/lib/invest";
 
 export const GET = handle(async () => {
   // identity: one of the few read routes open to a sign-in with provisional recovery access.

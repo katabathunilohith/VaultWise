@@ -439,17 +439,25 @@ async function main() {
       return r.data.fills.map((f) => f.symbol).join(", ");
     });
     await test("recurring SIP can be configured", async () => {
-      const r = await post("/invest/core/sip", { amount: 100, frequency: "monthly" });
+      // Setting up a SIP needs the MPIN (invest_sip); lowering it doesn't.
+      const noPin = await post("/invest/core/sip", { amount: 100, frequency: "monthly" });
+      expect(noPin.status === 401 && noPin.data.code === "mpin_required", `no-PIN status ${noPin.status}`);
+      const r = await post("/invest/core/sip", { amount: 100, frequency: "monthly", pin: PIN });
       expect(r.status === 200, `status ${r.status}`);
+      const lower = await post("/invest/core/sip", { amount: 50, frequency: "monthly" });
+      expect(lower.status === 200, `lowering status ${lower.status}`);
     });
     await test("Satellite opt-in enforces disclosures and the allocation cap", async () => {
       const ov = (await get("/invest/satellite")).data;
       expect(ov.eligibility.eligible, `not eligible: ${JSON.stringify(ov.eligibility.checks.filter((c) => !c.pass))}`);
-      const noAck = await post("/invest/satellite/opt-in", { amount: 10, acknowledged: 0 });
+      // Opting in moves money from the bank, so it needs the MPIN (satellite_opt_in).
+      const noPin = await post("/invest/satellite/opt-in", { amount: 20, acknowledged: ov.disclosures.length });
+      expect(noPin.status === 401 && noPin.data.code === "mpin_required", `no-PIN status ${noPin.status}`);
+      const noAck = await post("/invest/satellite/opt-in", { amount: 10, acknowledged: 0, pin: PIN });
       expect(noAck.status === 400, `no-ack status ${noAck.status}`);
-      const overCap = await post("/invest/satellite/opt-in", { amount: 10_000, acknowledged: ov.disclosures.length });
+      const overCap = await post("/invest/satellite/opt-in", { amount: 10_000, acknowledged: ov.disclosures.length, pin: PIN });
       expect(overCap.status === 400, `over-cap status ${overCap.status}`);
-      const ok = await post("/invest/satellite/opt-in", { amount: 20, acknowledged: ov.disclosures.length });
+      const ok = await post("/invest/satellite/opt-in", { amount: 20, acknowledged: ov.disclosures.length, pin: PIN });
       expect(ok.status === 201, `opt-in status ${ok.status} ${JSON.stringify(ok.data)}`);
     });
     await test("SMC market analysis returns candles and overlays", async () => {

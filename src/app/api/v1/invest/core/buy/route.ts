@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { body, customer, handle, json, minor } from "@/lib/api";
-import { executeSip } from "@/lib/invest/core";
+import { executeSip } from "@/lib/invest";
 import { mpinField, requireMpin } from "@/lib/mpin"; // mpin
 
 /** A one-off buy of the Core model portfolio from the linked bank. Needs the MPIN. */

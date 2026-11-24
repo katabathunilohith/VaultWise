@@ -1,5 +1,5 @@
 import { customer, handle, json } from "@/lib/api";
-import { optOut } from "@/lib/invest/satellite";
+import { optOut } from "@/lib/invest";
 
 export const POST = handle(async () => {
   const user = await customer({ tick: false });

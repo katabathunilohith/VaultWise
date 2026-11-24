@@ -5,6 +5,7 @@ import { reconcile } from "@/lib/ledger";
 import { listFlags } from "@/lib/fraud";
 import { rulesFor } from "@/lib/compliance";
 import { pendingLimitReviews } from "@/lib/limits";
+import { allStrategies } from "@/lib/invest";
 
 /** Operations console: review queue, risk flags, model metrics, ledger and audit integrity. */
 export const GET = handle(async () => {
@@ -73,10 +74,15 @@ export const GET = handle(async () => {
     Date.now() - 30 * 86_400_000,
   );
 
-  const strategies = all<{ id: string; name: string; stage: string; last_backtest: string | null }>(
-    "SELECT id, name, stage, last_backtest FROM strategies ORDER BY id",
-  ).map((s) => ({
-    ...s,
+  // Strategies are per customer (B9): one row per customer and strategy. `id` stays unique per row;
+  // `strategyId` is the strategy itself and `userId`/`customer` say whose backtest it is.
+  const strategies = allStrategies().map((s) => ({
+    id: `${s.user_id}:${s.id}`,
+    strategyId: s.id,
+    userId: s.user_id,
+    customer: s.customer,
+    name: s.name,
+    stage: s.stage,
     last_backtest: parseJson(s.last_backtest, null),
   }));
 

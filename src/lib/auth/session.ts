@@ -110,8 +110,17 @@ export async function resolveCustomer(
   }
   if (s.access === "recovery" && ((opts.access ?? "write") === "write" || !opts.recovery))
     throw new HttpError(403, RECOVERY_RESTRICTED, "recovery_restricted");
-  if (opts.kyc && kycGateOn() && s.user.kyc_status !== "verified") throw new HttpError(403, KYC_REQUIRED, "kyc_required");
+  if (opts.kyc) assertKycGate(s.user);
   return { user: s.user, session: s };
+}
+
+/**
+ * The ID-check gate on its own: 403 kyc_required unless the ID is verified (off with KYC_ENFORCED=false).
+ * `resolveCustomer({ kyc: true })` applies it; `moneyGate()` in lib/api.ts applies it once a route knows that
+ * this request moves money (POST /vaults with an opening deposit).
+ */
+export function assertKycGate(user: Pick<User, "kyc_status">) {
+  if (kycGateOn() && user.kyc_status !== "verified") throw new HttpError(403, KYC_REQUIRED, "kyc_required");
 }
 
 /** Never throws: the wallet if this request has full access to one, else null. */

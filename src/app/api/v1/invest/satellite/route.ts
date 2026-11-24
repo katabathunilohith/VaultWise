@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { customer, handle, json } from "@/lib/api";
-import { runPaperEngine, satelliteOverview } from "@/lib/invest/satellite";
+import { runPaperEngine, satelliteOverview } from "@/lib/invest";
 
 export const GET = handle(async () => {
   const user = await customer({ access: "read" });

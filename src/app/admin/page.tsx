@@ -163,8 +163,12 @@ interface Overview {
     checkedAt: number;
   };
   auditChain: { ok: boolean; checked: number; brokenAt: number | null; headHash: string };
+  // One row per customer and strategy (B9): `id` is unique per row, `strategyId` the strategy itself.
   strategies: {
     id: string;
+    strategyId: string;
+    userId: string;
+    customer: string | null;
     name: string;
     stage: string;
     last_backtest: {
@@ -591,7 +595,9 @@ export default function AdminPage() {
 
       {tab === "strategies" && (
         <Card>
-          <CardTitle sub="Satellite strategies by market and timeframe. Run backtests from the Satellite page.">Strategy governance</CardTitle>
+          <CardTitle sub="Each customer's Satellite backtests, by market and timeframe. Customers run them from the Satellite page.">
+            Strategy governance
+          </CardTitle>
           {data.strategies.length === 0 ? (
             <p className="text-sm text-muted">No strategies have been backtested yet.</p>
           ) : (
@@ -599,6 +605,7 @@ export default function AdminPage() {
               <thead>
                 <tr>
                   <Th>Strategy</Th>
+                  <Th>Customer</Th>
                   <Th>Stage</Th>
                   <Th right>Trades</Th>
                   <Th right>OOS expectancy</Th>
@@ -611,6 +618,7 @@ export default function AdminPage() {
                 {data.strategies.map((s) => (
                   <tr key={s.id}>
                     <Td className="font-medium">{s.name}</Td>
+                    <Td className="text-ink-2">{s.customer ?? s.userId}</Td>
                     <Td>
                       <Badge>{s.stage}</Badge>
                     </Td>

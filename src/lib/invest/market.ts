@@ -1,4 +1,5 @@
 import { get, run } from "../db";
+import { priceProvider } from "./prices";
 
 export interface Candle {
   t: number; // ms epoch (bar open)
@@ -15,7 +16,8 @@ export interface Series {
   symbol: string;
   interval: Interval;
   currency: string;
-  source: "yahoo" | "cache" | "synthetic";
+  /** The price provider's name ("yahoo" by default, see prices.ts), "cache" or "synthetic". */
+  source: string;
   fetchedAt: number;
   candles: Candle[];
 }
@@ -46,36 +48,6 @@ const DEFAULT_RANGE: Record<Interval, string> = {
   "1wk": "10y",
   "1mo": "10y",
 };
-
-async function fetchYahoo(symbol: string, interval: Exclude<Interval, "4h">, range: string) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${range}&includePrePost=false`;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 12_000);
-  try {
-    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (Vaultwise prototype)" }, signal: ctrl.signal, cache: "no-store" });
-    if (!res.ok) throw new Error(`Yahoo ${res.status}`);
-    const json = await res.json();
-    const r = json?.chart?.result?.[0];
-    if (!r?.timestamp) throw new Error("No data");
-    const q = r.indicators.quote[0];
-    let currency: string = r.meta?.currency ?? "USD";
-    const scale = currency === "GBp" || currency === "GBX" ? 0.01 : 1;
-    if (scale !== 1) currency = "GBP";
-    const candles: Candle[] = [];
-    for (let i = 0; i < r.timestamp.length; i++) {
-      const o = q.open[i];
-      const h = q.high[i];
-      const l = q.low[i];
-      const c = q.close[i];
-      if (o == null || h == null || l == null || c == null) continue;
-      candles.push({ t: r.timestamp[i] * 1000, o: o * scale, h: h * scale, l: l * scale, c: c * scale, v: q.volume?.[i] ?? 0 });
-    }
-    if (candles.length < 10) throw new Error("Too few candles");
-    return { candles, currency };
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 function aggregate(candles: Candle[], hours: number): Candle[] {
   const bucket = hours * 3_600_000;
@@ -153,16 +125,19 @@ export async function getSeries(symbol: string, interval: Interval, range = DEFA
     };
   }
   try {
-    const raw = interval === "4h" ? await fetchYahoo(symbol, "1h", range) : await fetchYahoo(symbol, interval, range);
+    // Every live read goes through the price provider (Yahoo by default; tests plug in a fake).
+    const provider = priceProvider();
+    const raw = await provider.fetchCandles(symbol, interval === "4h" ? "1h" : interval, range);
     const candles = interval === "4h" ? aggregate(raw.candles, 4) : raw.candles;
     const now = Date.now();
     run(
-      "INSERT INTO market_cache (key, fetched_at, source, payload) VALUES (?, ?, 'yahoo', ?) ON CONFLICT(key) DO UPDATE SET fetched_at = excluded.fetched_at, source = excluded.source, payload = excluded.payload",
+      "INSERT INTO market_cache (key, fetched_at, source, payload) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET fetched_at = excluded.fetched_at, source = excluded.source, payload = excluded.payload",
       key,
       now,
+      provider.source,
       JSON.stringify({ currency: raw.currency, candles }),
     );
-    return { symbol, interval, currency: raw.currency, source: "yahoo", fetchedAt: now, candles };
+    return { symbol, interval, currency: raw.currency, source: provider.source, fetchedAt: now, candles };
   } catch {
     if (cached) {
       const p = JSON.parse(cached.payload);

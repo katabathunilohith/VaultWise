@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { all, get, run } from "@/lib/db";
 import { executeEmergency, settleEmergencies } from "@/lib/emergency";
-import { runDueSips, upsertSip } from "@/lib/invest/core";
-import { scoreAnswers } from "@/lib/invest/profile";
+import { runDueSips, scoreAnswers, setPriceProvider, upsertSip } from "@/lib/invest";
+import { downPrices, fakePrices } from "./helpers/prices";
 import { balanceOf, transfer, userAccount, worldAccount } from "@/lib/ledger";
 import { createUser, type User } from "@/lib/users";
 import { createVault, deposit } from "@/lib/vaults";
@@ -60,7 +60,12 @@ describe("emergency scheduling", () => {
 });
 
 describe("SIP scheduler", () => {
+  afterEach(() => setPriceProvider(fakePrices()));
+
   it("runs every missed SIP date (bounded), records misses when the bank is short, and advances the schedule", async () => {
+    // B21: prices come from a deterministic fake, never the live Yahoo endpoint.
+    const prices = fakePrices();
+    setPriceProvider(prices);
     const fresh = newCustomer("Sip Saver", 250_00);
     const profile = scoreAnswers({ age: 1, horizon: 3, income: 2, cushion: 2, drawdown: 2, experience: 2, goal: 2 });
     run("UPDATE users SET risk_profile = ? WHERE id = ?", JSON.stringify({ ...profile, completedAt: Date.now() }), fresh().id);
@@ -72,5 +77,24 @@ describe("SIP scheduler", () => {
     expect(next).toBeGreaterThan(Date.now());
     // Running again immediately does nothing.
     expect(await runDueSips(fresh())).toHaveLength(0);
+    // Every fill was priced by the fake: 100.00 per unit, so each 100.00 debit bought 1 unit across the portfolio.
+    expect(prices.calls.length).toBeGreaterThan(0);
+    const units = all<{ units: number; price: number }>("SELECT units, price FROM orders WHERE user_id = ?", fresh().id);
+    expect(units.every((o) => o.price === 100)).toBe(true);
+    expect(units.reduce((s, o) => s + o.units, 0)).toBeCloseTo(2, 6);
+  });
+
+  it("still fills when the price provider is down, from synthetic prices, without touching the network", async () => {
+    const down = downPrices();
+    setPriceProvider(down);
+    run("DELETE FROM market_cache");
+    const fresh = newCustomer("Sip Offline", 200_00);
+    const profile = scoreAnswers({ age: 1, horizon: 3, income: 2, cushion: 2, drawdown: 2, experience: 2, goal: 2 });
+    run("UPDATE users SET risk_profile = ? WHERE id = ?", JSON.stringify({ ...profile, completedAt: Date.now() }), fresh().id);
+    upsertSip(fresh(), 100_00, "monthly", Date.now() - HOUR);
+    expect((await runDueSips(fresh())).map((r) => r.status)).toEqual(["filled"]);
+    expect(down.calls).toBeGreaterThan(0);
+    const sources = all<{ details: string }>("SELECT details FROM audit_log WHERE user_id = ? AND action = 'invest.core_buy'", fresh().id);
+    expect(JSON.parse(sources[0].details).priceSources).toEqual(["synthetic"]);
   });
 });
