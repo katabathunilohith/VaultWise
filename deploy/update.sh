@@ -5,7 +5,7 @@
 #   sudo vaultwise-update            # pull the latest code, build, restart
 #   sudo vaultwise-update --no-pull  # build and restart what's already there
 #
-# Root never runs anything from /opt/vaultwise: that folder belongs to the app user "vaultwise", and `npm ci`
+# Root never runs anything from /opt/vaultwise: that folder belongs to the app user "vaultwise", and `npm install`
 # runs package install scripts as that user, so a file there could have been changed by any package. The pull,
 # the install and the build run as "vaultwise"; root only restarts the service. When the repository has a newer
 # copy of this script, backup.sh or the service file, it shows the difference (control characters made
@@ -56,7 +56,10 @@ check_installed vaultwise.service /etc/systemd/system/vaultwise.service \
   "sudo install -o root -g root -m 0644 $APP_DIR/deploy/vaultwise.service /etc/systemd/system/vaultwise.service && sudo systemctl daemon-reload"
 
 echo "== Installing packages and building (a few minutes)"
-as_app "set -a && . '$ENV_FILE' && set +a && npm ci --include=dev --no-audit --no-fund && npm run build"
+# Not `npm ci`: npm on Windows leaves two optional WebAssembly helpers (@emnapi/core, @emnapi/runtime) out of
+# package-lock.json, and `npm ci` on Linux refuses that lockfile. `npm install` fills them in and takes every other
+# version from the lockfile; putting the lockfile back keeps the checkout clean for the next `git pull --ff-only`.
+as_app "set -a && . '$ENV_FILE' && set +a && npm install --include=dev --no-audit --no-fund && git checkout -- package-lock.json && npm run build"
 
 echo "== Restarting"
 systemctl restart vaultwise

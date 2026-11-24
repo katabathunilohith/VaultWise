@@ -95,7 +95,7 @@ flowchart LR
 
 | Job | Steps |
 |---|---|
-| Server and web app (root) | `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` |
+| Server and web app (root) | `npm install` (not `npm ci`: npm on Windows leaves two optional WebAssembly helpers out of the lockfile, which `npm ci` on Linux refuses; see the comment in `ci.yml`), `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` |
 | Phone app (`mobile/`) | `npm ci`, `npm run typecheck`, `npx eslint src scripts --max-warnings=0`, `npm test` (reads `../tests/contract/vectors`), `npx expo export --platform web` |
 
 Merge a pull request only when both jobs are green. The end-to-end suite (`npm run test:e2e`), the live AI check and the evaluation's live pass stay manual (table above). The phone's CI lint fails on warnings, which `npm run lint` (`expo lint`) only prints, so fix warnings before pushing.

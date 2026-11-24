@@ -49,12 +49,12 @@ From [`package.json`](../../package.json). Run these in the repo root (`VaultWis
 
 Run these **on the server**, over SSH, as described in [`deploy/README.md`](../../deploy/README.md). They are bash scripts for Ubuntu, not for Windows.
 
-Root runs only root-owned copies of the scripts, installed outside the app folder: `/opt/vaultwise` belongs to the `vaultwise` user, and `npm ci` runs package install scripts as that user, so a file there could have been changed by a package. Never run `sudo bash /opt/vaultwise/deploy/...`.
+Root runs only root-owned copies of the scripts, installed outside the app folder: `/opt/vaultwise` belongs to the `vaultwise` user, and `npm install` runs package install scripts as that user, so a file there could have been changed by a package. Never run `sudo bash /opt/vaultwise/deploy/...`.
 
 | Task | Command | Notes |
 |---|---|---|
 | Install (or reinstall) the scripts and the service | `sudo install -o root -g root -m 0644 /opt/vaultwise/deploy/vaultwise.service /etc/systemd/system/vaultwise.service`, `sudo install -o root -g root -m 0755 /opt/vaultwise/deploy/update.sh /usr/local/sbin/vaultwise-update`, `sudo install -o root -g root -m 0755 /opt/vaultwise/deploy/backup.sh /usr/local/sbin/vaultwise-backup`, then `sudo systemctl daemon-reload` | Step 12 of the deploy guide. Later, only after reading the difference `vaultwise-update` prints. |
-| Pull, build and restart | `sudo vaultwise-update` | Pulls with `git pull --ff-only` as the `vaultwise` user, loads `/etc/vaultwise.env`, runs `npm ci --include=dev` and `npm run build` as that user, restarts the `vaultwise` service, and waits up to 30 s for `/api/v1/region`. Run it after changing `/etc/vaultwise.env` too (`NEXT_PUBLIC_*` values are built in). If the repository's `update.sh`, `backup.sh` or `vaultwise.service` differs from the installed copy, it prints the difference (lines starting `!!`) and the `sudo install …` command to run after reading it, and keeps using the installed copy. It never installs them itself. |
+| Pull, build and restart | `sudo vaultwise-update` | Pulls with `git pull --ff-only` as the `vaultwise` user, loads `/etc/vaultwise.env`, runs `npm install --include=dev` (then puts `package-lock.json` back, so the checkout stays clean) and `npm run build` as that user, restarts the `vaultwise` service, and waits up to 30 s for `/api/v1/region`. Run it after changing `/etc/vaultwise.env` too (`NEXT_PUBLIC_*` values are built in). If the repository's `update.sh`, `backup.sh` or `vaultwise.service` differs from the installed copy, it prints the difference (lines starting `!!`) and the `sudo install …` command to run after reading it, and keeps using the installed copy. It never installs them itself. |
 | Build and restart without pulling | `sudo vaultwise-update --no-pull` | The first start, or after editing files on the server. |
 | Schedule the nightly backup | `echo '30 21 * * * root /usr/local/sbin/vaultwise-backup >> /var/log/vaultwise-backup.log 2>&1' \| sudo tee /etc/cron.d/vaultwise-backup` | 03:00 IST. Cron runs the installed copy, never the one in `/opt/vaultwise`. |
 | Add the S3 copy | `sudo sed -i '1i BACKUP_S3_URI=s3://YOUR-BUCKET-NAME/vaultwise' /etc/cron.d/vaultwise-backup` | After `aws configure` (deploy guide step 17). The bucket is a setting in the cron file, so neither copy of `backup.sh` is edited. |
@@ -107,7 +107,7 @@ From [`mobile/package.json`](../../mobile/package.json). Run these inside `mobil
 
 | Job | Runs in | Steps |
 |---|---|---|
-| Server and web app | repo root | `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` |
+| Server and web app | repo root | `npm install` (see the comment in `ci.yml`), `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` |
 | Phone app | `mobile/` | `npm ci`, `npm run typecheck` (app and tests), `npx eslint src scripts --max-warnings=0`, `npm test` (unit and contract tests; the whole repo is checked out so they can read `../tests/contract/vectors`), `npx expo export --platform web` (the web bundle builds) |
 
 `npm run test:e2e`, `npm run test:ai` and `npm run eval:verification -- --live` stay manual. Run the same checks locally before a pull request.
