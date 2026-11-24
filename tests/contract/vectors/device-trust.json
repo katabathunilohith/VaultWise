@@ -1,0 +1,19 @@
+{
+  "rule": "device-trust",
+  "about": "Whether a device is trusted, and when an untrusted one trusts itself: trusted with a texted code and the MPIN (or the sign-up device), or 24 hours after it was first seen, unless it was first seen after a device was signed out of the account (coolsDown false: it never trusts itself). A signed-out device is never trusted. Times are ms since the epoch.",
+  "server": "src/lib/devices/rules.ts (isTrusted, trustableAtOf)",
+  "phone": "mobile/src/lib/api/demo/devices.ts (practiceTrusted, practiceTrustableAt, the Practice simulator)",
+  "cases": {
+    "trust": [
+      { "why": "trusted with a code and the MPIN", "input": { "device": { "firstSeen": 1790000000000, "trustedAt": 1790000500000, "revokedAt": null }, "now": 1790000600000 }, "expected": { "trusted": true, "trustableAt": null } },
+      { "why": "new: untrusted, trusts itself 24 hours after first sight", "input": { "device": { "firstSeen": 1790000000000, "trustedAt": null, "revokedAt": null }, "now": 1790000001000 }, "expected": { "trusted": false, "trustableAt": 1790086400000 } },
+      { "why": "one millisecond before the 24 hours are up", "input": { "device": { "firstSeen": 1790000000000, "trustedAt": null, "revokedAt": null }, "now": 1790086399999 }, "expected": { "trusted": false, "trustableAt": 1790086400000 } },
+      { "why": "exactly 24 hours on: trusted", "input": { "device": { "firstSeen": 1790000000000, "trustedAt": null, "revokedAt": null }, "now": 1790086400000 }, "expected": { "trusted": true, "trustableAt": null } },
+      { "why": "first seen after a sign-out: never trusts itself", "input": { "device": { "firstSeen": 1790000000000, "trustedAt": null, "revokedAt": null, "coolsDown": false }, "now": 1799000000000 }, "expected": { "trusted": false, "trustableAt": null } },
+      { "why": "first seen after a sign-out, then trusted with a code", "input": { "device": { "firstSeen": 1790000000000, "trustedAt": 1790000100000, "revokedAt": null, "coolsDown": false }, "now": 1790000200000 }, "expected": { "trusted": true, "trustableAt": null } },
+      { "why": "signed out: never trusted, even once trusted", "input": { "device": { "firstSeen": 1790000000000, "trustedAt": 1790000100000, "revokedAt": 1790000200000 }, "now": 1790000300000 }, "expected": { "trusted": false, "trustableAt": null } },
+      { "why": "signed out before its 24 hours: no time to wait for", "input": { "device": { "firstSeen": 1790000000000, "trustedAt": null, "revokedAt": 1790000200000 }, "now": 1790000300000 }, "expected": { "trusted": false, "trustableAt": null } },
+      { "why": "coolsDown true is the same as not saying", "input": { "device": { "firstSeen": 1790000000000, "trustedAt": null, "revokedAt": null, "coolsDown": true }, "now": 1790000001000 }, "expected": { "trusted": false, "trustableAt": 1790086400000 } }
+    ]
+  }
+}

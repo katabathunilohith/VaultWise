@@ -1,0 +1,24 @@
+{
+  "rule": "sip-mpin",
+  "about": "When saving a Core plan (SIP) is a money action that needs the MPIN (invest_sip): setting one up, or a change that moves more money, either more per month (weekly counts as 52/12 times a month, so a monthly plan turned weekly at the same amount is more) or a start date before the current next buy. Lowering it, or changing it without moving more money sooner, doesn't; nor does pausing it. Amounts are minor units; times ms.",
+  "server": "src/lib/invest/sip-rule.ts (sipNeedsMpin, used by POST /invest/core/sip and the web form)",
+  "phone": "mobile/src/lib/invest.ts (sipNeedsMpin, used by the plan screen and the Practice simulator)",
+  "cases": {
+    "sipNeedsMpin": [
+      { "why": "setting a plan up", "input": { "current": null, "next": { "amount": 100000, "frequency": "monthly" } }, "expected": true },
+      { "why": "a weekly plan from nothing", "input": { "current": null, "next": { "amount": 100, "frequency": "weekly" } }, "expected": true },
+      { "why": "the same plan saved again", "input": { "current": { "amount": 2400000, "frequency": "monthly", "next_run_at": 1793249859172 }, "next": { "amount": 2400000, "frequency": "monthly" } }, "expected": false },
+      { "why": "a higher monthly amount", "input": { "current": { "amount": 2400000, "frequency": "monthly", "next_run_at": 1793249859172 }, "next": { "amount": 2400001, "frequency": "monthly" } }, "expected": true },
+      { "why": "a lower monthly amount", "input": { "current": { "amount": 2400000, "frequency": "monthly", "next_run_at": 1793249859172 }, "next": { "amount": 1000000, "frequency": "monthly" } }, "expected": false },
+      { "why": "monthly turned weekly at the same amount is 52/12 times as much", "input": { "current": { "amount": 2400000, "frequency": "monthly", "next_run_at": 1793249859172 }, "next": { "amount": 2400000, "frequency": "weekly" } }, "expected": true },
+      { "why": "weekly ₹5,000 is about ₹21,667 a month: less than ₹24,000 monthly", "input": { "current": { "amount": 2400000, "frequency": "monthly", "next_run_at": 1793249859172 }, "next": { "amount": 500000, "frequency": "weekly" } }, "expected": false },
+      { "why": "weekly ₹5,000 to monthly ₹22,000 is more a month", "input": { "current": { "amount": 500000, "frequency": "weekly", "next_run_at": 1793249859172 }, "next": { "amount": 2200000, "frequency": "monthly" } }, "expected": true },
+      { "why": "weekly ₹5,000 to monthly ₹21,666.66 is a little less a month (no rounding up)", "input": { "current": { "amount": 500000, "frequency": "weekly", "next_run_at": 1793249859172 }, "next": { "amount": 2166666, "frequency": "monthly" } }, "expected": false },
+      { "why": "weekly ₹5,540 is ₹24,006.67 a month, so monthly ₹24,000 is a lowering", "input": { "current": { "amount": 554000, "frequency": "weekly", "next_run_at": 1793249859172 }, "next": { "amount": 2400000, "frequency": "monthly" } }, "expected": false },
+      { "why": "a start date before the next buy brings money forward", "input": { "current": { "amount": 2400000, "frequency": "monthly", "next_run_at": 1793249859172 }, "next": { "amount": 2400000, "frequency": "monthly", "startAt": 1793249859171 } }, "expected": true },
+      { "why": "a lower amount sooner still moves money sooner", "input": { "current": { "amount": 2400000, "frequency": "monthly", "next_run_at": 1793249859172 }, "next": { "amount": 100, "frequency": "monthly", "startAt": 1790000000000 } }, "expected": true },
+      { "why": "a start date on the next buy brings nothing forward", "input": { "current": { "amount": 2400000, "frequency": "monthly", "next_run_at": 1793249859172 }, "next": { "amount": 2400000, "frequency": "monthly", "startAt": 1793249859172 } }, "expected": false },
+      { "why": "a later start date pushes it back", "input": { "current": { "amount": 2400000, "frequency": "monthly", "next_run_at": 1793249859172 }, "next": { "amount": 1000000, "frequency": "monthly", "startAt": 1795000000000 } }, "expected": false }
+    ]
+  }
+}

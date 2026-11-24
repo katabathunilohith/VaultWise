@@ -1,0 +1,52 @@
+{
+  "rule": "id-numbers",
+  "about": "Government ID numbers: which types a market accepts, how a typed number is cleaned up, whether its format (and Aadhaar's Verhoeff checksum) passes, and the last 4 characters, the most of a number ever kept or shown. The refusal wording is display text each side words its own way, so only ok/number are compared. Masks are compared with the mask characters (server X, phone •) read as *.",
+  "server": "src/lib/kyc/ids.ts (docTypesFor, normaliseId, validateIdNumber, last4, maskId)",
+  "phone": "mobile/src/lib/api/identity-ids.ts (the same names; the Practice simulator checks typed numbers with it too)",
+  "cases": {
+    "docTypesFor": [
+      { "why": "India takes its own IDs and a passport", "input": { "market": "IN" }, "expected": ["aadhaar", "pan", "passport", "driving_licence", "voter_id"] },
+      { "why": "elsewhere a passport or a national ID", "input": { "market": "US" }, "expected": ["passport", "national_id"] },
+      { "why": "the UK too", "input": { "market": "UK" }, "expected": ["passport", "national_id"] },
+      { "why": "the euro area too", "input": { "market": "EU" }, "expected": ["passport", "national_id"] }
+    ],
+    "normaliseId": [
+      { "why": "upper case, without spaces, dots, hyphens or slashes", "input": { "raw": " ab.cd-12/34 " }, "expected": "ABCD1234" },
+      { "why": "an Aadhaar typed in groups", "input": { "raw": "2341 2341 2346" }, "expected": "234123412346" }
+    ],
+    "validateIdNumber": [
+      { "why": "a well-formed Aadhaar (Verhoeff check digit 6)", "input": { "docType": "aadhaar", "raw": "2341 2341 2346", "market": "IN" }, "expected": { "ok": true, "number": "234123412346" } },
+      { "why": "another well-formed Aadhaar", "input": { "docType": "aadhaar", "raw": "4987-6543-2102", "market": "IN" }, "expected": { "ok": true, "number": "498765432102" } },
+      { "why": "a wrong check digit", "input": { "docType": "aadhaar", "raw": "234123412347", "market": "IN" }, "expected": { "ok": false } },
+      { "why": "an Aadhaar never starts with 0 or 1", "input": { "docType": "aadhaar", "raw": "123456789012", "market": "IN" }, "expected": { "ok": false } },
+      { "why": "11 digits", "input": { "docType": "aadhaar", "raw": "23412341234", "market": "IN" }, "expected": { "ok": false } },
+      { "why": "letters in an Aadhaar", "input": { "docType": "aadhaar", "raw": "23412341234A", "market": "IN" }, "expected": { "ok": false } },
+      { "why": "nothing typed", "input": { "docType": "aadhaar", "raw": "   ", "market": "IN" }, "expected": { "ok": false } },
+      { "why": "a well-formed PAN, typed in lower case with spaces", "input": { "docType": "pan", "raw": "abcde 1234 f", "market": "IN" }, "expected": { "ok": true, "number": "ABCDE1234F" } },
+      { "why": "a PAN missing its last letter", "input": { "docType": "pan", "raw": "ABCDE1234", "market": "IN" }, "expected": { "ok": false } },
+      { "why": "a PAN with digits where letters go", "input": { "docType": "pan", "raw": "ABC1E1234F", "market": "IN" }, "expected": { "ok": false } },
+      { "why": "an Indian passport: a letter and 7 digits", "input": { "docType": "passport", "raw": "K1234567", "market": "IN" }, "expected": { "ok": true, "number": "K1234567" } },
+      { "why": "an Indian passport can't be all digits", "input": { "docType": "passport", "raw": "123456789", "market": "IN" }, "expected": { "ok": false } },
+      { "why": "elsewhere a passport is 5 to 20 letters and digits", "input": { "docType": "passport", "raw": "123456789", "market": "US" }, "expected": { "ok": true, "number": "123456789" } },
+      { "why": "elsewhere 4 characters is too short", "input": { "docType": "passport", "raw": "A123", "market": "UK" }, "expected": { "ok": false } },
+      { "why": "with no market (account recovery) a passport may be from anywhere", "input": { "docType": "passport", "raw": "X12345", "market": null }, "expected": { "ok": true, "number": "X12345" } },
+      { "why": "a driving licence: state, RTO, year, serial", "input": { "docType": "driving_licence", "raw": "MH14 20110012345", "market": "IN" }, "expected": { "ok": true, "number": "MH1420110012345" } },
+      { "why": "a driving licence one digit short", "input": { "docType": "driving_licence", "raw": "MH14 2011001234", "market": "IN" }, "expected": { "ok": false } },
+      { "why": "a voter ID: 3 letters and 7 digits", "input": { "docType": "voter_id", "raw": "abc1234567", "market": "IN" }, "expected": { "ok": true, "number": "ABC1234567" } },
+      { "why": "a voter ID with 2 letters", "input": { "docType": "voter_id", "raw": "AB12345678", "market": "IN" }, "expected": { "ok": false } },
+      { "why": "a national ID, separators dropped", "input": { "docType": "national_id", "raw": "AB-12345", "market": "US" }, "expected": { "ok": true, "number": "AB12345" } },
+      { "why": "a national ID of 4 characters", "input": { "docType": "national_id", "raw": "1234", "market": "US" }, "expected": { "ok": false } },
+      { "why": "a national ID of 21 characters", "input": { "docType": "national_id", "raw": "ABCDEFGHIJ12345678901", "market": "US" }, "expected": { "ok": false } }
+    ],
+    "last4": [
+      { "why": "the last 4 characters of the cleaned-up number", "input": { "raw": "abcde 1234 f" }, "expected": "234F" },
+      { "why": "an Aadhaar in groups", "input": { "raw": "2341 2341 2346" }, "expected": "2346" }
+    ],
+    "maskId": [
+      { "why": "an Aadhaar is shown in its groups", "input": { "docType": "aadhaar", "idLast4": "2346" }, "expected": "**** **** 2346" },
+      { "why": "any other ID shows its last 4 after the mask", "input": { "docType": "pan", "idLast4": "234F" }, "expected": "****234F" },
+      { "why": "an unknown type is masked like any other", "input": { "docType": null, "idLast4": "4821" }, "expected": "****4821" },
+      { "why": "nothing to show", "input": { "docType": "passport", "idLast4": null }, "expected": "" }
+    ]
+  }
+}

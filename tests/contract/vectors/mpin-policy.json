@@ -1,0 +1,66 @@
+{
+  "rule": "mpin-policy",
+  "about": "Choosing an MPIN (6 digits, not one digit repeated, not a straight run, not a common PIN, not the date of birth as DDMMYY), the lock after wrong tries, and how long a lock is said to last.",
+  "server": "src/lib/mpin/policy.ts (checkNewMpin, birthDateAsPin), src/lib/mpin/attempts.ts (lockMsAfter, triesLeftAfter), src/lib/mpin/verify.ts (waitText)",
+  "phone": "mobile/src/features/mpin/policy.ts (all of them; the Practice simulator uses the same file)",
+  "cases": {
+    "checkNewMpin": [
+      { "why": "an ordinary 6-digit MPIN", "input": { "pin": "482916" }, "expected": { "ok": true } },
+      { "why": "the Practice MPIN itself passes the policy", "input": { "pin": "246810" }, "expected": { "ok": true } },
+      { "why": "too short", "input": { "pin": "48291" }, "expected": { "ok": false, "reason": "length", "message": "Your MPIN must be exactly 6 digits." } },
+      { "why": "too long", "input": { "pin": "4829160" }, "expected": { "ok": false, "reason": "length", "message": "Your MPIN must be exactly 6 digits." } },
+      { "why": "letters aren't digits", "input": { "pin": "48a916" }, "expected": { "ok": false, "reason": "length", "message": "Your MPIN must be exactly 6 digits." } },
+      { "why": "an older 4-digit PIN isn't a new MPIN", "input": { "pin": "2468" }, "expected": { "ok": false, "reason": "length", "message": "Your MPIN must be exactly 6 digits." } },
+      { "why": "empty", "input": { "pin": "" }, "expected": { "ok": false, "reason": "length", "message": "Your MPIN must be exactly 6 digits." } },
+      { "why": "one digit repeated", "input": { "pin": "777777" }, "expected": { "ok": false, "reason": "repeated", "message": "Your MPIN can't be one digit repeated. Choose a mix of digits." } },
+      { "why": "zeros are one digit repeated too", "input": { "pin": "000000" }, "expected": { "ok": false, "reason": "repeated", "message": "Your MPIN can't be one digit repeated. Choose a mix of digits." } },
+      { "why": "a straight run up", "input": { "pin": "123456" }, "expected": { "ok": false, "reason": "sequence", "message": "Your MPIN can't be a straight run like 123456 or 654321." } },
+      { "why": "a straight run down", "input": { "pin": "654321" }, "expected": { "ok": false, "reason": "sequence", "message": "Your MPIN can't be a straight run like 123456 or 654321." } },
+      { "why": "a run up wraps 9 to 0", "input": { "pin": "567890" }, "expected": { "ok": false, "reason": "sequence", "message": "Your MPIN can't be a straight run like 123456 or 654321." } },
+      { "why": "a run down wraps 0 to 9", "input": { "pin": "109876" }, "expected": { "ok": false, "reason": "sequence", "message": "Your MPIN can't be a straight run like 123456 or 654321." } },
+      { "why": "a run with one step missing isn't a run", "input": { "pin": "123457" }, "expected": { "ok": true } },
+      { "why": "on the common list", "input": { "pin": "121212" }, "expected": { "ok": false, "reason": "common", "message": "That MPIN is too easy to guess. Choose a less common one." } },
+      { "why": "on the common list (a keypad column)", "input": { "pin": "147258" }, "expected": { "ok": false, "reason": "common", "message": "That MPIN is too easy to guess. Choose a less common one." } },
+      { "why": "on the common list (last entry)", "input": { "pin": "696969" }, "expected": { "ok": false, "reason": "common", "message": "That MPIN is too easy to guess. Choose a less common one." } },
+      { "why": "the date of birth as DDMMYY", "input": { "pin": "150394", "dob": "1994-03-15" }, "expected": { "ok": false, "reason": "birth_date", "message": "Your MPIN can't be your date of birth." } },
+      { "why": "a date of birth with a time still counts", "input": { "pin": "150394", "dob": "1994-03-15T08:00:00Z" }, "expected": { "ok": false, "reason": "birth_date", "message": "Your MPIN can't be your date of birth." } },
+      { "why": "the same digits are fine when the date of birth isn't known", "input": { "pin": "150394", "dob": null }, "expected": { "ok": true } },
+      { "why": "YYMMDD isn't the rule, only DDMMYY", "input": { "pin": "940315", "dob": "1994-03-15" }, "expected": { "ok": true } },
+      { "why": "the rules run in order: repeated before the date of birth", "input": { "pin": "111111", "dob": "2011-11-11" }, "expected": { "ok": false, "reason": "repeated", "message": "Your MPIN can't be one digit repeated. Choose a mix of digits." } }
+    ],
+    "birthDateAsPin": [
+      { "why": "YYYY-MM-DD becomes DDMMYY", "input": { "dob": "2001-12-09" }, "expected": "091201" },
+      { "why": "a time after the date is ignored", "input": { "dob": "2001-12-09T23:59:00Z" }, "expected": "091201" },
+      { "why": "no date of birth", "input": { "dob": null }, "expected": null },
+      { "why": "another format isn't read", "input": { "dob": "09/12/2001" }, "expected": null }
+    ],
+    "lockMsAfter": [
+      { "why": "no wrong tries", "input": { "failures": 0 }, "expected": null },
+      { "why": "the 1st wrong try doesn't lock", "input": { "failures": 1 }, "expected": null },
+      { "why": "the 4th wrong try doesn't lock", "input": { "failures": 4 }, "expected": null },
+      { "why": "the 5th locks for 1 minute", "input": { "failures": 5 }, "expected": 60000 },
+      { "why": "the 6th doesn't lock again", "input": { "failures": 6 }, "expected": null },
+      { "why": "the 10th locks for 5 minutes", "input": { "failures": 10 }, "expected": 300000 },
+      { "why": "the 15th locks for 30 minutes", "input": { "failures": 15 }, "expected": 1800000 },
+      { "why": "the 20th locks for 24 hours", "input": { "failures": 20 }, "expected": 86400000 },
+      { "why": "it stays at 24 hours after that", "input": { "failures": 50 }, "expected": 86400000 }
+    ],
+    "triesLeftAfter": [
+      { "why": "5 tries per lock", "input": { "failures": 0 }, "expected": 5 },
+      { "why": "after 1 wrong try", "input": { "failures": 1 }, "expected": 4 },
+      { "why": "one left before the lock", "input": { "failures": 4 }, "expected": 1 },
+      { "why": "the count starts again after a lock", "input": { "failures": 5 }, "expected": 5 },
+      { "why": "after a lock and 2 more", "input": { "failures": 7 }, "expected": 3 }
+    ],
+    "waitText": [
+      { "why": "never less than a second", "input": { "ms": 0 }, "expected": "1 second" },
+      { "why": "seconds, rounded up", "input": { "ms": 44001 }, "expected": "45 seconds" },
+      { "why": "one minute", "input": { "ms": 60000 }, "expected": "1 minute" },
+      { "why": "minutes, rounded up", "input": { "ms": 60001 }, "expected": "2 minutes" },
+      { "why": "half an hour", "input": { "ms": 1800000 }, "expected": "30 minutes" },
+      { "why": "59.5 minutes rounds up to an hour, never \"60 minutes\"", "input": { "ms": 3570000 }, "expected": "1 hour" },
+      { "why": "hours, rounded up", "input": { "ms": 3600001 }, "expected": "2 hours" },
+      { "why": "the longest lock", "input": { "ms": 86400000 }, "expected": "24 hours" }
+    ]
+  }
+}

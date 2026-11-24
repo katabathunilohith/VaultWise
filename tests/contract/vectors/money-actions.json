@@ -1,0 +1,29 @@
+{
+  "rule": "money-actions",
+  "about": "Which money actions need the MPIN, a verified ID (kyc) and the untrusted-device cap (deviceCap: money out, so a phone that isn't trusted yet moves only up to the cap), and which are money in from the linked bank (moneyIn: the ID gate, never the MPIN). One entry per action; the server's suite also fails when its table gains an action that has no entry here. On the phone the Practice simulator is held to it by behaviour: each action is called without the MPIN, with the ID unverified, and over the cap on a new phone, and must answer mpin_required, kyc_required and device_untrusted exactly when this table says so.",
+  "server": "src/lib/money-routes.ts (MONEY_ROUTES)",
+  "phone": "mobile/src/lib/api/demo/* (each Practice money move: requirePracticeMpin, assertPracticeIdVerified, assertPracticeDeviceCap)",
+  "cases": {
+    "actions": [
+      { "why": "a proof-checked withdrawal from a vault", "input": { "action": "withdraw" }, "expected": { "mpin": true, "kyc": true, "deviceCap": true, "moneyIn": false } },
+      { "why": "paying someone from the wallet", "input": { "action": "wallet_spend" }, "expected": { "mpin": true, "kyc": true, "deviceCap": true, "moneyIn": false } },
+      { "why": "wallet back to the bank", "input": { "action": "wallet_cash_out" }, "expected": { "mpin": true, "kyc": true, "deviceCap": true, "moneyIn": false } },
+      { "why": "wallet to a vault: stays inside the account, so no device cap", "input": { "action": "wallet_move" }, "expected": { "mpin": true, "kyc": true, "deviceCap": false, "moneyIn": false } },
+      { "why": "raising or turning off the wallet's daily limit", "input": { "action": "wallet_limit_raise" }, "expected": { "mpin": true, "kyc": false, "deviceCap": false, "moneyIn": false } },
+      { "why": "emergency money, every tier", "input": { "action": "emergency" }, "expected": { "mpin": true, "kyc": true, "deviceCap": true, "moneyIn": false } },
+      { "why": "any withdrawal or emergency limit going up", "input": { "action": "limits_loosen" }, "expected": { "mpin": true, "kyc": false, "deviceCap": false, "moneyIn": false } },
+      { "why": "a one-off Core buy from the bank", "input": { "action": "invest_buy" }, "expected": { "mpin": true, "kyc": true, "deviceCap": false, "moneyIn": false } },
+      { "why": "setting up a Core plan, or one that moves more money", "input": { "action": "invest_sip" }, "expected": { "mpin": true, "kyc": true, "deviceCap": false, "moneyIn": false } },
+      { "why": "every Satellite allocation from the bank", "input": { "action": "satellite_opt_in" }, "expected": { "mpin": true, "kyc": true, "deviceCap": false, "moneyIn": false } },
+      { "why": "closing a signed-in account", "input": { "action": "close_account" }, "expected": { "mpin": true, "kyc": false, "deviceCap": false, "moneyIn": false } },
+      { "why": "changing the MPIN needs the current one", "input": { "action": "mpin_change" }, "expected": { "mpin": true, "kyc": false, "deviceCap": false, "moneyIn": false } },
+      { "why": "trusting a phone (with a texted code)", "input": { "action": "device_trust" }, "expected": { "mpin": true, "kyc": false, "deviceCap": false, "moneyIn": false } },
+      { "why": "signing a device out", "input": { "action": "device_revoke" }, "expected": { "mpin": true, "kyc": false, "deviceCap": false, "moneyIn": false } },
+      { "why": "adding or replacing the verified phone number", "input": { "action": "phone_change" }, "expected": { "mpin": true, "kyc": false, "deviceCap": false, "moneyIn": false } },
+      { "why": "bank to wallet: money in", "input": { "action": "wallet_top_up" }, "expected": { "mpin": false, "kyc": true, "deviceCap": false, "moneyIn": true } },
+      { "why": "bank to a vault (a deposit, or a new vault's first deposit): money in", "input": { "action": "vault_deposit" }, "expected": { "mpin": false, "kyc": true, "deviceCap": false, "moneyIn": true } },
+      { "why": "practice salary and card events on the linked bank: money in", "input": { "action": "bank_simulate" }, "expected": { "mpin": false, "kyc": true, "deviceCap": false, "moneyIn": true } },
+      { "why": "round-ups from the bank to a vault: money in", "input": { "action": "roundup_sweep" }, "expected": { "mpin": false, "kyc": true, "deviceCap": false, "moneyIn": true } }
+    ]
+  }
+}
