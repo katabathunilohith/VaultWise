@@ -31,6 +31,8 @@ export interface InvestState {
   /** The plan as last saved, or "stopped"; null while the snapshot's own plan stands. */
   plan: { amount: Minor; frequency: PlanFrequency; nextRunAt: Millis } | "stopped" | null;
   buys: Minor[];
+  /** This session's Satellite allocations from the bank (opt-in, then more). Saves from before it lack it. */
+  satellite?: Minor[];
 }
 
 interface State {
@@ -62,7 +64,7 @@ function fresh(): State {
     limits: clone(limitsFx) as unknown as LimitsOverview,
     journals: clone(activity.journals),
     recent: clone(dash.recent),
-    invest: { plan: null, buys: [] },
+    invest: { plan: null, buys: [], satellite: [] },
     wallet: freshWallet(), // wallet
     identity: freshIdentity(), // identity
   };

@@ -1,6 +1,6 @@
 /**
  * protection (plan 04, baseline finding 3): how the phone's wrong-PIN guard (features/account/
- * pin-guard.ts) slows guessing. Pure functions with no imports, ready for a test runner.
+ * pin-guard.ts) slows guessing. Pure functions with no imports (tested in __tests__/protection.test.ts).
  *
  * Like a phone's own passcode: 4 free wrong tries, then a wait after each wrong try in a row, 1, 5,
  * 30 and 60 minutes (and 60 after that), and the 10th in a row ends it: live, the app signs out of

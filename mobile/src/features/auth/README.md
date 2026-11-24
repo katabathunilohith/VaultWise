@@ -62,7 +62,8 @@ Delete `features/auth`, `features/kyc`, `features/recovery`, `lib/auth/firebase.
 | `src/lib/api/types.ts` | the `MeAuth`/`MeKyc`/`MeRecovery` import and the `auth`, `kyc`, `recovery` fields of `MeOnboarded` and `MeNew` |
 | `src/lib/api/demo/index.ts` | `withIdentity` in `me`; `...identityDemo` |
 | `src/lib/api/demo/state.ts` | the `identity` field and `freshIdentity()` |
-| `src/lib/api/demo/wallet.ts` | `assertPracticeCanMove()` in `assertCanMove` |
+| `src/lib/api/demo/wallet.ts` | `assertPracticeIdVerified()` (the ID gate, with `assertPracticeCanMove()`) as `assertCanMove` |
+| `src/lib/api/demo/vaults.ts`, `emergency.ts`, `invest.ts`, `index.ts` | `assertPracticeIdVerified()` on withdraw, deposits (and a new vault's first deposit), emergency, Core buys and plans, Satellite allocations, simulate and sweep: the server's `kyc` column (`tests/contract/vectors/money-actions.json`) |
 | `src/lib/api/keys.ts` | `kyc` and `recovery` keys (added by the lead) |
 | `src/features/home/TodoCards.tsx` | `useIdentityTodo` and its card |
 | `src/features/account/settings/SettingsHome.tsx` | the identity rows, `useAuthSettings`, `useRecoveryPending`, and the signed-in branch of Export my data |

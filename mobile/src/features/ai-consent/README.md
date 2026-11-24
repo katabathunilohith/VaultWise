@@ -21,4 +21,4 @@ Apple's App Store rule 5.1.2(i) (since November 2025) says an app must name the 
 | `features/account/settings/TrustScreen.tsx` | the "AI reads bills and IDs" switch |
 | `app/_layout.tsx`, `app/ai-consent.tsx` | the sheet's route |
 
-Server side: `src/lib/ai-consent.ts`, read in `src/lib/verification/pipeline.ts` (via the `proofs.ai_allowed` column), `src/lib/kyc/analyse.ts`, `src/lib/limits.ts` and `src/lib/engagement.ts`. A client that sends no header (the web app) keeps the old behaviour. Test: `tests/ai-consent.test.ts`.
+Server side: `src/lib/ai-consent.ts`, read in `src/lib/verification/proofs.ts` and `src/lib/verification/stages/ai-read.ts` (via the `proofs.ai_allowed` column), `src/lib/kyc/analyse.ts`, `src/lib/limits/assess.ts` and `src/lib/engagement.ts`. A client that sends no header (the web app) keeps the old behaviour. Test: `tests/ai-consent.test.ts`.

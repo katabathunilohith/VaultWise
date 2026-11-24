@@ -10,7 +10,7 @@ The server says which way an account verifies (`flow` in `GET /api/v1/kyc`):
 ## The photo check
 
 - **Screen.** Where the check is (verified, being checked by a person, not accepted with reasons) and the form: the type of ID (the market's list: India Aadhaar, PAN, passport, driving licence, voter ID; elsewhere passport and national ID), a photo (camera or photo library through `lib/media/pick`, so the app lock waits for them), and the number if the person wants to type it.
-- **Numbers.** A typed number is checked on the phone with the server's rules (`lib/api/identity-ids.ts`: formats and Aadhaar's Verhoeff checksum), sent once, then cleared. Only the last 4 characters are ever shown (`••••4821`), and screen readers hear "ending in 4 8 2 1".
+- **Numbers.** A typed number is checked on the phone with the server's rules (`lib/api/identity-ids.ts`: formats and Aadhaar's Verhoeff checksum; held to `src/lib/kyc/ids.ts` by `tests/contract/vectors/id-numbers.json`), sent once, then cleared. Only the last 4 characters are ever shown (`••••4821`), and screen readers hear "ending in 4 8 2 1".
 
 ## The onboarding steps (kyc-checks)
 

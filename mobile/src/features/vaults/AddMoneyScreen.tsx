@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { router } from "expo-router";
-import { BankIcon, LockIcon } from "@/components/icons";
+import { BankIcon, LockIcon, ShieldCheckIcon } from "@/components/icons";
 import {
   Amount,
   Banner,
@@ -21,6 +21,8 @@ import {
   Txt,
   VaultGlyph,
 } from "@/components/ui";
+import { VERIFY_ID_HREF } from "@/features/kyc/routes"; // identity
+import { moveBlock } from "@/features/wallet/model"; // identity: the same account holds as the wallet's moves
 import { api } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import { useDashboard, useInvalidateMoney, useVaults } from "@/lib/api/hooks";
@@ -60,7 +62,7 @@ export function AddMoneyScreen({ vaultId }: { vaultId: string }) {
   const [step, setStep] = useState<Step>(choosing ? "pick" : "amount");
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [deposit, setDeposit] = useState<Deposit | null>(null);
 
   const vault = vaults.data?.vaults.find((v) => v.id === chosen);
@@ -89,7 +91,7 @@ export function AddMoneyScreen({ vaultId }: { vaultId: string }) {
       void invalidate();
     } catch (e) {
       haptic("error");
-      setError(errorMessage(e));
+      setError(e);
     } finally {
       setSubmitting(false);
     }
@@ -285,7 +287,7 @@ function Source({ bank, loading, currency }: { bank: number | null; loading: boo
   );
 }
 
-function ConfirmStep({ vault, amount, error }: { vault: Vault; amount: number; error: string | null }) {
+function ConfirmStep({ vault, amount, error }: { vault: Vault; amount: number; error: unknown }) {
   const { c } = useTheme();
   const after = vault.balance + amount;
   const pct = Math.round(progressOf(after, vault.target) * 100);
@@ -298,7 +300,7 @@ function ConfirmStep({ vault, amount, error }: { vault: Vault; amount: number; e
         </Txt>
         <Amount value={amount} currency={vault.currency} size="xl" align="center" animate={false} />
       </View>
-      {error ? <Banner tone="danger" title="That didn't go through" body={`${error} Nothing moved. Try again.`} /> : null}
+      {error ? <DepositFailed error={error} /> : null}
       <Card>
         <Line label="To" value={vault.name} />
         <Divider />
@@ -410,3 +412,27 @@ const styles = StyleSheet.create({
   line: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 48 },
   lockNote: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
 });
+
+/**
+ * A deposit that didn't go through. Money in from the bank needs a verified ID (the server's
+ * `vault_deposit` gate, 403 `kyc_required`), so that hold is said calmly with the way forward;
+ * a recovery waiting for a person likewise. Anything else: the reason, and that nothing moved.
+ */
+function DepositFailed({ error }: { error: unknown }) {
+  const block = moveBlock(error);
+  if (block)
+    return (
+      <Banner
+        tone="info"
+        icon={ShieldCheckIcon}
+        title={block.title}
+        body={block.body}
+        action={
+          block.code === "kyc_required"
+            ? { label: "Verify your ID", onPress: () => router.replace(VERIFY_ID_HREF) }
+            : { label: "Go to Settings", onPress: () => router.replace("/settings") }
+        }
+      />
+    );
+  return <Banner tone="danger" title="That didn't go through" body={`${errorMessage(error)} Nothing moved. Try again.`} />;
+}

@@ -9,7 +9,7 @@ import { ApiError } from "../errors";
 import type { Millis, Minor } from "../types";
 import { WALLET_MAX_AMOUNT, WALLET_NOTE_MAX, WALLET_PAYEE_MAX, type Wallet, type WalletActivity, type WalletMoveResult, type WalletSettingsInput, type WalletSettingsResult } from "../wallet-types";
 import { clone, currency, DAY, findVault, journal, newId, recompute, record, S, toMinor, wait } from "./state";
-import { assertPracticeCanMove } from "./identity"; // identity
+import { assertPracticeCanMove, assertPracticeIdVerified } from "./identity"; // identity
 import { requirePracticeMpin } from "./mpin"; // mpin
 import { practiceAlert } from "./alerts"; // alerts
 import { assertPracticeDeviceCap } from "./devices"; // devices
@@ -41,15 +41,21 @@ function median(xs: number[]) {
   return s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
 }
 
+/** How many recent paydays the gap is measured from (the server's PAYDAYS_MEASURED). */
+const PAYDAYS_MEASURED = 7;
+
 /**
- * Same as the server: last income + the median gap between incomes (credits on the same day count
- * once), rolled forward by whole gaps past today. No income yet: 30 days from now.
+ * Same as the server's paydayEstimate (src/lib/wallet/plan.ts): last income + the median gap between
+ * the last 7 paydays (credits on the same day count once, keeping that day's first), rolled forward
+ * by whole gaps past today. No income yet: 30 days from now. Pure; the contract vectors in
+ * tests/contract/vectors/wallet-maths.json hold both copies to the same answers.
  */
-function payday(now: number) {
+export function paydayFrom(incomes: readonly Millis[], now: number) {
   const paydays: number[] = [];
-  for (const t of S.wallet.incomes.filter((x) => x <= now).sort((a, b) => b - a)) {
+  for (const t of incomes.filter((x) => x <= now).sort((a, b) => b - a)) {
     if (paydays.length && dayStart(paydays[paydays.length - 1]) === dayStart(t)) paydays[paydays.length - 1] = t;
-    else paydays.push(t);
+    else if (paydays.length < PAYDAYS_MEASURED) paydays.push(t);
+    else break;
   }
   if (!paydays.length) {
     const next = now + DEFAULT_PAY_GAP;
@@ -62,6 +68,8 @@ function payday(now: number) {
   while (dayStart(next) < today) next += gap;
   return { next, days: Math.max(1, daysBetween(now, next)), basis: "income" as const };
 }
+
+const payday = (now: number) => paydayFrom(S.wallet.incomes, now);
 
 /** The server's scheduler stepping (`nextRun` in src/lib/vaults.ts). */
 function nextRun(from: number, frequency: string | null) {
@@ -98,46 +106,59 @@ function spentToday(now: number) {
   return S.wallet.moves.filter((m) => m.createdAt >= since && (m.kind === "spend" || m.kind === "cash_out")).reduce((s, m) => s - m.amount, 0);
 }
 
-function raiseState(now: number) {
-  const at = S.wallet.limitRaisedAt;
+/**
+ * The daily limit as the server's limitState() works it out: what's left today, and whether raising
+ * (or turning off) is allowed now, or when it next is (once per 30 days). Pure.
+ */
+export function limitState(settings: { dailyLimit: Minor | null; limitRaisedAt: Millis | null }, spent: Minor, now: number) {
+  const at = settings.limitRaisedAt;
   const available = at === null || now - at >= RAISE_WINDOW;
-  return { available, nextAt: available || at === null ? null : at + RAISE_WINDOW };
+  return {
+    dailyLimit: settings.dailyLimit,
+    spentToday: spent,
+    limitLeftToday: settings.dailyLimit === null ? null : Math.max(0, settings.dailyLimit - spent),
+    limitRaiseAvailable: available,
+    nextRaiseAt: available || at === null ? null : at + RAISE_WINDOW,
+  };
+}
+
+/**
+ * The server's safeToSpend(): what's in the wallet less the auto-saves due from it before payday,
+ * over the days to payday, capped by what the daily limit still allows. Rounded down. Pure.
+ */
+export function safeToSpend(input: { balance: Minor; upcoming: Minor; daysToPayday: number; limitLeftToday: Minor | null }) {
+  const perDay = Math.floor(Math.max(0, input.balance - input.upcoming) / Math.max(1, input.daysToPayday));
+  return input.limitLeftToday === null ? perDay : Math.min(perDay, input.limitLeftToday);
+}
+
+function raiseState(now: number) {
+  const l = limitState(S.wallet, 0, now);
+  return { available: l.limitRaiseAvailable, nextAt: l.nextRaiseAt };
 }
 
 function view(now = Date.now()): Wallet {
   const w = S.wallet;
   const pay = payday(now);
-  const spent = spentToday(now);
-  const limitLeft = w.dailyLimit === null ? null : Math.max(0, w.dailyLimit - spent);
+  const limit = limitState(w, spentToday(now), now);
   const upcoming = upcomingFromWallet(now, pay.next);
-  const perDay = Math.floor(Math.max(0, w.balance - upcoming) / pay.days);
-  const raise = raiseState(now);
   return {
     enabled: true,
     currency,
     balance: w.balance,
     bankBalance: S.totals.bank,
-    safeToSpendToday: limitLeft === null ? perDay : Math.min(perDay, limitLeft),
+    safeToSpendToday: safeToSpend({ balance: w.balance, upcoming, daysToPayday: pay.days, limitLeftToday: limit.limitLeftToday }),
     daysToPayday: pay.days,
     nextPayday: pay.next,
     paydayBasis: pay.basis,
-    dailyLimit: w.dailyLimit,
-    spentToday: spent,
-    limitLeftToday: limitLeft,
-    limitRaiseAvailable: raise.available,
-    nextRaiseAt: raise.nextAt,
+    ...limit,
     autoSaveSource: w.autoSaveSource,
     upcomingFromWallet: upcoming,
     recent: clone(w.moves.slice(0, 20)),
   };
 }
 
-/** Same gate as the server's `customer({ kyc: true })` on money moves. */
-function assertCanMove() {
-  assertPracticeCanMove(); // identity: read-only while a Practice recovery request waits
-  const kyc = S.me.user.kycStatus;
-  if (kyc && kyc !== "verified") fail(403, "Verify your ID to move money.", "kyc_required");
-}
+/** Same gate as the server's `customer({ money })` on these moves (identity: also read-only while a recovery request waits). */
+const assertCanMove = assertPracticeIdVerified;
 
 /** As the server: its schema first (a positive number up to the most allowed), then whole minor units. */
 function amountOf(major: number) {

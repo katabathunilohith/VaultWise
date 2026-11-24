@@ -42,7 +42,7 @@ Every money move out needs the 6-digit MPIN, checked by the server ([plan 03](..
 | File | What |
 |---|---|
 | `src/app/mpin.tsx`, `src/app/_layout.tsx` (`// mpin`) | The sheet's route, inside the in-app guard |
-| `src/lib/api/client.ts`, `wallet.ts`, `wallet-types.ts` | `pin` on `withdraw`, `walletMove`, `walletSpend`, `walletCashOut`, `walletSettings`, `setLimits`, `buyCore`, `reset`; `changeMpin` |
+| `src/lib/api/client.ts`, `wallet.ts`, `wallet-types.ts` | `pin` on `withdraw`, `walletMove`, `walletSpend`, `walletCashOut`, `walletSettings`, `setLimits`, `buyCore`, `setSip`, `satelliteOptIn`, `reset`; `changeMpin` |
 | `src/lib/api/types.ts` | `MeMpin` (`upgradeDue`, `lockedUntil`, `enforced`), `mpin` on `/me` |
 | `src/lib/api/errors.ts`, `http.ts` (`// mpin`) | `ApiError.data`: the error body's extra fields |
 | `src/lib/api/practice.ts` | `PRACTICE_PIN = "246810"` |
@@ -59,6 +59,8 @@ Every money move out needs the 6-digit MPIN, checked by the server ([plan 03](..
 | `src/features/wallet/flows/SpendFlow.tsx`, `CashOutFlow.tsx`, `MoveFlow.tsx`, `LimitFlow.tsx` | MPIN on each move, and on raising or turning off the daily limit |
 | `src/features/emergency/request/RequestFlow.tsx`, `ReviewStep.tsx` | MPIN on every tier (its own PIN step is gone) |
 | `src/features/invest/core/LumpSumModal.tsx` | MPIN step on a Core buy |
+| `src/features/invest/core/PlanModal.tsx` | MPIN step when a Core plan starts or moves more money (`sipNeedsMpin` in `lib/invest.ts`, the server's `invest_sip` rule); lowering or stopping it asks nothing. A no-PIN save the server answers `mpin_required` opens the step |
+| `src/features/invest/practice/AllocateModal.tsx`, `PracticeView.tsx` | Turn on the Satellite sleeve, or set more aside (`satellite_opt_in`): every risk statement confirmed, then the MPIN, every time |
 | `src/features/pay/checkout/useCheckoutFlow.ts`, `PinStep.tsx` | 6-digit pad, MPIN answers by code, a biometric only in a live dry run (the payments shortcut is live-only, so none in Practice) |
 | `src/features/account/settings/SettingsHome.tsx`, `security/SecurityFlow.tsx` | The payments shortcut shows "Live only" in Practice and can't be turned on there |
 | `src/features/home/activity-model.ts` | Labels for `mpin.failed`, `mpin.locked`, `mpin.changed` |
@@ -77,4 +79,4 @@ Delete this folder, `src/app/mpin.tsx` and `src/lib/api/demo/mpin.ts`; remove th
 - **Turning app lock on with no PIN on this phone** keeps a copy of the MPIN typed twice, unchecked (there's no endpoint that only checks an MPIN). The next live money move the server accepts with `mpin.enforced: true` replaces it with the checked MPIN; until then a copy typed wrong stays (or change it in Settings → Security).
 - A changed Practice MPIN is kept in the Practice save's secure part (the `mpin` slice is `sensitive: true`, so it goes to the Keychain / Keystore as `vw.practice.mpin`, lib/api/demo/persist.ts). Change MPIN in Practice still says not to reuse a real PIN.
 - The date-of-birth rule is only checked by the server (the phone doesn't know the date of birth); its `mpin_weak` answer is shown.
-- No tests: the phone has no test runner. `policy.ts` and `errors.ts` are pure and ready for one.
+- Tests: `__tests__/policy.test.ts` and `errors.test.ts` (Jest, `npm test`). `__tests__/contract-mpin-policy.test.ts` holds `policy.ts` to the same vectors as the server's `src/lib/mpin` (`tests/contract/vectors/mpin-policy.json`); the money table (`money-actions.json`) and the Core plan rule (`sip-mpin.json`) are held against the Practice simulator and `lib/invest.ts` the same way.

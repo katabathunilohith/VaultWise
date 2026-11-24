@@ -115,8 +115,17 @@ const live = {
   investCore: () => request<InvestCore>("/invest/core"),
   investSatellite: () => request<Record<string, unknown>>("/invest/satellite"),
   buyCore: (amountMajor: number, pin?: string) => post<{ fills: unknown[] }>("/invest/core/buy", { amount: amountMajor, pin }),
-  setSip: (amountMajor: number, frequency: "weekly" | "monthly") => post<{ ok: true }>("/invest/core/sip", { amount: amountMajor, frequency }),
+  /** `pin`: the MPIN (`invest_sip`), when the plan is new or moves more money (sipNeedsMpin in lib/invest.ts); left out when lowering. */
+  setSip: (amountMajor: number, frequency: "weekly" | "monthly", pin?: string) =>
+    post<{ ok: true }>("/invest/core/sip", { amount: amountMajor, frequency, pin }),
+  /** Stopping a plan moves no money: no MPIN. */
   cancelSip: () => request<{ ok: true }>("/invest/core/sip", { method: "DELETE" }),
+  /**
+   * mpin: set money aside for the Satellite sleeve from the bank (opting in the first time). `acknowledged`:
+   * how many risk disclosures were confirmed (all of them, or the server refuses); `pin`: the MPIN (`satellite_opt_in`).
+   */
+  satelliteOptIn: (amountMajor: number, acknowledged: number, pin?: string) =>
+    post<{ ok: true }>("/invest/satellite/opt-in", { amount: amountMajor, acknowledged, pin }),
   /** mpin: change the MPIN; the server checks the current one and the policy (400 `mpin_weak` with `reason`). */
   changeMpin: (currentPin: string, newPin: string) => post<{ ok: true }>("/mpin", { currentPin, newPin }),
   region: () => request<{ guess: { country: string | null; supported: boolean; source: string | null; detail: string | null } }>("/region"),

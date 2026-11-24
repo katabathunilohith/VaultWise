@@ -22,9 +22,22 @@ export interface GovernanceStage {
   detail: string;
 }
 
+/** The server's eligibility() for opting in or setting more aside: one check per rule, and the cap left. */
+export interface SatelliteEligibility {
+  eligible: boolean;
+  capPct: number | null;
+  /** What the cap still allows, in minor units; null when the server didn't say. */
+  headroom: number | null;
+  checks: { key: string; label: string; pass: boolean; detail: string }[];
+}
+
 export interface SatelliteView {
   optedIn: boolean;
   maxAllocationPct: number | null;
+  /** mpin: for the allocate flow (AllocateModal); null when the server sent none. */
+  eligibility: SatelliteEligibility | null;
+  /** The server's risk disclosures; opting in needs every one acknowledged (it counts them). */
+  disclosures: string[];
   openPositions: PaperPosition[];
   closedCount: number;
   stages: GovernanceStage[];
@@ -68,9 +81,22 @@ export function parseSatellite(raw: unknown): SatelliteView {
     const name = str(m.name);
     if (symbol && name) marketNames[symbol] = name;
   }
+  const e = isObj(o.eligibility) ? o.eligibility : null;
   return {
     optedIn: o.optedIn === true,
     maxAllocationPct: num(rules.maxAllocationPct),
+    eligibility: e
+      ? {
+          eligible: e.eligible === true,
+          capPct: num(e.capPct) ?? num(rules.maxAllocationPct),
+          headroom: num(e.headroom),
+          checks: arr(e.checks)
+            .filter(isObj)
+            .map((c) => ({ key: str(c.key) ?? "", label: str(c.label) ?? "", pass: c.pass === true, detail: str(c.detail) ?? "" }))
+            .filter((c) => c.key),
+        }
+      : null,
+    disclosures: arr(o.disclosures).filter((d): d is string => typeof d === "string" && d.trim().length > 0),
     openPositions: positions.filter((p) => p.status === "open").map((p) => p.position),
     closedCount: num(stats.closed) ?? positions.filter((p) => p.status === "closed").length,
     stages: arr(governance.stages)

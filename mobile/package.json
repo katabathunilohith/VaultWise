@@ -1,7 +1,7 @@
 {
   "name": "vaultwise-mobile",
   "main": "expo-router/entry",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "dependencies": {
     "@expo-google-fonts/bricolage-grotesque": "^0.4.1",
     "@expo-google-fonts/figtree": "^0.4.1",
@@ -52,9 +52,12 @@
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.3",
+    "@types/jest": "30.0.0",
     "@types/react": "~19.3.0",
     "eslint": "^9.39.5",
     "eslint-config-expo": "~58.0.4",
+    "jest": "~30.5.2",
+    "jest-expo": "~58.0.15",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -64,7 +67,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "jest",
     "doctor": "npx expo-doctor@latest",
     "build:tester": "node scripts/build-tester.mjs",
     "deploy:tester": "npm run build:tester && npx eas-cli@latest deploy --prod",

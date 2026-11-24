@@ -20,7 +20,7 @@ Delete this folder, then remove each line marked `custom-rules`:
 | `mobile/src/lib/api/demo/vaults.ts` | the `customRule` lines in `createVault` |
 | `mobile/src/lib/categories.ts` | the `customRule` field of `RulesSource` and its check in `covers` |
 | `src/lib/custom-rules.ts` (server) | the whole file |
-| `src/app/api/v1/vaults/route.ts`, `src/lib/vaults.ts`, `src/lib/verification/pipeline.ts` | the `custom-rules` lines |
+| `src/app/api/v1/vaults/route.ts`, `src/lib/vaults.ts`, `src/lib/verification/stages/ai-read.ts` | the `custom-rules` lines |
 | `src/components/custom-rule.tsx` (web) and the pages that import it | the whole file and its lines |
 
 The server keeps rules in their own table, `vault_custom_rules`, which it creates on first use. No other table changes, so no migration needs undoing.

@@ -1,5 +1,5 @@
 /** Vaults, simulated: creating and editing them, deposits, withdrawals with proof, and limits. */
-import { assertPracticeCanMove } from "./identity"; // identity
+import { assertPracticeCanMove, assertPracticeIdVerified } from "./identity"; // identity
 import { money } from "../../money";
 import { ApiError } from "../errors";
 import type { CreateVaultInput, LimitKey, UpdateVaultInput, UploadFile, Vault, VaultDetail, WithdrawalRow } from "../types";
@@ -41,6 +41,8 @@ export const vaultsApi = {
   },
   createVault: async (input: CreateVaultInput) => {
     assertPracticeCanMove(); // identity: read-only while a Practice recovery request waits
+    // Money in from the bank (`vault_deposit`) needs a verified ID, as on the server; an empty vault doesn't.
+    if (input.initialDeposit) assertPracticeIdVerified();
     await wait(500);
     const vid = newId("vlt");
     const initial = input.initialDeposit ? toMinor(input.initialDeposit) : 0;
@@ -104,7 +106,7 @@ export const vaultsApi = {
     return { ok: true as const };
   },
   deposit: async (vaultId: string, amountMajor: number, memo?: string) => {
-    assertPracticeCanMove(); // identity: read-only while a Practice recovery request waits
+    assertPracticeIdVerified(); // identity: money in from the bank (`vault_deposit`) needs a verified ID, as on the server
     await wait(450);
     const v = findVault(vaultId);
     const amount = toMinor(amountMajor);
@@ -117,7 +119,7 @@ export const vaultsApi = {
     return { journalId: S.journals[0].id };
   },
   withdraw: async (vaultId: string, amountMajor: number, payee: string, note?: string, pin?: string) => {
-    assertPracticeCanMove(); // identity: read-only while a Practice recovery request waits
+    assertPracticeIdVerified(); // identity: a verified ID first, as on the server (and read-only while a recovery request waits)
     await wait(350);
     const amount = toMinor(amountMajor);
     assertPracticeDeviceCap(amount); // devices: an untrusted phone moves small amounts only (before the MPIN, as on the server)
