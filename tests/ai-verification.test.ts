@@ -1,8 +1,8 @@
 import fs from "node:fs";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { get } from "@/lib/db";
 import { transfer, userAccount, worldAccount } from "@/lib/ledger";
+import { renderSample } from "@/lib/samples";
 import { createUser, type User } from "@/lib/users";
 import { createVault, createWithdrawal, deposit } from "@/lib/vaults";
 import { createProof, runPipeline } from "@/lib/verification/pipeline";
@@ -14,9 +14,13 @@ import type { VaultCategory } from "@/lib/shared";
  * Always: with no AI key, every bill goes to a person (nothing is approved blind).
  * With a key: `npm run test:ai` (reads GROQ_API_KEY from .env.local and prints a table of results).
  * (tests/setup.ts removes GROQ_API_KEY so the normal suite never calls the provider.)
+ *
+ * The bills are drawn now by renderSample() (src/lib/samples.ts), dated relative to today, so the recent ones stay
+ * inside the 120-day window whenever this runs. The bundled copies in mobile/assets/samples carry fixed October 2026
+ * dates and would turn "old" from early 2027 (docs/maintainability.md B20). For a larger labelled set with edited,
+ * duplicate, wrong-purpose and stale bills, see `npm run eval:verification` (docs/evaluation/README.md).
  */
 
-const SAMPLES = path.join(process.cwd(), "mobile", "assets", "samples");
 const LIVE_KEY = process.env.GROQ_LIVE_KEY;
 
 const created = createUser({ name: "Priya Sharma", country: "IN", pin: "2468" });
@@ -42,7 +46,7 @@ function vaultFor(category: VaultCategory) {
 async function check(sample: string, category: VaultCategory, amount = 2_000_00) {
   const vaultId = vaultFor(category);
   const withdrawalId = createWithdrawal(fresh(), vaultId, amount, "Sample payee");
-  const buffer = fs.readFileSync(path.join(SAMPLES, `${sample}.jpg`));
+  const buffer = await renderSample(sample, fresh());
   const proofId = createProof(fresh(), {
     buffer,
     fileName: `${sample}.jpg`,

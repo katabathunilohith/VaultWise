@@ -104,6 +104,16 @@ const LEXICON: Record<Exclude<Scored, "other">, [string, number][]> = {
   ],
 };
 
+/**
+ * True if `term` starts a word in `t` (`t` begins with a space). Terms still match as prefixes ("diagnos" in
+ * "diagnosis", "lab" in "laboratory"), but not inside another word: "lease" in "please", "rent" in "current",
+ * "lab" in "gulab", "fee" in "coffee" and "ward" in "forward" used to count as purpose evidence.
+ */
+function startsWord(t: string, term: string) {
+  for (let i = t.indexOf(term); i !== -1; i = t.indexOf(term, i + 1)) if (!/[a-z0-9]/.test(t[i - 1])) return true;
+  return false;
+}
+
 export function keywordScores(text: string): Record<Scored, number> & { hits: Record<string, string[]> } {
   const t = ` ${text.toLowerCase()} `;
   const raw: Record<string, number> = {};
@@ -112,7 +122,7 @@ export function keywordScores(text: string): Record<Scored, number> & { hits: Re
     raw[cat] = 0;
     hits[cat] = [];
     for (const [w, weight] of words) {
-      if (t.includes(w)) {
+      if (startsWord(t, w)) {
         raw[cat] += weight;
         hits[cat].push(w);
       }
