@@ -64,7 +64,8 @@ as_app "set -a && . '$ENV_FILE' && set +a && npm install --include=dev --no-audi
 echo "== Restarting"
 systemctl restart vaultwise
 for _ in $(seq 1 30); do
-  if curl -fsS -o /dev/null http://127.0.0.1:3000/api/v1/region; then
+  # Quiet (-fs): the first tries usually come before the app has finished starting.
+  if curl -fs -o /dev/null http://127.0.0.1:3000/api/v1/region; then
     echo "== Vaultwise is up"
     exit 0
   fi
