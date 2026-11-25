@@ -1,11 +1,15 @@
 # Putting Vaultwise online
 
 > A step-by-step guide for someone who has never set up a server. It follows [plan 05](../docs/plans/05-server-online.md):
-> one small AWS Lightsail server in Mumbai runs the Vaultwise server and its SQLite database, Caddy gives it HTTPS,
+> one small AWS EC2 server in Mumbai runs the Vaultwise server and its SQLite database, Caddy gives it HTTPS,
 > and backups run every night. Money stays pretend; this only makes accounts real.
 
-**Time:** about two hours the first time. **Cost:** about US$12 a month for the server (check the price Lightsail shows for
-Mumbai when you pick the plan; new AWS accounts sometimes get the first months free), a few cents a month for snapshots,
+**Our server:** [vaultwise.online](https://vaultwise.online), set up with this guide in November 2026. It's an EC2 `t3.small`
+in Mumbai running Ubuntu, with an Elastic IP, the domain's DNS at Hostinger, and Firebase sign-in. (Plan 05 first chose
+Lightsail; we built it on EC2. The software on the server is the same.)
+
+**Time:** about two hours the first time. **Cost:** roughly US$20 to 25 a month for a `t3.small`, its disk and its public
+IP address (check the EC2 pricing page for Mumbai; new AWS accounts may get free credits), a little more for snapshots,
 plus a domain (roughly ₹200 to ₹1,500 a year).
 
 ## Who does what
@@ -19,17 +23,17 @@ else is copy and paste, and anyone on the team (or Claude, given SSH access) can
 | 2 | Domain name | **YOU ONLY** (payment) |
 | 3 | Firebase project and sign-in | **YOU ONLY** (Google account) |
 | 4 | Groq API key (optional) | **YOU ONLY** |
-| 5 to 7 | Create the server, static IP, firewall | **YOU ONLY** (in your AWS account) |
+| 5 to 7 | Launch the server, Elastic IP, security group | **YOU ONLY** (in your AWS account) |
 | 8 | Point the domain at the server | **YOU ONLY** (at your domain registrar) |
 | 9 to 15 | Install, configure, start, HTTPS, checks | Anyone |
-| 16 | Automatic snapshots | **YOU ONLY** (AWS console) |
+| 16 | Disk encryption check and daily snapshots | **YOU ONLY** (AWS console) |
 | 17 | Nightly backups (and optional S3 copy) | Anyone (S3 bucket: **YOU ONLY**) |
 | 18 | Test a restore | Anyone |
 | 19 | Uptime check | **YOU ONLY** (free account) |
 | 20 | Phone `tester-live` build | **YOU ONLY** (Expo account) |
 
-Wherever you see `vaultwise.example.com`, use your own domain (for example `app.yourname.in`), and wherever you see
-`YOUR-STATIC-IP`, use the address from step 6.
+Wherever you see `vaultwise.example.com` or `YOUR-DOMAIN`, use your own domain (ours is `vaultwise.online`), and wherever
+you see `YOUR-ELASTIC-IP`, use the address from step 6.
 
 ---
 
@@ -39,12 +43,12 @@ Wherever you see `vaultwise.example.com`, use your own domain (for example `app.
 
 1. Sign up at [aws.amazon.com](https://aws.amazon.com/). You need a payment card; India cards work.
 2. Turn on multi-factor authentication for the root user: top-right menu → **Security credentials** → **Assign MFA device**.
-3. Optional but wise: in **Billing → Budgets**, create a monthly budget of US$20 that emails you, so a surprise bill can't happen.
+3. Optional but wise: in **Billing → Budgets**, create a monthly budget of US$30 that emails you, so a surprise bill can't happen.
 
 ### 2. A domain
 
 Buy a domain from any registrar (GoDaddy, Namecheap, Cloudflare, Hostinger, BigRock...). A subdomain of a domain you
-already own works too, for example `vaultwise.yourname.in`.
+already own works too, for example `vaultwise.yourname.in`. Ours, `vaultwise.online`, is registered at Hostinger.
 
 Use a name you only use for Vaultwise: the server tells browsers to use HTTPS for it (and its subdomains) for two years.
 
@@ -54,7 +58,7 @@ Use a name you only use for Vaultwise: the server tells browsers to use HTTPS fo
 2. **Build → Authentication → Get started → Sign-in method → Email/Password → Enable → Save.**
 3. **Authentication → Settings → Authorised domains → Add domain**: your domain from step 2.
 4. **Project settings** (gear icon) **→ General → Your apps → Web (`</>`)**: register an app called "Vaultwise web".
-   Keep the page open; you'll copy `apiKey`, `authDomain`, `projectId` and `appId` from the config it shows in step 9.
+   Keep the page open; you'll copy `apiKey`, `authDomain`, `projectId` and `appId` from the config it shows in step 11.
 5. Decide who reviews bills and IDs. Each reviewer signs up on the website later with that email and verifies it.
 
 ### 4. Groq API key (optional)
@@ -66,35 +70,47 @@ bill and the assistant is off. Create a key at [console.groq.com/keys](https://c
 
 ## Part B. The server
 
-### 5. Create the Lightsail instance (YOU ONLY)
+### 5. Launch the EC2 instance (YOU ONLY)
 
-1. Open [lightsail.aws.amazon.com](https://lightsail.aws.amazon.com/) → **Create instance**.
-2. **Region:** Mumbai, `ap-south-1` (zone A is fine).
-3. **Platform:** Linux/Unix. **Blueprint:** *OS Only* → the newest **Ubuntu LTS** (24.04 or later).
-4. **SSH key:** keep the default key, and download it (**Download default key**). Store the `.pem` file safely; it's the
-   key to your server.
-5. **Plan:** the one with **2 GB** memory. Check the monthly price shown.
-6. **Name:** `vaultwise`. Tick **Enable automatic snapshots** if offered (otherwise step 16 does it).
-7. **Create instance** and wait until it says *Running*.
+1. Open the [EC2 console](https://console.aws.amazon.com/ec2/). In the region menu at the top right, pick
+   **Asia Pacific (Mumbai) `ap-south-1`**.
+2. **Launch instance**. **Name:** `vaultwise`.
+3. **Application and OS image:** **Ubuntu** → the newest **Ubuntu Server LTS** (24.04 or later), 64-bit (x86).
+4. **Instance type:** `t3.small` (2 GB memory). Check the hourly price it shows.
+5. **Key pair:** **Create new key pair** → name `vaultwise`, type ED25519 (or RSA), format `.pem`. It downloads; store it
+   safely, because it's the key to your server.
+6. **Network settings → Edit:** **Create security group**, name `vaultwise-sg`, with three inbound rules: SSH from
+   **My IP**, HTTP from anywhere, HTTPS from anywhere (step 7 explains them).
+7. **Configure storage:** 20 GiB, `gp3`. Open **Advanced**, expand the volume and set **Encrypted** to *Encrypted*
+   (the default key is fine). The privacy page says the server's disk is encrypted, and it can't be switched on later
+   without copying the disk (step 16). To make every future disk encrypted, also turn on **EBS encryption** under
+   **Data protection and security** in the EC2 dashboard's account attributes.
+8. **Launch instance**, and wait until **Instance state** says *Running*.
 
-### 6. Attach a static IP (YOU ONLY)
+### 6. Attach an Elastic IP (YOU ONLY)
 
-The server's address changes when it restarts unless you fix it. Open the instance → **Networking** →
-**Attach static IP** (or **Create static IP**, choose the instance, name it `vaultwise-ip`). Write the address down: it's
-`YOUR-STATIC-IP`. A static IP is free while it's attached.
+A server's public address changes when it stops and starts, unless you fix it with an Elastic IP.
 
-### 7. Open the firewall (YOU ONLY)
+1. EC2 → **Network & Security → Elastic IPs → Allocate Elastic IP address → Allocate**.
+2. Select the new address → **Actions → Associate Elastic IP address** → choose the `vaultwise` instance → **Associate**.
 
-Instance → **Networking** → **IPv4 firewall**. Make sure there are exactly these rules:
+Write the address down: it's `YOUR-ELASTIC-IP`. AWS charges a small hourly fee for every public IPv4 address, so
+**release** the Elastic IP if you ever delete the server (it keeps costing money while it's unattached).
 
-| Application | Port | Why |
-|---|---|---|
-| SSH | 22 | You log in (you can restrict it to your own IP with **Restrict to IP address**) |
-| HTTP | 80 | Caddy proves you own the domain and redirects to HTTPS |
-| HTTPS | 443 | The website and the phone app |
+### 7. Check the security group (YOU ONLY)
 
-Do the same under **IPv6 firewall** (or delete its rules if you don't use IPv6). Don't open port 3000: the app only
-listens inside the server.
+EC2 → the instance → **Security** tab → the `vaultwise-sg` group → **Edit inbound rules**. Make sure there are exactly
+these:
+
+| Type | Port | Source | Why |
+|---|---|---|---|
+| SSH | 22 | **My IP**, plus `13.233.177.0/29` if you log in with EC2 Instance Connect in the browser (AWS's address range for it in Mumbai) | You log in |
+| HTTP | 80 | Anywhere-IPv4 and Anywhere-IPv6 | Caddy proves you own the domain and redirects to HTTPS |
+| HTTPS | 443 | Anywhere-IPv4 and Anywhere-IPv6 | The website and the phone app |
+
+The console shows a yellow warning when SSH is open to anywhere (`0.0.0.0/0`): that's a nudge to narrow it as above.
+Your home address can change; if SSH stops working, update the **My IP** rule. Don't open port 3000: the app only
+listens inside the server. Leave the outbound rules as they are (all traffic).
 
 ### 8. Point the domain at the server (YOU ONLY)
 
@@ -102,7 +118,10 @@ At your registrar's DNS settings, add a record:
 
 | Type | Name / host | Value | TTL |
 |---|---|---|---|
-| `A` | `@` for the bare domain, or e.g. `app` for `app.yourname.in` | `YOUR-STATIC-IP` | 300 (or the lowest offered) |
+| `A` | `@` for the bare domain, or e.g. `app` for `app.yourname.in` | `YOUR-ELASTIC-IP` | 300 (or the lowest offered) |
+
+At Hostinger it's **Domains → your domain → DNS / Nameservers → DNS records**. First delete any `A` or `AAAA` record for
+`@` that points somewhere else (the registrar's parking page), or some visitors will land there.
 
 Check it from your computer after a few minutes (it can take up to an hour):
 
@@ -110,17 +129,19 @@ Check it from your computer after a few minutes (it can take up to an hour):
 nslookup vaultwise.example.com
 ```
 
-It's ready when the answer shows `YOUR-STATIC-IP`.
+It's ready when the answer shows `YOUR-ELASTIC-IP`.
 
 ### 9. Log in and install the software
 
-Log in with the browser terminal (instance → **Connect using SSH**), or from your computer:
+Log in with the browser terminal (EC2 → the instance → **Connect** → **EC2 Instance Connect** → user `ubuntu` →
+**Connect**), or from your computer:
 
 ```bash
-ssh -i path/to/LightsailDefaultKey-ap-south-1.pem ubuntu@YOUR-STATIC-IP
+ssh -i path/to/vaultwise.pem ubuntu@YOUR-ELASTIC-IP
 ```
 
-Everything from here runs on the server. Paste one block at a time.
+(On a Mac or Linux, run `chmod 400 path/to/vaultwise.pem` once first.) Everything from here runs on the server. Paste
+one block at a time.
 
 **Update the system and add swap** (memory on disk, so the build doesn't run out on 2 GB):
 
@@ -199,7 +220,7 @@ around `=`). Save with **Ctrl+O, Enter**, quit with **Ctrl+X**.
 
 | Variable | Value | Required |
 |---|---|---|
-| `NODE_ENV` | `production` (add this line) | yes |
+| `NODE_ENV` | `production` (add this line, written exactly `NODE_ENV=production`) | yes |
 | `TRUST_PROXY_HOPS` | `1` (remove the `#` in front of it). Caddy is the one proxy in front of the app and sets `X-Real-IP`, so rate limits see each visitor's real address. Without it the app ignores address headers (a visitor could fake them) and only limits per person | yes |
 | `RATE_LIMIT_PER_MINUTE` | leave it out for the default, 120 requests a minute per person and per address. Photo uploads have their own limit (20 an hour per person) | optional |
 | `FIREBASE_PROJECT_ID` | `projectId` from step 3. **Without it the server refuses to start**, because the app would be open to anyone | yes |
@@ -221,9 +242,8 @@ outside the code folder. (If you do set it, it must be exactly `/var/lib/vaultwi
 `NEXT_PUBLIC_` values end up in the web pages, so they aren't secret; everything else is. Never commit this file or
 paste it into a chat.
 
-**Before you build, put the real contact address in the policy pages:** edit
-`/opt/vaultwise/src/components/legal/config.ts` (or better, change it in the repository and pull) and replace
-`privacy@<your-domain>` with an inbox the team reads.
+**The contact address on the policy pages** is `CONTACT_EMAIL` in `src/components/legal/config.ts`, already set to the
+team's inbox. To change it, change it in the repository and pull; don't edit the server's copy.
 
 ### 12. Install the service and scripts, build and start
 
@@ -260,8 +280,8 @@ sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 sudo systemctl reload caddy
 ```
 
-Replace `YOUR-DOMAIN` with your domain (just the name, e.g. `app.yourname.in`). Caddy gets a free certificate within a
-minute. If it can't, check step 7 (ports 80 and 443) and step 8 (the domain points here):
+Replace `YOUR-DOMAIN` with your domain (just the name, e.g. `vaultwise.online`). Caddy gets a free certificate within a
+minute. If it can't, check step 7 (ports 80 and 443 open in the security group) and step 8 (the domain points here):
 `journalctl -u caddy -n 50 --no-pager`.
 
 ### 14. Check it from your computer
@@ -281,8 +301,9 @@ This must answer `{"error":"Sign in to continue.","code":"signed_out"}` (status 
 isn't on: stop the server (`sudo systemctl stop vaultwise`) and fix step 11.
 
 Then in a browser: open `https://YOUR-DOMAIN`, create an account, make a vault, send a bill, and open
-`https://YOUR-DOMAIN/admin` with a reviewer email from `ADMIN_EMAILS` to see it. Also open `/privacy`, `/terms` and
-`/delete-account` in a private window (signed out): Google Play checks these links.
+`https://YOUR-DOMAIN/admin` with a reviewer email from `ADMIN_EMAILS` to see it. (A reviewer who signed up before
+verifying their email has to sign out and back in once.) Also open `/privacy`, `/terms` and `/delete-account` in a
+private window (signed out): Google Play checks these links.
 
 ### 15. Updating later
 
@@ -293,7 +314,8 @@ sudo vaultwise-update
 ```
 
 It pulls, builds and restarts (the site is down for a few seconds). After changing `/etc/vaultwise.env`, run the same
-command, because some settings are baked in at build time.
+command, because some settings are baked in at build time. A "failed to connect" line while it waits for the app to
+start is normal; what counts is the last line, `Vaultwise is up`.
 
 If the new code changed `deploy/update.sh`, `deploy/backup.sh` or `deploy/vaultwise.service`, it prints the
 difference from the installed copy (lines starting `!!`) and the `sudo install ...` command for it, and keeps using
@@ -308,13 +330,19 @@ must show no local changes), then run the three `sudo install` lines from step 1
 
 ## Part C. Keeping the data safe
 
-### 16. Automatic snapshots and disk encryption (YOU ONLY)
+### 16. Disk encryption and daily snapshots (YOU ONLY)
 
-1. Lightsail → the instance → **Snapshots** → **Automatic snapshots** → **Enable**, and pick a time, e.g. 03:00 IST.
-   Lightsail keeps the last 7 daily snapshots of the whole disk.
-2. Lightsail encrypts instance disks and snapshots at rest. Check that the
-   [Lightsail FAQ](https://aws.amazon.com/lightsail/faq/) still says so, and record it with the date in the project's
-   security notes (gap 16 in `docs/security.md`).
+1. **Check the disk is encrypted.** EC2 → **Elastic Block Store → Volumes** → the `vaultwise` instance's volume:
+   **Encryption** must say *Encrypted*. Record it with the date in gap 16 of `docs/security.md`. The privacy page says
+   the server runs on an encrypted disk, so if it says *Not encrypted*, fix it or change the page. To fix it: take a
+   fresh nightly backup (step 17), then on the instance choose **Actions → Image and templates → Create image**; when
+   the image is ready, **copy** it with encryption turned on; launch a new instance from the copy (same type, key pair
+   and security group); move the Elastic IP to it (step 6); check the site; then terminate the old instance.
+2. **Turn on daily snapshots.** Tag the volume first: **Volumes** → the volume → **Tags → Manage tags → Add tag**,
+   key `Backup`, value `daily`. Then **Elastic Block Store → Lifecycle Manager → Create lifecycle policy → EBS
+   snapshot policy**: target resource type **Volume**, target tag `Backup` = `daily`, the default IAM role, a schedule
+   of **daily, every 24 hours, starting 21:30 UTC** (03:00 IST), and retention by **count: 7** → **Create policy**.
+   The first snapshot appears under **Snapshots** after the next scheduled time.
 
 ### 17. Nightly backups
 
@@ -349,7 +377,7 @@ The server clock is UTC, so `30 21` runs at 03:00 IST. The last command should p
 - **Download (by hand, weekly).** From your computer:
 
   ```bash
-  ssh -i path/to/key.pem ubuntu@YOUR-STATIC-IP 'sudo bash -c "cd /var/backups/vaultwise && tar -cz \$(ls -1 | tail -n 1)"' > vaultwise-backup-$(date +%F).tar.gz
+  ssh -i path/to/vaultwise.pem ubuntu@YOUR-ELASTIC-IP 'sudo bash -c "cd /var/backups/vaultwise && tar -cz \$(ls -1 | tail -n 1)"' > vaultwise-backup-$(date +%F).tar.gz
   ```
 
   The file holds personal data: keep it on an encrypted drive and delete copies older than 14 days.
@@ -403,7 +431,8 @@ It emails you when the site stops answering, and again when it's back. For the r
 
 The `tester-live` profile in `mobile/eas.json` makes an Android APK that talks to this server, with sign-in on and Practice off.
 
-1. In `mobile/eas.json`, replace `https://YOUR-DOMAIN` in the `tester-live` profile with your domain, and commit it.
+1. In `mobile/eas.json`, the `tester-live` profile's `EXPO_PUBLIC_API_URL` is `https://vaultwise.online`. Change it
+   only if you use another domain.
 2. Give the build the Firebase web settings from step 3 (they're public by design), in the EAS `preview` environment
    that the profile uses. From `mobile/`:
 
@@ -422,6 +451,7 @@ The `tester-live` profile in `mobile/eas.json` makes an Android APK that talks t
    ```
 
 4. Full check on a phone: sign up, make a vault, send a bill, and see it in the admin console on the website.
+5. Later code and design changes reach installed tester apps over the air: `npm run update:tester-live -- "What changed"`.
 
 ---
 
@@ -431,17 +461,22 @@ The `tester-live` profile in `mobile/eas.json` makes an Android APK that talks t
 |---|---|
 | The site is down | `sudo systemctl status vaultwise caddy --no-pager`, then `journalctl -u vaultwise -n 100 --no-pager` |
 | `Vaultwise won't start ... FIREBASE_PROJECT_ID is not set` | Fill in `/etc/vaultwise.env` (step 11), then `sudo systemctl restart vaultwise` |
+| `NODE_ENV: command not found` in the log | The first line of `/etc/vaultwise.env` isn't written `NODE_ENV=production`. Fix it, then `sudo systemctl restart vaultwise` |
 | The service gave up after several failures | Fix the cause in the log, then `sudo systemctl reset-failed vaultwise && sudo systemctl start vaultwise` |
 | The build stops with "killed" or "out of memory" | Check the swap from step 9 is on: `swapon --show` |
-| No certificate / browser warning | Ports 80 and 443 open (step 7)? Domain points here (step 8)? `journalctl -u caddy -n 50 --no-pager` |
+| No certificate / browser warning | Ports 80 and 443 open in the security group (step 7)? Domain points at the Elastic IP (step 8)? `journalctl -u caddy -n 50 --no-pager` |
+| You can't SSH in any more | Your home address changed: update the **My IP** SSH rule (step 7), or use EC2 Instance Connect |
 | Sign-in fails on the website | Your domain is in Firebase's **Authorised domains** (step 3), and the `NEXT_PUBLIC_FIREBASE_*` values are right. Rebuild after fixing them (step 15) |
+| The admin console says it's for reviewers | The email isn't in `ADMIN_EMAILS`, or the sign-in predates verifying the email: sign out and back in |
+| "Trust this phone" or a texted code says it's not available | `OTP_MODE` is blank. Set it (step 11) and run `sudo vaultwise-update` |
 | Wrong or lost data | [restore.md](restore.md) |
 | `AUDIT ANCHOR MISMATCH` in `/var/log/vaultwise-backup.log`, or `npm run audit:verify` fails | The audit log may have been changed. Don't restore or delete anything yet: keep the server, the backups, S3 and the journal as they are, and run the checker on older backups (`-- --db <backup>/vaultwise.db --anchors <backup>/audit-anchors.jsonl`) to find when it changed |
 
 **Turning it off (rollback).** Point the tester build back at Practice with an over-the-air update, then stop the
 server: `sudo systemctl stop vaultwise && sudo systemctl disable vaultwise`. The data stays in the snapshots and
-backups. To stop paying, delete the instance, its snapshots and the static IP in Lightsail (keep a downloaded backup
-first if you need the data, and remember the privacy policy promises to delete it when the project ends).
+backups. To stop paying, terminate the instance, delete its snapshots and the Lifecycle Manager policy, and **release**
+the Elastic IP (keep a downloaded backup first if you need the data, and remember the privacy policy promises to delete
+it when the project ends).
 
 ## Files in this folder
 
@@ -451,7 +486,7 @@ first if you need the data, and remember the privacy policy promises to delete i
 | `vaultwise.service` | Runs `npm start` as the `vaultwise` user, with `/etc/vaultwise.env` and `VAULTWISE_DATA_DIR=/var/lib/vaultwise` | `/etc/systemd/system/vaultwise.service` (root, 0644) |
 | `update.sh` | Pull and build as `vaultwise`, restart, wait until it answers; shows changes to the installed deploy files | `/usr/local/sbin/vaultwise-update` (root, 0755), run with `sudo` |
 | `backup.sh` | Nightly database, photo and audit-anchor backup with an anchor check, keeps 14 days, optional S3 copy (`BACKUP_S3_URI`) | `/usr/local/sbin/vaultwise-backup` (root, 0755), run by `/etc/cron.d/vaultwise-backup` |
+| `restore.md` | Testing a restore, restoring the app, rebuilding the server from a snapshot | |
 
 Root only ever runs the installed, root-owned copies. The files in `/opt/vaultwise/deploy` are the source you read and
 install from (step 15), never something root runs.
-| `restore.md` | Testing a restore, restoring the app, rebuilding from a snapshot | |

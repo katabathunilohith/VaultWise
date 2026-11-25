@@ -1,6 +1,6 @@
 # 05. Server online
 
-**Status:** server code, web pages and deploy scripts built (22 November 2026); not online yet (the owner's account steps remain); the phone side is recorded separately · **Owner:** Shaik (accounts), Claude (code and scripts) · **Size:** L
+**Status:** server code, web pages and deploy scripts built (22 November 2026); online at [vaultwise.online](https://vaultwise.online) since November 2026, on AWS EC2 instead of Lightsail (see *As built* below); the phone side is recorded separately · **Owner:** Shaik (accounts), Claude (code and scripts) · **Size:** L
 
 ## Goal
 
@@ -17,13 +17,15 @@ Run the real server and its SQLite database on the internet, so testers get real
 
 | Piece | Choice |
 |---|---|
-| Server | AWS Lightsail in Mumbai (`ap-south-1`), Ubuntu, 2 GB. Check the Mumbai price first. |
+| Server | AWS in Mumbai (`ap-south-1`), Ubuntu, 2 GB. Planned on Lightsail; built on an EC2 `t3.small` with an Elastic IP. |
 | Runtime | Node 24 (needed for `node:sqlite`), `npm run build`, then `npm start` under systemd |
 | HTTPS | Caddy in front, with a free certificate for your domain |
 | Data | `VAULTWISE_DATA_DIR=/var/lib/vaultwise` on the server's disk, never in the app folder |
-| Backups | Lightsail automatic daily snapshots, plus a nightly `sqlite3 .backup` copy to a second place (S3 or a downloaded copy) |
+| Backups | Daily snapshots of the whole disk (EBS snapshots from an EC2 Lifecycle Manager policy), plus a nightly `sqlite3 .backup` copy to a second place (S3 or a downloaded copy) |
 | Secrets | `.env.local` on the server only: `FIREBASE_*`, `IDENTITY_SECRET`, `ADMIN_EMAILS`, `GROQ_API_KEY` |
 | Monitoring | A free uptime check on `/api/v1/region`, plus server logs |
+
+**As built (November 2026).** The server runs on an EC2 `t3.small` in Mumbai instead of Lightsail, with an Elastic IP in place of Lightsail's static IP and a security group in place of its firewall. Everything else is as planned: Ubuntu, Node 24 under systemd, Caddy and `/var/lib/vaultwise`. The domain is `vaultwise.online`, with its DNS at Hostinger. [deploy/README.md](../../deploy/README.md) is written for EC2.
 
 ### Hardening (security gaps 1, 4, 5, 12 and 16)
 
@@ -32,7 +34,7 @@ Run the real server and its SQLite database on the internet, so testers get real
 - **Consent:** the web app asks before AI use and sends `x-ai-consent`. The server then treats a missing header as "no", and the assistant route checks it too.
 - **Security headers** through Next.js config in production: HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and a Content Security Policy for the web pages.
 - **Rate limits:** a general per-person and per-IP limit on every route, with tighter limits on sign-in, MPIN and uploads. `TRUST_PROXY_HOPS=1` behind Caddy, so the IP comes from Caddy.
-- **Encrypted disk:** Lightsail disks are encrypted. Check and record this.
+- **Encrypted disk:** the EC2 volume (EBS) is created encrypted. Check and record this.
 
 ### Phone and web
 
@@ -76,7 +78,7 @@ Run the real server and its SQLite database on the internet, so testers get real
 
 ## Who does what
 
-- **You:** create the AWS account and Lightsail server, buy the domain and point it at the server, create the Firebase project and turn on email sign-in, and fill `.env.local` on the server.
+- **You:** create the AWS account and the EC2 server, buy the domain and point it at the server, create the Firebase project and turn on email sign-in, and fill `.env.local` on the server.
 - **Claude:** everything in `deploy/`, the code changes, and a step-by-step setup guide.
 
 ## What was built (server)
@@ -125,8 +127,8 @@ Built 22 November 2026. The feature doc is [features/running-online.md](../featu
 
 ### Left for the owner
 
-- Everything marked **YOU ONLY** in [deploy/README.md](../../deploy/README.md): the AWS account and Lightsail server, static IP and firewall, the domain, the Firebase project, `/etc/vaultwise.env` (with `TRUST_PROXY_HOPS=1`), automatic snapshots, recording that the disk is encrypted, the S3 copy or weekly download, and the uptime check.
-- Replace `CONTACT_EMAIL` (`privacy@<your-domain>`) in `src/components/legal/config.ts` before going live.
+- Everything marked **YOU ONLY** in [deploy/README.md](../../deploy/README.md): the AWS account and EC2 server, Elastic IP and security group, the domain, the Firebase project, `/etc/vaultwise.env` (with `TRUST_PROXY_HOPS=1`) (all done), then daily snapshots, recording that the disk is encrypted, the S3 copy or weekly download, and the uptime check.
+- `CONTACT_EMAIL` in `src/components/legal/config.ts`: done, it's the team's inbox.
 - For plans 06 and 07 on the live server, also choose `OTP_MODE` (and Twilio keys, or `OTP_TEST_ALLOWED=true` for a demo) and, if the KYC steps flow is used, `KYC_DIGILOCKER_REDIRECT_URL` and, with Setu, `SETU_BASE_URL` (required in production). All are in `.env.example`; `OTP_MODE` is also in the guide's settings table, the KYC ones aren't.
 - Still open from the [maintainability review](../maintainability.md): B13 (a closed account's login can sign up again).
 

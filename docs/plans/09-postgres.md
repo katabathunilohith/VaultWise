@@ -28,7 +28,7 @@ Every database call in `src/lib` is synchronous (`get`, `all`, `run`, `tx` in `s
 - Driver and query layer: `pg` with a thin typed helper, or Drizzle ORM. Decide then.
 - Change `db.ts` to an async interface (`await get(...)`, `await tx(async (t) => ...)`), then convert modules one by one behind it, keeping SQLite running until the end.
 - Data move: a one-off script that reads SQLite and writes PostgreSQL in batches, run during a short maintenance window, then a comparison of row counts and ledger totals (`reconcile()`).
-- Hosting: Amazon RDS or Lightsail managed PostgreSQL in Mumbai.
+- Hosting: Amazon RDS for PostgreSQL in Mumbai, next to the EC2 server.
 
 ## Acceptance criteria
 

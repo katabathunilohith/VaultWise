@@ -8,7 +8,7 @@ Vaultwise is a two-person entrepreneurship capstone: a savings app where money s
 
 > **All money is pretend.** Vaultwise is a student prototype, not a bank, payment service or investment adviser. No real money moves, and the ID checks run against test providers.
 
-**Live demo:** not deployed yet. [deploy/README.md](deploy/README.md) is the step-by-step guide (one AWS Lightsail server, Caddy, nightly backups). The phone app's Practice build runs with no server at all.
+**Live:** [vaultwise.online](https://vaultwise.online), on one AWS EC2 server in Mumbai with HTTPS and Firebase sign-in. Sign up with any email; all money is test money. Android testers use the `tester-live` build, which talks to the same server, and the phone app's Practice build runs with no server at all. How the server is set up: [deploy/README.md](deploy/README.md).
 
 | Web app: overview | Web app: emergency access | Ops console: audit chain |
 |---|---|---|
@@ -59,6 +59,20 @@ flowchart LR
 ```
 
 Request path: a route handler resolves the session (sign-in, device, rate limit), applies the money policy for its action (ID gate, MPIN, new-device cap), then calls a domain module, which writes balanced ledger entries and an audit row. More in [docs/architecture.md](docs/architecture.md).
+
+## Where it runs
+
+| Piece | What we use |
+|---|---|
+| Server | One AWS EC2 instance (`t3.small`, Ubuntu) in Mumbai, `ap-south-1`, with an Elastic IP |
+| Domain and HTTPS | [vaultwise.online](https://vaultwise.online); Caddy gets and renews the certificate and proxies to the app |
+| App and data | Next.js 16 on Node 24 under systemd; SQLite and uploaded photos in `/var/lib/vaultwise`, with a nightly backup script (`deploy/backup.sh`) |
+| Sign-in | Firebase Authentication (email and password) |
+| AI | A Groq vision model, only for people who agree |
+| Phone builds and updates | Expo EAS: an Android APK for testers (`tester-live`) and over-the-air updates |
+| Checks | GitHub Actions on every push and pull request ([ci.yml](.github/workflows/ci.yml)) |
+
+Setup, updates, backups and restores: [deploy/README.md](deploy/README.md) and [deploy/restore.md](deploy/restore.md).
 
 ## Quick start
 
@@ -128,7 +142,4 @@ The Satellite engine never cleared its own walk-forward gate (out-of-sample prof
 - [docs/README.md](docs/README.md): architecture, every feature with its files and functions, the API, data model and configuration.
 - [docs/process/development-process.md](docs/process/development-process.md) and [module guide](docs/process/module-guide.md): how changes are planned, built, tested and released.
 - [docs/plans/roadmap.md](docs/plans/roadmap.md): what was built in which order, and what's next.
-- [docs/how-this-was-built.md](docs/how-this-was-built.md): how the project was built (with AI coding assistants, directed and reviewed by the team) and who did what.
-- Walkthroughs to explain the core without any tool: [the ledger](docs/walkthroughs/ledger.md), [the MPIN](docs/walkthroughs/mpin.md) and [the verification pipeline](docs/walkthroughs/verification-pipeline.md).
-- [docs/demo-script.md](docs/demo-script.md): a timed demo with a plan B for when the AI or market data stalls.
 - [CHANGELOG.md](CHANGELOG.md) (server and web) and [mobile/CHANGELOG.md](mobile/CHANGELOG.md) (phone).

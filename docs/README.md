@@ -15,8 +15,6 @@ Everything you need to understand, change and release Vaultwise. Start with the 
 | [Maintainability review](maintainability.md) | When planning clean-up work |
 | [Roadmap and plans](plans/roadmap.md) | To see what's next, in what order, and why |
 | [Contracts](plans/contracts.md) | The interfaces agreed for plans 02 to 08, and where the code deviates ("Deviations as built") |
-| [How this was built](how-this-was-built.md) | To see who decided what, how the AI coding assistant was used, and how the work was checked |
-| [Demo script](demo-script.md) | Before the capstone demo: the 5 to 7 minute script, what to do if something stalls, and the backup video checklist |
 
 ## Testing and evaluation
 
@@ -25,16 +23,6 @@ Everything you need to understand, change and release Vaultwise. Start with the 
 | [Contract tests](../tests/contract/README.md) | You change a rule that lives on both the server and the phone (MPIN policy, ID numbers, device trust and cap, emergency tiers, wallet maths, the SIP rule, the money table): one vector file, two suites |
 | [Evaluation of bill verification](evaluation/README.md) | You change the verification pipeline's rules, thresholds or prompt: a labelled set of bills, `npm run eval:verification`, and the measured results ([verification-results.md](evaluation/verification-results.md)) |
 | [Development process: tests and CI](process/development-process.md#4-test) | Before a pull request: which checks to run, and what CI runs on every push |
-
-## Walkthroughs
-
-Self-study guides to the core, so either of us can explain it without the tool. Each has a diagram, a path through the code, the rules with their tests, viva questions and exercises.
-
-| Walkthrough | What it covers |
-|---|---|
-| [The ledger](walkthroughs/ledger.md) | Accounts, journals and entries; how deposits, withdrawals, emergency money and wallet moves are recorded; balances, holds and the invariants |
-| [The MPIN](walkthroughs/mpin.md) | Choosing, storing (scrypt) and checking the MPIN on every money move; the lock; reset with a texted code and the 72-hour hold; rollback mode; the phone side |
-| [The verification pipeline](walkthroughs/verification-pipeline.md) | From upload to decision: consent, forensics, the AI read, rules, thresholds, person review and appeals |
 
 ## Features
 
@@ -80,7 +68,7 @@ Self-study guides to the core, so either of us can explain it without the tool. 
 
 - [README.md](../README.md): what Vaultwise is, quick start, demo script, how the blueprint maps to the code.
 - [mobile/README.md](../mobile/README.md): running the phone app, releases and updates.
-- [deploy/README.md](../deploy/README.md): putting the server online step by step (AWS Lightsail, Caddy, systemd, backups), with [deploy/restore.md](../deploy/restore.md) for restoring.
+- [deploy/README.md](../deploy/README.md): putting the server online step by step (AWS EC2, Caddy, systemd, backups; the live server is [vaultwise.online](https://vaultwise.online)), with [deploy/restore.md](../deploy/restore.md) for restoring.
 - [mobile/DESIGN.md](../mobile/DESIGN.md) and [mobile/RESEARCH.md](../mobile/RESEARCH.md): the design rules and the research behind them.
 - [CHANGELOG.md](../CHANGELOG.md) and [mobile/CHANGELOG.md](../mobile/CHANGELOG.md): what changed on the server and web app, and in each phone app version.
 - [.github/workflows/ci.yml](../.github/workflows/ci.yml): the checks CI runs on every push to `main` and every pull request.
