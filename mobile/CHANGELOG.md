@@ -12,7 +12,9 @@ The version lives in `app.json` (`expo.version`). Build numbers count up by them
 
 ## Unreleased
 
-Nothing yet.
+- The amount keypad no longer covers the form on shorter phones: it sits below the content, which scrolls above it (every keypad screen, for example the new-vault "How will it fill up?" step).
+- The live app labels the Pay tab's built-in checkouts as samples ("Try a sample checkout", a Sample tag, and a note that nothing is paid), since merchants can't send real bills until the server has merchant checkout.
+- The money badge says TEST instead of PRACTICE when the app is on the live server (the money is still pretend).
 
 ## 0.2.0 (2026-11-24)
 

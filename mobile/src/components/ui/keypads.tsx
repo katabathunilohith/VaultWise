@@ -5,6 +5,7 @@ import { BackspaceIcon, FingerprintIcon, ScanSmileyIcon } from "@/components/ico
 import { haptic } from "@/lib/haptics";
 import { layout, radius, useTheme } from "@/theme";
 import { useReduceMotion } from "./hooks";
+import { useDockedFooter } from "./layout";
 import { Press } from "./Press";
 import { Txt } from "./Txt";
 
@@ -14,6 +15,7 @@ import { Txt } from "./Txt";
  * Each key plays the same light key haptic (tactile keys improve touchscreen entry).
  */
 export function AmountKeypad({ value, onChange, maxDecimals = 2 }: { value: string; onChange: (next: string) => void; maxDecimals?: number }) {
+  useDockedFooter(); // in a ModalScreen footer: dock it below the form rather than over it
   const press = (k: string) => {
     haptic("pin.digit");
     if (k === "⌫") return onChange(value.slice(0, -1));

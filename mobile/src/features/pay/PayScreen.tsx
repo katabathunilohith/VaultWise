@@ -1,7 +1,7 @@
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FlashlightIcon } from "@/components/icons";
-import { Card, PracticeBadge, Row, Screen, SectionHeader, ToggleRow, Txt } from "@/components/ui";
+import { Card, PracticeBadge, Row, Screen, ToggleRow, Txt } from "@/components/ui";
 import { usePayIntents } from "@/lib/api/hooks";
 import { layout, space } from "@/theme";
 import { MerchantCodeEntry } from "./MerchantCodeEntry";
@@ -43,7 +43,6 @@ export function PayScreen() {
       <ScannerArea scanner={scanner} height={viewfinderHeight} aimY={aimY} />
 
       <View style={styles.section}>
-        <SectionHeader title="Waiting for you" />
         <PendingCheckouts />
       </View>
 
