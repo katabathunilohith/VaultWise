@@ -34,6 +34,8 @@ flowchart LR
 | Web app | `src/app/*` (pages), `src/components` | Next.js pages, React | The original prototype UI, the reviewer console and sign-in pages |
 | Phone app | `mobile/` | Expo SDK 58, React Native 0.88, expo-router, React Query | The main product. Runs live against the server, or in Practice mode on its own |
 
+In production the server and web app run on one AWS EC2 server in Mumbai behind Caddy, at [vaultwise.online](https://vaultwise.online) ([deploy/README.md](../deploy/README.md)).
+
 ## Server layers
 
 A request goes through the same layers every time.

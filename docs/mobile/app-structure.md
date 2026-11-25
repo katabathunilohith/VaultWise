@@ -281,7 +281,7 @@ channel.
 | `development-simulator` | `development` | internal | no | Extends `development`; iOS simulator build. |
 | `preview` | `preview` | internal | no | |
 | `apk` | `apk` | internal | yes (`EXPO_PUBLIC_PRACTICE_ONLY=1`) | Android `.apk`; build number counts up. |
-| `tester-live` | `tester-live` | internal | no | Android `.apk` for online testers: live data and sign-in against `EXPO_PUBLIC_API_URL` (in the profile's `env`, a `https://YOUR-DOMAIN` placeholder until the server is online), EAS environment `preview`, no ID check or recovery (`TESTER_LIVE`). Build number counts up. No npm script: `npx eas-cli@latest build --profile tester-live --platform android`. |
+| `tester-live` | `tester-live` | internal | no | Android `.apk` for online testers: live data and sign-in against `EXPO_PUBLIC_API_URL` (in the profile's `env`: `https://vaultwise.online`), EAS environment `preview`, no ID check or recovery (`TESTER_LIVE`). Build number counts up. No npm script: `npx eas-cli@latest build --profile tester-live --platform android`. |
 | `production` | `production` | store (default) | yes (`EXPO_PUBLIC_PRACTICE_ONLY=1`) | Build number counts up. `submit.production` is empty. |
 
 `cli.appVersionSource` is `"remote"`, so EAS keeps the build numbers.

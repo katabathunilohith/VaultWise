@@ -4,7 +4,10 @@ What changed in the server (`src/`) and web app. The phone app has its own log i
 
 ## Unreleased
 
-Nothing yet.
+### Changed
+
+- **Online at [vaultwise.online](https://vaultwise.online)**, on one AWS EC2 server in Mumbai (Ubuntu, Caddy, systemd) instead of the planned Lightsail. The deploy and restore guides ([deploy/README.md](deploy/README.md), [deploy/restore.md](deploy/restore.md)) now describe EC2: an Elastic IP, a security group, an encrypted EBS disk and daily EBS snapshots, plus fixes for the problems met while setting it up.
+- The README shows the live link and where each part runs.
 
 ## 0.2.0 (2026-11-24)
 
@@ -38,7 +41,6 @@ Tag `v0.2.0` on the commit that releases it. Roadmap steps 1 to 8 ([docs/plans/r
 - **Contract tests** (`tests/contract`): shared rule tables that the server and the phone both test against.
 - **CI** on GitHub Actions (type check, lint, tests and build for the server and the phone), `engines` (Node 22.18 or later) and `.nvmrc`.
 - The verification pipeline, personal limits and account recovery are split into small single-purpose files, with no behaviour change.
-- Docs: how this was built, walkthroughs of the ledger, the MPIN and the verification pipeline, and a demo script with a plan B.
 
 - **MPIN checked by the server** ([plan 03](docs/plans/03-mpin.md)). Every money move needs the 6-digit MPIN in the request (`pin`), checked before any money, upload or AI call. A PIN policy (no repeats, runs, common PINs or date of birth), and a lock after 5 wrong tries (1 minute, then 5 minutes, 30 minutes, 24 hours). `POST /mpin` to change it; a reset with a texted code. Web MPIN fields on every money form. Rollback switch `MPIN_ENFORCED`.
 - **Registered devices, alerts and texted codes** ([plan 06](docs/plans/06-devices-alerts-otp.md)). Each phone (and, with sign-in on, each browser) is a device. A new device can only send small amounts (USD 50 equivalent per move, ₹4,000) until it is trusted with a texted code and the MPIN, or 24 hours pass. Devices can be signed out from another device. Alerts for money moves, new devices, PIN and phone changes, in the app and as push notifications. Texted codes in test mode or through Twilio. Web "Devices and alerts" card.

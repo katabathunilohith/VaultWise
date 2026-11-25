@@ -4,7 +4,7 @@
 
 ## Goal
 
-Measure the app against a recognised standard twice: a **baseline** now and a **final** check after plans 03 to 07. The difference is evidence for the capstone report.
+Measure the app against a recognised standard twice: a **baseline** now and a **final** check after plans 03 to 07. The difference shows what the work improved.
 
 ## Scope
 

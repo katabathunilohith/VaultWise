@@ -178,7 +178,7 @@ Tunable limits (constants, not switches):
 | `RECOVERY_PAGES` | `src/components/identity/config.ts` | `["/", "/vaults", "/recover"]` | Pages that stay open while a recovery claim waits. Other pages show a placeholder. |
 | `CUSTOM_RULES_ENABLED` | [`src/components/custom-rule.tsx`](../../src/components/custom-rule.tsx) | `true` | Shows "write your own rule" for custom vaults on the web. |
 | `PUBLIC_PAGES` | [`src/components/legal/config.ts`](../../src/components/legal/config.ts) | `["/privacy", "/terms", "/delete-account"]` | Pages anyone can open without signing in. |
-| `CONTACT_EMAIL`, `LAST_UPDATED`, `OPERATOR`, `CLOSED_ACCOUNT_DAYS`, `BACKUP_DAYS`, `REPLY_DAYS` | `src/components/legal/config.ts` | `privacy@<your-domain>` (a placeholder to replace before going live), `22 November 2026`, `the Vaultwise student team`, 90, 14, 30 | Values the policy pages show |
+| `CONTACT_EMAIL`, `LAST_UPDATED`, `OPERATOR`, `CLOSED_ACCOUNT_DAYS`, `BACKUP_DAYS`, `REPLY_DAYS` | `src/components/legal/config.ts` | `vaultwise007@gmail.com` (the team's inbox), `22 November 2026`, `the Vaultwise student team`, 90, 14, 30 | Values the policy pages show |
 
 ### Phone app (`mobile/src`)
 

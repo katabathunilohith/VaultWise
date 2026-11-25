@@ -62,7 +62,7 @@ Root runs only root-owned copies of the scripts, installed outside the app folde
 | Check the audit chain on the server | `sudo -u vaultwise -H bash -c 'cd /opt/vaultwise && export VAULTWISE_DATA_DIR=/var/lib/vaultwise && set -a && . /etc/vaultwise.env && set +a && npm run audit:verify'` | As the app user, never root (deploy guide step 17, which also checks the journal's copy of the anchors). |
 | See the anchors in the journal | `journalctl -u vaultwise -o cat \| grep audit_anchor` | One `[vaultwise] audit_anchor {...}` line per start and per day. |
 | Move a server set up the old way | read `/opt/vaultwise/deploy/update.sh` and `backup.sh`, check `git -C /opt/vaultwise status` and `git -C /opt/vaultwise diff` show no local changes, then run the three `sudo install` lines above and the cron line | For a server whose cron or people ran `/opt/vaultwise/deploy/*.sh` as root (deploy guide step 15). |
-| Restore or test a restore | follow [`deploy/restore.md`](../../deploy/restore.md) | Monthly test restore into a scratch folder; real restore; rebuild from a Lightsail snapshot. |
+| Restore or test a restore | follow [`deploy/restore.md`](../../deploy/restore.md) | Monthly test restore into a scratch folder; real restore; rebuild the server from an EBS snapshot. |
 | Server logs | `journalctl -u vaultwise -n 100 --no-pager` | Start-up guard messages, `[vaultwise]` warnings and `server_error <errorId>` lines. |
 | Find an error by its id | `journalctl -u vaultwise --no-pager \| grep <errorId>` | The `errorId` from a 500 answer. |
 | Service status | `sudo systemctl status vaultwise caddy --no-pager` | |

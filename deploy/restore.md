@@ -5,7 +5,7 @@ Two kinds of backup exist (see [README.md](README.md)):
 | Backup | Made by | Kept | Use it when |
 |---|---|---|---|
 | Nightly copy in `/var/backups/vaultwise/<date>/` (`vaultwise.db` + `uploads.tar.gz` + `audit-anchors.jsonl`) | `/usr/local/sbin/vaultwise-backup` (the root-owned copy of `deploy/backup.sh`) from cron | 14 days | The data is wrong or lost but the server is fine |
-| Lightsail automatic snapshot (the whole disk) | Lightsail | 7 days | The server itself is broken or gone |
+| EBS snapshot of the whole disk | the EC2 Lifecycle Manager policy ([README.md](README.md), step 16) | 7 days | The server itself is broken or gone |
 
 Run every command below on the server, over SSH, unless it says otherwise.
 
@@ -125,16 +125,20 @@ Write the date and the counts in your project log, so you can show the restore w
 
 Anything that happened after the backup was made (new sign-ups, vaults, bills) is lost. Tell your testers.
 
-## Restore the whole server from a Lightsail snapshot
+## Restore the whole server from an EBS snapshot
 
-Use this if the server won't boot, was deleted, or you can't log in.
+Use this if the server won't boot, was deleted, or you can't log in. Work in the [EC2 console](https://console.aws.amazon.com/ec2/),
+region Mumbai (`ap-south-1`).
 
-1. In the [Lightsail console](https://lightsail.aws.amazon.com/), open **Snapshots**, find the newest automatic snapshot
-   of the instance, and choose **Create new instance**. Pick the same plan (2 GB) in Mumbai.
-2. When it's running, open **Networking** on the new instance and **attach the static IP** (detach it from the old one
-   first). Your domain keeps working because it points at the static IP.
-3. Check the firewall rules on the new instance still allow HTTPS (443) and HTTP (80); add them if not.
-4. SSH in and check: `sudo systemctl status vaultwise caddy --no-pager`, then open the site.
-5. If the snapshot is older than last night's backup, restore the nightly backup too (above). Snapshots and nightly
+1. **If the instance still exists:** select it → **Actions → Monitor and troubleshoot → Replace root volume** →
+   restore from a **snapshot** → pick the newest snapshot of its volume → **Create replacement task**. The instance
+   keeps its Elastic IP and security group, and restarts on the disk as it was when the snapshot was taken.
+2. **If the instance is gone:** **Elastic Block Store → Snapshots** → the newest snapshot → **Actions → Create image
+   from snapshot** (architecture `x86_64`, root device name `/dev/sda1`, ENA support on). Then **Images → AMIs** →
+   the new image → **Launch instance from AMI**, with type `t3.small`, the `vaultwise` key pair and the
+   `vaultwise-sg` security group. When it's running, **associate the Elastic IP** with it (README step 6). Your domain
+   keeps working because it points at the Elastic IP.
+3. SSH in and check: `sudo systemctl status vaultwise caddy --no-pager`, then open the site.
+4. If the snapshot is older than last night's backup, restore the nightly backup too (above). Snapshots and nightly
    backups live on the same server unless you set up the S3 copy, so a lost server loses its nightly backups as well.
-6. Delete the old instance once the new one works (it still costs money while it exists).
+5. Terminate the old instance once the new one works (it still costs money while it exists).

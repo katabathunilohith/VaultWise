@@ -2,7 +2,7 @@
 
 > What keeps the server safe once it is on the internet: a start-up guard, security headers, rate limits, plain error answers with an id, careful proxy trust, public policy pages, and the deployment, backup and restore scripts.
 
-**Status:** built ([plan 05](../plans/05-server-online.md)). The server isn't online yet: the accounts, domain and keys are the owner's steps in [deploy/README.md](../../deploy/README.md). · **Switches:** `NODE_ENV=production` turns the guard and the headers on; `ALLOW_PROTOTYPE_IN_PRODUCTION`, `RATE_LIMIT_PER_MINUTE`, `TRUST_PROXY_HOPS`, `TRUST_PROXY_HEADER`
+**Status:** built ([plan 05](../plans/05-server-online.md)) and online at [vaultwise.online](https://vaultwise.online), on one AWS EC2 server in Mumbai set up with [deploy/README.md](../../deploy/README.md). · **Switches:** `NODE_ENV=production` turns the guard and the headers on; `ALLOW_PROTOTYPE_IN_PRODUCTION`, `RATE_LIMIT_PER_MINUTE`, `TRUST_PROXY_HOPS`, `TRUST_PROXY_HEADER`
 
 The AI consent change from the same plan (a missing `x-ai-consent` header now means no) is in [ai.md](ai.md). The deployment steps themselves are in [deploy/README.md](../../deploy/README.md); this page explains the code and points there rather than copying it.
 
@@ -147,11 +147,11 @@ Read [deploy/README.md](../../deploy/README.md) for the full, step-by-step guide
 | [deploy/Caddyfile](../../deploy/Caddyfile) | HTTPS with an automatic Let's Encrypt certificate, compression, a 25 MB body limit, `X-Real-IP` set, `Cf-Connecting-Ip` dropped, `Server` removed |
 | [deploy/update.sh](../../deploy/update.sh) | Installed as `/usr/local/sbin/vaultwise-update` (root:root, 0755) and run as `sudo vaultwise-update [--no-pull]`: pull, `npm ci --include=dev` and `npm run build` as the `vaultwise` user with `/etc/vaultwise.env` loaded, restart, wait up to 30 s for `/api/v1/region`. When the repository's `update.sh`, `backup.sh` or `vaultwise.service` differs from the installed copy, it prints the difference (lines starting `!!`, control characters made visible) and the `sudo install …` command, and keeps using the installed copy. It never installs them itself. |
 | [deploy/backup.sh](../../deploy/backup.sh) | Installed as `/usr/local/sbin/vaultwise-backup` (root:root, 0755); `/etc/cron.d/vaultwise-backup` runs that copy nightly (`30 21 * * *` UTC = 03:00 IST): copies the audit anchors file first (`AUDIT_ANCHOR_FILE`, default `$VAULTWISE_DATA_DIR/audit-anchors.jsonl`), then `sqlite3 .backup`, `PRAGMA integrity_check`, a check that the newest anchor's row has the same hash in the copy (the run fails if not; it never runs app code), `uploads.tar.gz`, and keeps `KEEP_DAYS` (14) in `BACKUP_DIR` (`/var/backups/vaultwise`). With `BACKUP_S3_URI` set (a line in the cron file) it also copies each backup to S3 with server-side encryption. |
-| [deploy/restore.md](../../deploy/restore.md) | A monthly test restore into a scratch folder (checked with `npm run audit:verify -- --db ... --anchors ...` as the app user), a real restore that puts back the anchors from the same backup, and rebuilding from a Lightsail snapshot |
+| [deploy/restore.md](../../deploy/restore.md) | A monthly test restore into a scratch folder (checked with `npm run audit:verify -- --db ... --anchors ...` as the app user), a real restore that puts back the anchors from the same backup, and rebuilding the server from an EBS snapshot |
 
 **Why root-owned copies.** `/opt/vaultwise` belongs to the `vaultwise` user, and `npm ci` runs every package's install scripts as that user, so any file there could have been changed by a package. Root runs only the copies in `/usr/local/sbin`, which only root can write; the build still runs as `vaultwise`. A server set up the old way (cron or a person running `/opt/vaultwise/deploy/*.sh` as root) is moved over by reading the two scripts, checking `git status` and `git diff` show no local changes, and running the three `sudo install` lines and the new cron line (deploy/README.md, step 15).
 
-Lightsail's automatic snapshots (7 days) are a second, whole-disk backup. Photo paths are stored in full, so a real restore must go back into `/var/lib/vaultwise`.
+Daily EBS snapshots of the server's disk (an EC2 Lifecycle Manager policy that keeps 7) are a second, whole-disk backup. Photo paths are stored in full, so a real restore must go back into `/var/lib/vaultwise`.
 
 ## Where the code is
 
@@ -215,7 +215,7 @@ On the live server, `deploy/README.md` step 14 checks the headers with `curl -I`
 
 ## Known limits and open issues
 
-- **Not online yet.** The AWS account, domain, Firebase project, `.env` values, snapshots, S3 copy and uptime check are the owner's steps.
+- **The owner's steps after going online.** The disk-encryption check and daily snapshots, the nightly backup schedule with a copy off the server (S3 or a weekly download), a test restore and the uptime check are steps 16 to 19 of [deploy/README.md](../../deploy/README.md).
 - **`.env.example`** lists the plan 03 to 07 switches (`MPIN_ENFORCED`, `DEVICES_ENFORCED`, `OTP_MODE`, `KYC_FLOW`, `SETU_BASE_URL` and others) and `ALLOW_PROTOTYPE_IN_PRODUCTION`. [configuration.md](../reference/configuration.md) is the full list.
 - **One process only.** Counts live in SQLite and the limiter relies on Node running one request's statements at a time. Several servers would need a shared store ([plan 09](../plans/09-postgres.md), not built).
 - **`'unsafe-inline'` scripts** are allowed. Nonces would remove it but make every page dynamic.
