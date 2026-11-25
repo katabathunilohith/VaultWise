@@ -9,6 +9,7 @@ import {
   type Icon,
 } from "@/components/icons";
 import { categoryOf } from "@/lib/categories";
+import { usePracticeMode } from "@/lib/api/practice";
 import { radius, useTheme, type Palette } from "@/theme";
 import { Press } from "./Press";
 import { Txt } from "./Txt";
@@ -86,13 +87,23 @@ export function Banner({ tone, title, body, icon, action }: { tone: Tone; title:
 }
 
 /** Store requirement: simulated money must never look real. Shown on every money screen. */
+/**
+ * "No real money" marker. In Practice it says PRACTICE; on the live server (the tester build) the money
+ * is still pretend, but it isn't Practice mode, so it says TEST instead.
+ */
 export function PracticeBadge({ compact }: { compact?: boolean }) {
   const { c } = useTheme();
+  const practice = usePracticeMode();
+  const word = practice ? "PRACTICE" : "TEST";
   return (
-    <View accessible style={[styles.practice, { backgroundColor: c.practice }]} accessibilityLabel="Practice mode, no real money">
+    <View
+      accessible
+      style={[styles.practice, { backgroundColor: c.practice }]}
+      accessibilityLabel={practice ? "Practice mode, no real money" : "Test version, no real money"}
+    >
       <View style={[styles.dot, { backgroundColor: c.accentFill }]} />
       <Txt v="micro" color={c.onPractice}>
-        {compact ? "PRACTICE" : "PRACTICE · NO REAL MONEY"}
+        {compact ? word : `${word} · NO REAL MONEY`}
       </Txt>
     </View>
   );

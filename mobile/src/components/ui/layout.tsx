@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Platform, RefreshControl, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -102,9 +102,16 @@ export function ModalScreen({
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const [footerH, setFooterH] = useState(0);
+  // A footer holding a keypad docks below the content instead of floating over it (useDockedFooter).
+  const [docked, setDocked] = useState(false);
   const close = onClose ?? (() => (router.canGoBack() ? router.back() : router.replace("/")));
   // Scroll clearance = the measured footer (button, plus any keypad or secondary action) + a gap.
-  const footerSpace = footer ? (footerH || layout.ctaHeight + insets.bottom + layout.ctaBottomGap + 28) + space.md : insets.bottom + space.xl;
+  // A docked footer takes its own space, so the content only needs a small gap.
+  const footerSpace = !footer
+    ? insets.bottom + space.xl
+    : docked
+      ? space.md
+      : (footerH || layout.ctaHeight + insets.bottom + layout.ctaBottomGap + 28) + space.md;
   const Body = scroll ? ScrollView : View;
   return (
     <View style={[styles.fill, { backgroundColor: tone === "paper" ? c.surface : c.bg }]}>
@@ -138,15 +145,48 @@ export function ModalScreen({
       >
         {children}
       </Body>
-      {footer ? <BottomSlot onHeight={setFooterH}>{footer}</BottomSlot> : null}
+      {footer ? (
+        <DockContext.Provider value={setDocked}>
+          <BottomSlot onHeight={setFooterH} docked={docked}>
+            {footer}
+          </BottomSlot>
+        </DockContext.Provider>
+      ) : null}
     </View>
   );
 }
 
-/** The bottom action slot: anchored 16 pt above the home indicator, with a fade so content reads beneath. */
-export function BottomSlot({ children, onHeight }: { children: ReactNode; onHeight?: (h: number) => void }) {
+/** Set by ModalScreen: lets something inside its footer ask for the footer to be docked. */
+const DockContext = createContext<((docked: boolean) => void) | null>(null);
+
+/**
+ * Call from a component that makes a footer tall (the amount keypad). Its ModalScreen then docks the
+ * footer below the content, which scrolls in the space above it, instead of floating the footer over
+ * the content: a keypad over the form hid fields on shorter phones and let them show between the keys.
+ */
+export function useDockedFooter() {
+  const setDocked = useContext(DockContext);
+  useEffect(() => {
+    if (!setDocked) return undefined;
+    setDocked(true);
+    return () => setDocked(false);
+  }, [setDocked]);
+}
+
+/**
+ * The bottom action slot: anchored 16 pt above the home indicator, with a fade so content reads beneath.
+ * Docked (a keypad inside, see useDockedFooter): it sits below the content in the layout, on a solid
+ * background, so nothing shows through or hides behind it.
+ */
+export function BottomSlot({ children, onHeight, docked }: { children: ReactNode; onHeight?: (h: number) => void; docked?: boolean }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
+  if (docked)
+    return (
+      <View style={[styles.bottomDocked, { paddingBottom: insets.bottom + layout.ctaBottomGap, backgroundColor: c.bg, borderTopColor: c.border }]}>
+        <View style={styles.bottomInner}>{children}</View>
+      </View>
+    );
   return (
     <View
       pointerEvents="box-none"
@@ -222,6 +262,7 @@ const styles = StyleSheet.create({
   headerSide: { minWidth: layout.hit, alignItems: "flex-end" },
   modalContent: { paddingHorizontal: layout.gutter, gap: space.lg, maxWidth: layout.maxContentWidth, width: "100%", alignSelf: "center" },
   bottomSlot: { position: "absolute", left: 0, right: 0, bottom: 0, paddingTop: 28 },
+  bottomDocked: { paddingTop: space.sm, borderTopWidth: StyleSheet.hairlineWidth },
   bottomInner: { paddingHorizontal: layout.gutter, gap: 12, maxWidth: layout.maxContentWidth, width: "100%", alignSelf: "center" },
   card: { borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, padding: space.md, gap: space.sm },
   section: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: layout.hit, marginTop: space.xs },

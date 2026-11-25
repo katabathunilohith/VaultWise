@@ -143,7 +143,7 @@ Everything below is exported from `@/components/ui` unless noted.
 |---|---|---|
 | `Screen` | Tab roots and pushed screens | Scrolls, 96 pt extra bottom padding, optional pull-to-refresh with `pull.threshold`. |
 | `ModalScreen` | Full-screen modal flows (withdraw, emergency, pay, camera) | Close or Back top-leading, optional title and `headerRight`, `footer` in the R1 slot, `hideLeading` while money commits, `tone="paper"`. |
-| `BottomSlot` | The main-button slot | 16 pt above the home indicator, with a fade. `ModalScreen` uses it. |
+| `BottomSlot` | The main-button slot | 16 pt above the home indicator, with a fade. `ModalScreen` uses it. A footer holding the amount keypad is **docked** instead (`useDockedFooter()`, called by `AmountKeypad`): it sits below the content on a solid background and the content scrolls above it, so no field hides behind the keypad. |
 | `Card` | Grouped content | Optional `onPress` (scale 0.98) and `raised`. |
 | `SectionHeader` | A titled section with an optional text action | 44 pt action target. |
 | `Row`, `Stack` | Horizontal and vertical gaps | `gap` defaults to `space.sm`. |
