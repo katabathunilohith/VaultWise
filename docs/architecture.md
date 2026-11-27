@@ -2,6 +2,8 @@
 
 > How Vaultwise fits together: one server, a web app and a phone app, with a simulator so the phone works without the server.
 
+For the current rider demo, follow the [payout planner architecture and worked example](features/payout-planner.md). It traces the browser calculation, account boundary, save and check-in without going through a money-movement route.
+
 ## The three parts
 
 ```mermaid

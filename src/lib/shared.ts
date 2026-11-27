@@ -2,7 +2,7 @@
 
 export const BRAND = {
   name: "Vaultwise",
-  tagline: "Savings that keep their promise.",
+  tagline: "Will your cash last until payday?",
 };
 
 export type VaultCategory = "health" | "education" | "housing" | "emergency" | "retirement" | "custom";

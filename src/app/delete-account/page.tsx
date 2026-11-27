@@ -69,6 +69,7 @@ export default function DeleteAccountPage() {
       <LegalSection id="what-happens" title="What happens to your data">
         <Bullets>
           <li>Your account stops working straight away, and you&apos;re signed out of it everywhere.</li>
+          <li>Closing your signed-in account deletes your saved payout plans and their check-ins from the active database.</li>
           <li>All money in Vaultwise is pretend, so there is nothing to pay out and nothing is lost.</li>
           <li>
             We keep the account&apos;s records (your profile, pretend-money history, bill and ID photos and activity log) for up to{" "}

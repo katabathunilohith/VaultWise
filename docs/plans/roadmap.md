@@ -2,6 +2,8 @@
 
 > What's next, in order, and why. Each step has its own plan file with the design, changes, tests and acceptance criteria.
 
+The [November rider pilot plan](../capstone/README.md#shared-plan-and-carry-forward-register) is the current capstone priority. The steps below describe the earlier wallet and savings programme.
+
 ## Principles behind the order
 
 1. Fix the most dangerous gap before adding anything visible.

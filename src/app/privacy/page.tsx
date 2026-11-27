@@ -25,9 +25,8 @@ export default function PrivacyPage() {
       intro="What we collect, why we need it, who else sees it, how long we keep it, and how to get it changed or deleted. Written in plain English."
     >
       <Notice tone="warn" title="Vaultwise is a student prototype. The money is pretend.">
-        Vaultwise is a capstone project built by {OPERATOR} in India. Every balance, deposit, payment and investment is simulated
-        (&ldquo;Practice&rdquo; or pretend money). We don&apos;t hold real money, move real money or offer any real financial service, and no
-        licensed company checks your ID.
+        Vaultwise is a capstone project built by {OPERATOR} in India. You enter your own figures in the payout planner. The practice wallet
+        simulates balances, transfers and investments.
       </Notice>
 
       <LegalSection id="who" title="Who we are">
@@ -61,6 +60,10 @@ export default function PrivacyPage() {
             [
               "A device ID (a random number made when you install the app) and your IP address",
               "To recognise your phone, stop people guessing their way into accounts, and limit abuse. IP addresses used for limits are stored only as a hash.",
+            ],
+            [
+              "Payout plans you choose to save on the web",
+              "We store the cash, estimated pay, dates, daily work cost and bill entries you enter, together with any payout you later record. This lets you reopen the plan and compare your estimate with the amount received.",
             ],
             [
               "What you do in the app",
@@ -117,6 +120,7 @@ export default function PrivacyPage() {
       <LegalSection id="retention" title="How long we keep it">
         <Bullets>
           <li>While your account is open, we keep what the app needs to work.</li>
+          <li>Closing a signed-in account removes its payout plans and check-ins from the active database immediately.</li>
           <li>A rejected ID photo is deleted straight away. We keep only the last 4 characters and the result of the check.</li>
           <li>
             When you close your account it stops working at once. We keep its records for up to {CLOSED_ACCOUNT_DAYS} days, so we can answer

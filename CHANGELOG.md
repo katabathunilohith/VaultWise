@@ -4,6 +4,15 @@ What changed in the server (`src/`) and web app. The phone app has its own log i
 
 ## Unreleased
 
+### Payout planner capstone (27 November 2026)
+
+- Changed the capstone’s first audience from salaried savers to delivery riders managing fuel and household expenses between payouts. The web account setup, home action, navigation and page description now lead to this task. Wallet history is opt-in during setup.
+- Added the responsive payout planner, on-time and delayed forecasts, an expense breakdown, a labelled fictional week, saved plans and a check-in that compares actual pay with the original expectation. The planner uses calendar dates and integer minor units. Its calculations run without a bank integration or AI calls.
+- Added account-scoped SQLite storage and validated, retry-safe save and check-in routes. Saved plans are included in account export and cleared on account closure. Updated the privacy notice, architecture, API and data-model references.
+- A returning rider can test the longest observed delay from up to six distinct, checked-in payout cycles. The account history excludes labelled examples and retrospective plans. The planner caps a scenario at 14 days.
+- Added the [review pack](docs/capstone/README.md) with published rider evidence and alternatives, cost and price assumptions, fieldwork sheets, a pilot metric query, an editable pitch, founder rehearsal and the carry-forward register. The original pitch remains the historical record.
+- Added regression tests for the payout-day boundary, first shortfall, validation, account isolation, duplicate requests and actual-vs-expected results. The capstone prototype is available in the web app, including phone browsers.
+
 ### Changed
 
 - **Online at [vaultwise.online](https://vaultwise.online)**, on one AWS EC2 server in Mumbai (Ubuntu, Caddy, systemd) instead of the planned Lightsail. The deploy and restore guides ([deploy/README.md](deploy/README.md), [deploy/restore.md](deploy/restore.md)) now describe EC2: an Elastic IP, a security group, an encrypted EBS disk and daily EBS snapshots, plus fixes for the problems met while setting it up.

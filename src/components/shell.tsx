@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import {
   Activity,
   Bot,
+  CalendarDays,
   Gauge,
   Landmark,
   LayoutDashboard,
@@ -60,6 +61,7 @@ export function useMe() {
 }
 
 const NAV = [
+  { href: "/payout-planner", label: "Payout planner", icon: CalendarDays },
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/vaults", label: "Vaults", icon: PiggyBank },
   { href: "/emergency", label: "Emergency access", icon: Siren, emphasis: true },
@@ -133,7 +135,7 @@ function Logo() {
       </svg>
       <div>
         <div className="text-[15px] font-semibold leading-tight text-white">{BRAND.name}</div>
-        <div className="text-[11px] leading-tight text-brand-muted">Purpose-locked savings</div>
+        <div className="text-[11px] leading-tight text-brand-muted">Between delivery payouts</div>
       </div>
     </Link>
   );
@@ -158,7 +160,7 @@ function SideNav({ me, onNavigate }: { me: Me; onNavigate?: () => void }) {
     </Link>
   );
   return (
-    <div className="flex h-full flex-col gap-6 px-3 py-5">
+    <div className="flex h-full flex-col gap-6 overflow-y-auto px-3 py-5">
       <Logo />
       <nav className="flex flex-col gap-0.5" aria-label="Main">
         {NAV.map(item)}
@@ -214,6 +216,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const { data: me, reload, error } = useApi<Me>(gate.meUrl); // identity: no /me call until sign-in state is known
   const [mobileOpen, setMobileOpen] = useState(false);
   const path = usePathname(); // legal
+  const router = useRouter();
   // legal: the privacy policy, terms and account-deletion page open for everyone, signed in or not.
   if (isPublicPage(path)) return <PublicFrame>{children}</PublicFrame>; // legal
 
@@ -240,6 +243,7 @@ export function Shell({ children }: { children: ReactNode }) {
           countries={me.countries}
           onDone={() => {
             clearApiCache();
+            if (path === "/" || path === "/sign-in") router.replace("/payout-planner");
             reload();
           }}
         />

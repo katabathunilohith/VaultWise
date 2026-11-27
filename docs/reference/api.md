@@ -3,7 +3,7 @@
 Every HTTP route the Next.js server exposes, as of commit `012a9fc` plus the server work for plans 03, 05, 06 and 07 (2026-11-22) and the external review fixes (2026-11-24: the MPIN on SIPs and Satellite opt-in, the ID check on money in, per-customer strategies).
 The web app in `src/app` and the phone app in `mobile/` both call these routes.
 
-There are 82 route files under [`src/app/api/v1`](../../src/app/api/v1), which serve 93 method and path pairs.
+With the payout planner added on 27 November 2026, [the API](../../src/app/api/v1) has 83 route files and 96 method and path pairs.
 
 ## How a route works
 
@@ -179,6 +179,7 @@ In production there is no CORS, and every response carries the security headers 
 
 - **Request amounts are major units** (for example `12.5` means 12.50). Routes convert them with `minor()` in `src/lib/api.ts`, which also rejects zero, negative and non-finite numbers.
   `PUT /limits`, `POST /limits/emergency` and `GET /invest/core/projection` do their own `× 100` and allow 0.
+- **The payout planner accepts integer minor units in both directions.** For example, a ₹125.50 bill is sent as `12550`. Each saved plan belongs to a single account currency.
 - **Response amounts are integer minor units** (cents, pence and so on). The `currency` field says which currency.
 - Uploads are `multipart/form-data` with a `file` field. `POST /vaults/[id]/proofs`, `POST /emergency/[id]/receipt`, `POST /kyc` and `POST /limits/emergency` share a limit of 20 per person per hour (`limitUploads()`). An upload counts only once its route accepts it: the proof and receipt routes first check that one is left (`assertUploadsLeft()`, 429 before the body is read) and count once the withdrawal or request is known to take the file; `POST /kyc` refuses a steps-flow account before counting; `POST /limits/emergency` counts only when a file is sent.
 - Times in new fields (`lockedUntil`, `trustableAt`, `retryAt`, `expiresAt`, `firstSeen`, `createdAt`) are Unix milliseconds.
@@ -196,10 +197,22 @@ Paths below are relative to `/api/v1`.
 |---|---|---|---|---|---|
 | GET | `/me` | signed-in (uses `session()`, works without a wallet) | none | No wallet: `{ onboarded: false, aiEnabled, jurisdictions[], countries[], auth }`. With a wallet: `{ onboarded: true, auth: { mode, access, email }, kyc: { status, docType?, idLast4? }, recovery?: { claimId, status, createdAt }, aiEnabled, mpin: { upgradeDue, lockedUntil, enforced }, phone: { number (masked), verified }, device?: { registered, trusted, trustableAt }, user: { id, name, email, jurisdiction, country, currency, kycStatus, kycLevel, plan, riskProfile, satelliteOptIn, createdAt }, rules, jurisdictions[], countries[] }`. `mpin.enforced` is always sent: true unless `MPIN_ENFORCED=false` (then false, and `lockedUntil` is null). `device` is absent for a recovery claimant; `device.registered` is false for a request without a recorded device id. With recovery access: first name only, masked email, `riskProfile: null`. A signed-out device gets `401 device_revoked`; an older sign-in after a device sign-out `401 signed_out`. With a wallet, in firebase mode, it counts toward the per-person rate limit. | [me/route.ts](../../src/app/api/v1/me/route.ts) |
 | PATCH | `/me` | customer write | `{ name?, email? ("" clears), jurisdiction?, pin?, currentPin? }`. A new `pin` goes through `changeMpin()`: it must pass the MPIN policy, and `currentPin` is always needed when the account has a PIN. | `{ ok: true }`. 409 if the new market uses another currency. 409 `name_in_check` while an ID check uses the name; 403 `name_locked` if the name matches a verified ID. The MPIN errors for `pin`. | [me/route.ts](../../src/app/api/v1/me/route.ts) |
-| GET | `/me/export` | customer read | none | JSON download (`Content-Disposition: attachment`): `{ exportedAt, profile (no pin_hash), vaults, accounts, journals, ledgerEntries, withdrawals, proofs, emergencyRequests, bankTransactions, holdings, orders, paperPositions, auditLog }`. Writes audit `privacy.data_exported`. | [me/export/route.ts](../../src/app/api/v1/me/export/route.ts) |
+| GET | `/me/export` | customer read | none | JSON download (`Content-Disposition: attachment`): `{ exportedAt, profile (no pin_hash), payoutPlans (complete history), vaults, accounts, journals, ledgerEntries, withdrawals, proofs, emergencyRequests, bankTransactions, holdings, orders, paperPositions, auditLog }`. Writes audit `privacy.data_exported`. | [me/export/route.ts](../../src/app/api/v1/me/export/route.ts) |
 | POST | `/onboarding` | signed-in, with no wallet | `{ name, email?, country? or jurisdiction? (one is required), pin, demo: boolean }`. `pin` is a 6-digit MPIN that passes the policy (4–6 digits with `MPIN_ENFORCED=false`). `demo: true` seeds practice data. | `{ ok: true }`. 400 `mpin_weak` with `reason`. 409 if a wallet exists (`has_wallet` in firebase mode) or a recovery claim is pending (`claim_pending`). New users start KYC `pending` when `KYC_ENFORCED` applies, else `verified`. | [onboarding/route.ts](../../src/app/api/v1/onboarding/route.ts) |
-| POST | `/reset` | Prototype: **public**. Firebase: customer write (via `resolveCustomer`), money: `close_account`. | Firebase: `{ pin }` (the MPIN). Prototype: none. | Prototype: deletes the whole database and uploads, then `{ ok: true }`. Firebase: checks the MPIN, closes this person's account (data kept for audit), then `{ ok: true, closed: true }`. | [reset/route.ts](../../src/app/api/v1/reset/route.ts) |
+| POST | `/reset` | Prototype: **public**. Firebase: customer write (via `resolveCustomer`), money: `close_account`. | Firebase: `{ pin }` (the MPIN). Prototype: none. | Prototype: deletes the whole database and uploads, then `{ ok: true }`. Firebase: checks the MPIN, closes this person's account, removes their planner records from the active database and retains financial audit data, then `{ ok: true, closed: true }`. | [reset/route.ts](../../src/app/api/v1/reset/route.ts) |
 | GET | `/region` | public | headers only (geo headers, `accept-language`) | `{ networkCountry, languages[], guess: { country, supported, source, detail } }` | [region/route.ts](../../src/app/api/v1/region/route.ts) |
+
+### Payout planning
+
+All three methods use the account resolved by the session. The planner can be used with pending KYC. It avoids the money scheduler and the ledger. A plan's `createdAt` and a check-in's `recordedAt` are Unix milliseconds. The dates riders enter use `YYYY-MM-DD`.
+
+| Method | Path | Input | Success |
+|---|---|---|---|
+| GET | `/payout-plans` | Optional `?asOfDate=YYYY-MM-DD` for personal history. Defaults to today in the account’s time zone. | `{ plans: SavedPayoutPlan[], history: { sampleCount, lateCount, maxLateDays } }`. Plans are the latest 30 by creation time. History is calculated independently across up to six eligible distinct paydays, ordered by actual arrival. The maximum is the observed number of late days and can exceed the 14-day scenario limit. With no eligible history all three values are zero. |
+| POST | `/payout-plans` | `{ id, input, isExample? }` with a client-generated UUID. `input` contains `asOfDate`, `expectedPayoutDate`, `expectedPayoutAmount`, `openingCash`, `dailyWorkCost`, `delayDays` and `bills: [{ name, dueDate, amount }]`. | `{ plan }` with its original inputs, `id`, `currency`, `createdAt`, `isExample` (defaults to false) and `actual: null` for a new plan. An identical retry returns the saved plan. |
+| PATCH | `/payout-plans` | `{ id, actualDate, actualAmount }`. The date lies between the plan start and today in the account's time zone. Zero is accepted. | `{ plan }` including `actual: { date, amount, recordedAt, daysDifference, amountDifference }`. Both differences are actual minus expected. |
+
+Invalid fields return 400. Missing or foreign plan IDs on check-in return 404. A save that reuses an ID with different inputs or an attempt to replace a recorded outcome returns 409. [Route handler](../../src/app/api/v1/payout-plans/route.ts) · [Validation limits and forecast rules](../features/payout-planner.md)
 
 ### Dashboard, insight and activity
 
