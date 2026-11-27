@@ -1,7 +1,7 @@
 {
   "name": "vaultwise",
   "version": "0.2.0",
-  "description": "Delivery payout planning and simulated purpose-based savings. Vaultwise student capstone, server and web app.",
+  "description": "Vaultwise: purpose-locked savings with proof-checked withdrawals (server and web app). Student capstone; all money is pretend.",
   "private": true,
   "engines": {
     "node": ">=22.18.0"

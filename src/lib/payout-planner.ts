@@ -94,7 +94,7 @@ function scenario(input: PayoutPlanInput, payoutDate: string): PayoutScenario {
   }
   for (let i = 0; i < days; i++) {
     const date = datePlusDays(input.asOfDate, i);
-    charge(date, "Daily work cost", input.dailyWorkCost);
+    charge(date, "Daily costs", input.dailyWorkCost);
     for (const bill of input.bills) {
       if (bill.dueDate === date) {
         charge(date, bill.name, bill.amount);

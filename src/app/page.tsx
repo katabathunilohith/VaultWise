@@ -91,14 +91,14 @@ export default function DashboardPage() {
       <PageHeader
         eyebrow={new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
         title={`${greeting()}, ${user.name.split(" ")[0]}`}
-        subtitle="Check what you can spend before your next payout, then review your savings below."
+        subtitle="Here's where your savings stand and what needs your attention."
         actions={
           <>
             <LinkButton href="/emergency" icon={<Siren className="size-4 text-bad" />}>
               Emergency access
             </LinkButton>
-            <LinkButton href="/payout-planner" variant="brand" icon={<ArrowRight className="size-4" />}>
-              Open payout planner
+            <LinkButton href="/vaults?new=1" variant="brand" icon={<Plus className="size-4" />}>
+              New vault
             </LinkButton>
           </>
         }

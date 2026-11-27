@@ -9,8 +9,8 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Vaultwise · Payout planner",
-  description: "Plan for fuel and bills between delivery payouts, test a late payday and compare the plan with what arrived.",
+  title: "Vaultwise — purpose-locked savings",
+  description: "Category savings released against verified proof of use, tiered emergency access, and Core/Satellite investing.",
 };
 
 export const viewport: Viewport = {

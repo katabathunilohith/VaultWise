@@ -50,7 +50,7 @@ function Planner({ currency, timeZone, accountId }: { currency: string; timeZone
     <div className="vw-in">
       <PageHeader
         title="Payout planner"
-        subtitle="Will your cash cover fuel and bills if your delivery payout arrives late?"
+        subtitle="Will your money last until your next allowance, stipend or pay, even if it arrives late?"
         actions={
           selected && (
             <Button

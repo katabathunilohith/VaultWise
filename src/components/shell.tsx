@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import {
   Activity,
@@ -61,10 +61,10 @@ export function useMe() {
 }
 
 const NAV = [
-  { href: "/payout-planner", label: "Payout planner", icon: CalendarDays },
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/vaults", label: "Vaults", icon: PiggyBank },
   { href: "/emergency", label: "Emergency access", icon: Siren, emphasis: true },
+  { href: "/payout-planner", label: "Payout planner", icon: CalendarDays },
   { href: "/invest", label: "Invest", icon: TrendingUp },
   { href: "/accounts", label: "Linked accounts", icon: Landmark },
   { href: "/assistant", label: "Assistant", icon: Bot },
@@ -135,7 +135,7 @@ function Logo() {
       </svg>
       <div>
         <div className="text-[15px] font-semibold leading-tight text-white">{BRAND.name}</div>
-        <div className="text-[11px] leading-tight text-brand-muted">Between delivery payouts</div>
+        <div className="text-[11px] leading-tight text-brand-muted">Purpose-locked savings</div>
       </div>
     </Link>
   );
@@ -216,7 +216,6 @@ export function Shell({ children }: { children: ReactNode }) {
   const { data: me, reload, error } = useApi<Me>(gate.meUrl); // identity: no /me call until sign-in state is known
   const [mobileOpen, setMobileOpen] = useState(false);
   const path = usePathname(); // legal
-  const router = useRouter();
   // legal: the privacy policy, terms and account-deletion page open for everyone, signed in or not.
   if (isPublicPage(path)) return <PublicFrame>{children}</PublicFrame>; // legal
 
@@ -243,7 +242,6 @@ export function Shell({ children }: { children: ReactNode }) {
           countries={me.countries}
           onDone={() => {
             clearApiCache();
-            if (path === "/" || path === "/sign-in") router.replace("/payout-planner");
             reload();
           }}
         />

@@ -58,7 +58,7 @@ export function AuthFrame({ children, aside, top }: { children: ReactNode; aside
             <>
               <h1 className="text-4xl font-semibold leading-tight tracking-tight">{BRAND.tagline}</h1>
               <p className="mt-4 text-[15px] leading-relaxed text-brand-muted">
-                Plan for your next shift and the bills due before your delivery payout. Sign in to save your plan and check it when you get paid.
+                Sign in to see your vaults. Money only moves after we&apos;ve checked your ID, so your savings stay yours.
               </p>
             </>
           )}

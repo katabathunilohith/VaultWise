@@ -329,7 +329,7 @@ export function SignInScreen({ initialMode }: { initialMode: "sign-in" | "recove
       <div className="vw-in">
         <Heading
           title={mode === "sign-in" ? "Sign in" : "Create your login"}
-          sub={mode === "sign-in" ? "Use the email and password you signed up with." : "Use an email you can open. You’ll choose your planning currency next."}
+          sub={mode === "sign-in" ? "Use the email and password you signed up with." : "Use an email you can open. You'll set up your wallet next."}
         />
         <EmailPasswordForm
           key={mode}

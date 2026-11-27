@@ -69,7 +69,7 @@ function exampleDraft(today: string) {
     dailyWorkCost: "100",
     delayDays: "2",
     bills: [
-      { key: "rent", name: "Rent", dueDate: addDays(start, 2), amount: "1000" },
+      { key: "rent", name: "Hostel mess fee", dueDate: addDays(start, 2), amount: "1000" },
       { key: "repair", name: "Phone repair", dueDate: addDays(start, 5), amount: "500" },
     ],
   };
@@ -156,12 +156,12 @@ export function Editor({ today, currency, history, cacheScope, onSaved }: Editor
               setError("");
             }}
           >
-            Try a fictional week
+            Try an example
           </Button>
         )}
         {isExample && (
           <Notice
-            title="Fictional delivery week"
+            title="Fictional student example"
             action={
               <Button
                 size="sm"
@@ -184,13 +184,13 @@ export function Editor({ today, currency, history, cacheScope, onSaved }: Editor
         <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           <div className="min-w-0 space-y-4">
             <Card as="section">
-              <CardTitle sub={`Use ${currency} for all amounts. Include only cash you can already spend.`}>Your payout week</CardTitle>
+              <CardTitle sub={`Use ${currency} for all amounts. Include only cash you can already spend.`}>Until your money comes in</CardTitle>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Plan starts">
                   <Input required type="date" value={draft.asOfDate} onChange={(event) => change({ asOfDate: event.target.value })} />
                 </Field>
                 <AmountField label="Cash on hand" currency={currency} value={draft.openingCash} onChange={(openingCash) => change({ openingCash })} />
-                <Field label="Expected payout date">
+                <Field label="When your next money arrives">
                   <Input
                     required
                     type="date"
@@ -201,19 +201,19 @@ export function Editor({ today, currency, history, cacheScope, onSaved }: Editor
                   />
                 </Field>
                 <AmountField
-                  label="Expected take-home payout"
+                  label="How much arrives"
                   min={0.01}
                   currency={currency}
                   value={draft.expectedPayoutAmount}
                   onChange={(expectedPayoutAmount) => change({ expectedPayoutAmount })}
                 />
                 <AmountField
-                  label="Daily work cost"
+                  label="Daily costs"
                   currency={currency}
                   value={draft.dailyWorkCost}
                   onChange={(dailyWorkCost) => change({ dailyWorkCost })}
                 />
-                <Field label="Test a payout delay (days)">
+                <Field label="Test a delay (days)">
                   <Input
                     required
                     type="number"
@@ -226,7 +226,7 @@ export function Editor({ today, currency, history, cacheScope, onSaved }: Editor
                 </Field>
               </div>
               <p className="mt-3 text-xs text-ink-2">
-                Daily work cost includes fuel or charging and other costs to keep working. Use an average per calendar day.
+                Daily costs are travel, food and anything else you spend on most days. Use an average per calendar day.
               </p>
               {!isExample && observed && observed.sampleCount > 0 && (
                 <div className="mt-4 space-y-2 rounded-lg bg-surface-2 p-3 text-sm">
@@ -264,7 +264,7 @@ export function Editor({ today, currency, history, cacheScope, onSaved }: Editor
                           required
                           maxLength={60}
                           value={bill.name}
-                          placeholder="e.g. Rent"
+                          placeholder="e.g. Hostel fee"
                           onChange={(event) => editBill(bill.key, { name: event.target.value })}
                         />
                       </Field>
@@ -319,7 +319,7 @@ export function Editor({ today, currency, history, cacheScope, onSaved }: Editor
             {isExample ? "Save example plan" : "Save plan"}
           </Button>
           <p className="flex items-center gap-1.5 text-[13px] text-ink-2">
-            <CalendarClock className="size-4 shrink-0" aria-hidden /> Record the actual amount when your payout arrives.
+            <CalendarClock className="size-4 shrink-0" aria-hidden /> Record the actual amount when your money arrives.
           </p>
         </div>
       </fieldset>

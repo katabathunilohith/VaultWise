@@ -4,14 +4,11 @@ What changed in the server (`src/`) and web app. The phone app has its own log i
 
 ## Unreleased
 
-### Payout planner capstone (27 November 2026)
+### Added
 
-- Changed the capstone’s first audience from salaried savers to delivery riders managing fuel and household expenses between payouts. The web account setup, home action, navigation and page description now lead to this task. Wallet history is opt-in during setup.
-- Added the responsive payout planner, on-time and delayed forecasts, an expense breakdown, a labelled fictional week, saved plans and a check-in that compares actual pay with the original expectation. The planner uses calendar dates and integer minor units. Its calculations run without a bank integration or AI calls.
-- Added account-scoped SQLite storage and validated, retry-safe save and check-in routes. Saved plans are included in account export and cleared on account closure. Updated the privacy notice, architecture, API and data-model references.
-- A returning rider can test the longest observed delay from up to six distinct, checked-in payout cycles. The account history excludes labelled examples and retrospective plans. The planner caps a scenario at 14 days.
-- Added the [review pack](docs/capstone/README.md) with published rider evidence and alternatives, cost and price assumptions, fieldwork sheets, a pilot metric query, an editable pitch, founder rehearsal and the carry-forward register. The original pitch remains the historical record.
-- Added regression tests for the payout-day boundary, first shortfall, validation, account isolation, duplicate requests and actual-vs-expected results. The capstone prototype is available in the web app, including phone browsers.
+- **Payout planner (web).** Enter the cash you have, your usual daily costs and the bills due, and see whether it lasts until your next allowance, stipend or pay, and what changes if that money arrives late. It shows the first bill that can't be covered, keeps saved plans, and compares a plan with what actually arrived. A later plan can test the longest delay from up to six of your own checked-in paydays (capped at 14 days in a scenario). The calculation uses calendar dates and whole paise, with no bank connection and no AI calls.
+- Account-scoped SQLite storage (`payout_plans`) with validated, retry-safe save and check-in routes (`/api/v1/payout-plans`). Saved plans are included in the account export and deleted when the account closes; the privacy notice, API and data-model references describe them.
+- Regression tests for the payday boundary, the first shortfall, validation, account isolation, duplicate requests and actual-versus-expected results.
 
 ### Changed
 

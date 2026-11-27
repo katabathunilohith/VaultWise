@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarDays, Fuel, LoaderCircle, MapPin } from "lucide-react";
+import { CircleCheck, FileCheck2, LoaderCircle, Lock, MapPin, Siren, TrendingUp } from "lucide-react";
 import { api } from "@/lib/client";
 import { BRAND } from "@/lib/shared";
 import { countryFlag, detectRegion, regionName, type RegionGuess } from "@/lib/region";
-import { Button, ErrorNote, Field, Input, Notice, Select, Toggle } from "./ui";
+import { Button, ErrorNote, Field, Input, Notice, Select, Toggle, cx } from "./ui";
 
 export interface CountryOption {
   code: string;
@@ -17,8 +17,18 @@ export interface CountryOption {
 }
 
 const PILLARS = [
-  { icon: Fuel, title: "Tomorrow’s shift", body: "Allow for petrol or charging before deciding what you can spend today." },
-  { icon: CalendarDays, title: "A late payout", body: "See which bill falls short if your pay arrives a few days later." },
+  { icon: Lock, title: "Purpose-locked vaults", body: "Health, education, housing and more — money that's structurally harder to raid." },
+  { icon: FileCheck2, title: "AI-verified redemption", body: "Release funds against a receipt, checked in seconds with a human safety net." },
+  { icon: Siren, title: "Tiered emergency access", body: "One tap from your Health vault when it matters, with guardrails against misuse." },
+  { icon: TrendingUp, title: "Core / Satellite investing", body: "Low-cost index SIPs, plus an opt-in, capped systematic sleeve." },
+];
+
+const STEPS = [
+  "Verifying identity with KYC partner (simulated)",
+  "Opening your wallet and double-entry ledger",
+  "Creating vaults and replaying four months of activity",
+  "Buying Core ETFs at real historical prices",
+  "Running the Satellite paper engine on live market data",
 ];
 
 /** Groups countries by market so the rule set and currency are obvious. */
@@ -46,15 +56,16 @@ function CountrySelect({ countries, value, onChange }: { countries: CountryOptio
 }
 
 export function Onboarding({ countries, onDone }: { countries: CountryOption[]; onDone: () => void }) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState("Alex Morgan");
   const [email, setEmail] = useState("");
   const [country, setCountry] = useState("");
   const [guess, setGuess] = useState<RegionGuess | null>(null);
   const selected = countries.find((c) => c.code === country) ?? null;
   const [pin, setPin] = useState("");
   const [pin2, setPin2] = useState("");
-  const [demo, setDemo] = useState(false);
+  const [demo, setDemo] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   // Suggest a country from the network (when deployed behind a CDN), the device time zone and browser languages.
@@ -77,6 +88,12 @@ export function Onboarding({ countries, onDone }: { countries: CountryOption[]; 
     };
   }, []);
 
+  useEffect(() => {
+    if (!busy) return;
+    const id = setInterval(() => setStep((s) => Math.min(STEPS.length - 1, s + 1)), demo ? 1900 : 500);
+    return () => clearInterval(id);
+  }, [busy, demo]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -85,6 +102,7 @@ export function Onboarding({ countries, onDone }: { countries: CountryOption[]; 
     if (pin !== pin2) return setError("MPINs don't match");
     if (!country) return setError("Choose the country where you live and bank");
     setBusy(true);
+    setStep(0);
     try {
       await api.post("/api/v1/onboarding", { name, email, country, pin, demo });
       onDone();
@@ -107,7 +125,8 @@ export function Onboarding({ countries, onDone }: { countries: CountryOption[]; 
         <div className="mt-auto max-w-lg">
           <h1 className="text-4xl font-semibold leading-tight tracking-tight">{BRAND.tagline}</h1>
           <p className="mt-4 text-[15px] leading-relaxed text-brand-muted">
-            Start with the cash you have today. Enter the work costs and bills due before your next delivery payout to see how much you have left.
+            Most people don&apos;t fail to save because they lack a place to put money — they fail because it&apos;s too easy to spend. {BRAND.name}{" "}
+            ties every withdrawal to proof of its purpose, and keeps a fast, guarded path open for real emergencies.
           </p>
           <div className="mt-10 grid grid-cols-2 gap-5">
             {PILLARS.map((p) => (
@@ -120,16 +139,30 @@ export function Onboarding({ countries, onDone }: { countries: CountryOption[]; 
           </div>
         </div>
         <p className="mt-10 text-xs text-brand-muted/80">
-          Capstone prototype. All wallet balances and transfers use practice money.
+          Capstone prototype. Banking, brokerage and KYC partners are simulated; market data is live.
         </p>
       </section>
 
       <section className="flex items-center justify-center px-5 py-10">
         <div className="w-full max-w-md">
           {busy ? (
-            <div className="vw-in flex items-center gap-3" role="status">
-              <LoaderCircle className="size-5 animate-spin text-accent" aria-hidden />
-              <h2 className="text-xl font-semibold tracking-tight">{demo ? "Preparing your sample wallet history…" : "Setting up your account…"}</h2>
+            <div className="vw-in">
+              <h2 className="text-2xl font-semibold tracking-tight">Setting up your wallet</h2>
+              <p className="mt-1 text-sm text-ink-2">{demo ? "This takes about 15 seconds — it pulls live market data." : "One moment…"}</p>
+              <ol className="mt-8 space-y-4">
+                {STEPS.slice(0, demo ? STEPS.length : 2).map((s, i) => (
+                  <li key={s} className={cx("flex items-center gap-3 text-sm", i > step ? "text-muted" : "text-ink")}>
+                    {i < step ? (
+                      <CircleCheck className="size-5 text-good" aria-hidden />
+                    ) : i === step ? (
+                      <LoaderCircle className="size-5 animate-spin text-accent" aria-hidden />
+                    ) : (
+                      <span className="size-5 rounded-full border-2 border-line-strong" aria-hidden />
+                    )}
+                    {s}
+                  </li>
+                ))}
+              </ol>
             </div>
           ) : (
             <form onSubmit={submit} className="vw-in space-y-5">
@@ -141,8 +174,8 @@ export function Onboarding({ countries, onDone }: { countries: CountryOption[]; 
                   </svg>
                   <span className="text-lg font-semibold">{BRAND.name}</span>
                 </div>
-                <h2 className="text-2xl font-semibold tracking-tight">Set up your account</h2>
-                <p className="mt-1 text-sm text-ink-2">Save payout plans in your local currency. You can try the planner with an example.</p>
+                <h2 className="text-2xl font-semibold tracking-tight">Open your wallet</h2>
+                <p className="mt-1 text-sm text-ink-2">Your country sets the currency, guardrails and disclosures.</p>
               </div>
               <Field label="Full name" htmlFor="ob-name">
                 <Input id="ob-name" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} autoComplete="name" />
@@ -198,14 +231,15 @@ export function Onboarding({ countries, onDone }: { countries: CountryOption[]; 
                 <div>
                   <div className="text-sm font-medium">Start with demo history</div>
                   <p className="mt-0.5 text-[13px] text-muted">
-                    Add four months of sample activity to the practice wallet. You can use the payout planner with either setting.
+                    Six vaults, four months of salary, card spend, round-ups, SIPs, a verified withdrawal and an emergency — all through the real
+                    ledger.
                   </p>
                 </div>
                 <Toggle checked={demo} onChange={setDemo} label="Start with demo history" />
               </div>
               {error && <ErrorNote>{error}</ErrorNote>}
               <Button type="submit" size="lg" className="w-full" variant="brand">
-                Create account
+                Create wallet
               </Button>
               <p className="text-center text-xs text-muted">Identity verification is simulated in this prototype.</p>
             </form>

@@ -41,7 +41,7 @@ export function Forecast({ input, currency }: { input: PayoutPlanInput | null; c
   const forecast = input && forecastPayout(input);
   return (
     <Card as="section" className="min-w-0 self-start">
-      <CardTitle sub="What your opening cash can cover before the payout arrives.">
+      <CardTitle sub="What your cash can cover before your money arrives.">
         <span className="inline-flex items-center gap-2">
           <Gauge aria-hidden className="size-4 text-accent" /> Payout forecast
         </span>
@@ -97,7 +97,7 @@ export function Forecast({ input, currency }: { input: PayoutPlanInput | null; c
         <div className="rounded-lg border border-dashed border-line-strong bg-surface-2 px-4 py-7 text-center">
           <CalendarDays className="mx-auto mb-2 size-6 text-accent-ink" aria-hidden />
           <p className="text-sm font-medium">Your comparison will appear here</p>
-          <p className="mx-auto mt-1 max-w-xs text-[13px] text-ink-2">Enter your cash, payout and work costs to see which days your money covers.</p>
+          <p className="mx-auto mt-1 max-w-xs text-[13px] text-ink-2">Enter your cash, the money you expect and your daily costs to see which days your money covers.</p>
         </div>
       )}
     </Card>

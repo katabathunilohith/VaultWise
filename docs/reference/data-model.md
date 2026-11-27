@@ -70,7 +70,7 @@ The tables are grouped by area. "Owner" is the module that creates most rows. "A
 |---|---|---|---|
 | `users` | `db.ts` | [`src/lib/users.ts`](../../src/lib/users.ts) | One row per wallet (customer). |
 | `identities` | module | [`src/lib/auth/identities.ts`](../../src/lib/auth/identities.ts) | Firebase sign-ins and the wallet each one opens. |
-| `payout_plans` | `db.ts` | [Planner storage](../../src/lib/payout-plan-store.ts) | Rider forecasts, sample marker and the actual payout reported at check-in. |
+| `payout_plans` | `db.ts` | [Planner storage](../../src/lib/payout-plan-store.ts) | Saved forecasts, sample marker and the actual amount reported at check-in. |
 | `accounts` | `db.ts` | [`src/lib/ledger.ts`](../../src/lib/ledger.ts) | Ledger accounts (bank, vault, wallet, world and so on). |
 | `journals` | `db.ts` | `src/lib/ledger.ts` | One row per balanced money movement. |
 | `ledger_entries` | `db.ts` | `src/lib/ledger.ts` | The double-entry lines of each journal. Append-only. |
@@ -220,7 +220,7 @@ Index: `idx_attempts (bucket, client_key, ts)`.
 | `user_id`, `id` | Composite primary key. The customer ID refers to `users.id` with cascading deletion. The request UUID makes retries of one save idempotent for that customer. |
 | `currency`, `input_json` | Account currency and the validated original inputs, including bills in the order entered. Monetary inputs use integer minor units. |
 | `is_example`, `created_at` | Integer sample flag and server creation timestamp in milliseconds. |
-| `actual_date`, `actual_amount`, `checked_at` | Nullable until check-in. The date and minor units come from the rider, and the server records the check-in timestamp. The server writes all three in one transaction. |
+| `actual_date`, `actual_amount`, `checked_at` | Nullable until check-in. The date and minor units come from the user, and the server records the check-in timestamp. The server writes all three in one transaction. |
 
 The index `idx_payout_plans_recent` supports per-user history sorted by newest creation time. The core schema creates the empty table on first open for existing accounts. The active database drops a customer's plans on account closure and the practice reset deletes the whole database. Archived backups follow the deployment's retention schedule. [Storage code](../../src/lib/payout-plan-store.ts) · [Forecast and check-in](../features/payout-planner.md)
 

@@ -1,20 +1,14 @@
 # Vaultwise
 
-**Will today’s cash cover fuel and bills if a delivery payout comes late?**
+**Savings locked to a purpose. Show proof and the money unlocks; in an emergency it never waits.**
 
 [![CI](https://github.com/katabathunilohith/VaultWise/actions/workflows/ci.yml/badge.svg)](https://github.com/katabathunilohith/VaultWise/actions/workflows/ci.yml)
 
-Vaultwise is a two-founder financial-inclusion capstone. The current web prototype helps delivery riders compare an on-time payout with a delayed one. Enter available cash, daily work costs and dated bills. See which expense first goes uncovered, save the plan, then return on payday to compare the date and amount received with the forecast. On a later cycle you can test the longest delay from your own recent payout check-ins.
-
-**Try the core flow:** run the [local web app](#quick-start), choose India during account setup, open **Payout planner** and load its fictional delivery week. With ₹2,000 in hand, ₹100/day in work costs and ₹1,000 in rent, the rider has ₹100/day left until the expected payday. A two-day delay brings a ₹500 repair into the same window and leaves a ₹200 gap. Save the example and record an actual payout to finish the demo.
-
-![The fictional rider's saved plan shows ₹100 a day on time, a ₹200 shortfall if pay is two days late, and the eventual payout check-in](docs/images/payout-planner.png)
-
-The [capstone review guide](docs/capstone/README.md) includes the new problem statement, [market evidence](docs/capstone/market.md), [editable pitch slides](docs/capstone/Vaultwise-Payout-Planner-Review.pptx), live demo, interview materials and pricing test. The planner runs in a mobile or desktop browser. The earlier savings, wallet, emergency and investing prototypes are available on the web and in the [Expo app](mobile/README.md).
+Vaultwise is a two-person entrepreneurship capstone: a savings app where money sits in purpose vaults (health, rent, education...) and is released against a verified bill, with a tiered emergency path, a wallet, merchant checkout from vaults, and a Core/Satellite investing engine. It has a Next.js server and web app (this folder) and an Expo phone app ([mobile/](mobile/README.md)).
 
 > **All money is pretend.** Vaultwise is a student prototype, not a bank, payment service or investment adviser. No real money moves, and the ID checks run against test providers.
 
-**Hosted deployment:** the project uses [vaultwise.online](https://vaultwise.online), an EC2 server in Mumbai with HTTPS and Firebase sign-in. The planner in this checkout requires deploying this revision before hosted testers can use it. The Android `tester-live` build talks to the same backend for its existing features, and the native Practice build runs independently. [Deployment guide](deploy/README.md)
+**Live:** [vaultwise.online](https://vaultwise.online), on one AWS EC2 server in Mumbai with HTTPS and Firebase sign-in. Sign up with any email; all money is test money. Android testers use the `tester-live` build, which talks to the same server, and the phone app's Practice build runs with no server at all. How the server is set up: [deploy/README.md](deploy/README.md).
 
 | Web app: overview | Web app: emergency access | Ops console: audit chain |
 |---|---|---|
@@ -30,8 +24,8 @@ The [capstone review guide](docs/capstone/README.md) includes the new problem st
 
 | Area | What a person can do | Docs |
 |---|---|---|
-| Payout planner (web) | Test a late delivery payout against work costs and bills, then check the saved forecast against the payout received | [Payout planner](docs/features/payout-planner.md) |
 | Vaults | Save into purpose vaults by rule (fixed, % of income, round-ups); joint vaults | [vaults](docs/features/vaults.md) |
+| Payout planner (web) | Check whether the money you have lasts until your next allowance, stipend or pay, what happens if it arrives late, and how the plan compared with what arrived | [payout-planner](docs/features/payout-planner.md) |
 | Proof checks | Withdraw by uploading a bill: image forensics, an AI read (only with consent), rules, then approve, decline or send to a person; appeals | [proof-verification](docs/features/proof-verification.md) |
 | Emergency | Tier 1 releases the Health vault instantly; Tier 2 opens other vaults with the MPIN and a short hold; receipts afterwards | [emergency](docs/features/emergency.md) |
 | Wallet and Pay | A spending balance with a daily limit; pay a merchant from a vault, checked at checkout | [wallet](docs/features/wallet.md), [pay](docs/features/pay-with-vaultwise.md) |
@@ -56,8 +50,6 @@ flowchart LR
     FILES[("Uploaded bills and IDs")]
   end
   W -->|HTTPS + Firebase token| API
-  W --> Forecast["Payout forecast in browser"]
-  API --> Plans["Validate and save payout plans"] --> DB
   P -->|HTTPS + Firebase token<br/>x-device-id, x-ai-consent| API
   API --> POL --> DOM --> DB
   DOM --> FILES
@@ -93,7 +85,7 @@ cp .env.example .env.local   # add GROQ_API_KEY for AI reading (optional)
 npm run dev
 ```
 
-Open [the local app](http://localhost:3000). Onboarding asks for a name, country and six-digit MPIN and opens the payout planner from the home route. Wallet demo history is optional and off by default. The planner has its own **Try a fictional week** action. Without Firebase settings the server uses a single practice customer. Use an individual signed-in account per rider for field testing. [Sign-in configuration](docs/reference/configuration.md)
+Open http://localhost:3000. Onboarding asks for a name, a country (suggested from your region) and a 6-digit MPIN. Leave **Start with demo history** on for four months of sample activity. Without Firebase settings the server runs in prototype mode (one customer, no sign-in); see [configuration](docs/reference/configuration.md) to turn sign-in, texted codes and the India ID steps on.
 
 **Phone app:** `cd mobile && npm install && npm run web` (or `npm run start:go` for Expo Go). Practice mode needs no server; the Practice MPIN is `246810` and texted codes are `123456`. See [mobile/README.md](mobile/README.md).
 

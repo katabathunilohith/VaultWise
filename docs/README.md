@@ -8,7 +8,6 @@ Everything you need to understand, change and release Vaultwise. Start with the 
 
 | Doc | Read it when |
 |---|---|
-| [Capstone review guide](capstone/README.md) | Preparing the delivery rider demo, field interviews, market comparison, sponsor test or founder swap |
 | [Architecture](architecture.md) | You're new, or a change crosses the server, web app and phone app |
 | [Development process](process/development-process.md) | Before your first pull request, and before each release |
 | [Building a feature module](process/module-guide.md) | Before you add a feature: how this codebase applies SOLID |
@@ -29,7 +28,7 @@ Everything you need to understand, change and release Vaultwise. Start with the 
 
 | Feature | Doc |
 |---|---|
-| Payout planning between delivery shifts (web) | [features/payout-planner.md](features/payout-planner.md) |
+| Payout planner: will money last until the next allowance or pay (web) | [features/payout-planner.md](features/payout-planner.md) |
 | Vaults, deposits, withdrawals, the ledger and the scheduler | [features/vaults.md](features/vaults.md) |
 | Personal limits and emergency limit increases | [features/limits.md](features/limits.md) |
 | Custom vault rules | [features/custom-rules.md](features/custom-rules.md) |

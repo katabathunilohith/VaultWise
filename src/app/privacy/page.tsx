@@ -25,8 +25,9 @@ export default function PrivacyPage() {
       intro="What we collect, why we need it, who else sees it, how long we keep it, and how to get it changed or deleted. Written in plain English."
     >
       <Notice tone="warn" title="Vaultwise is a student prototype. The money is pretend.">
-        Vaultwise is a capstone project built by {OPERATOR} in India. You enter your own figures in the payout planner. The practice wallet
-        simulates balances, transfers and investments.
+        Vaultwise is a capstone project built by {OPERATOR} in India. Every balance, deposit, payment and investment is simulated
+        (&ldquo;Practice&rdquo; or pretend money). We don&apos;t hold real money, move real money or offer any real financial service, and no
+        licensed company checks your ID. The payout planner only works with figures you type in.
       </Notice>
 
       <LegalSection id="who" title="Who we are">

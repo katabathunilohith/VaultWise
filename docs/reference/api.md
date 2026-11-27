@@ -204,7 +204,7 @@ Paths below are relative to `/api/v1`.
 
 ### Payout planning
 
-All three methods use the account resolved by the session. The planner can be used with pending KYC. It avoids the money scheduler and the ledger. A plan's `createdAt` and a check-in's `recordedAt` are Unix milliseconds. The dates riders enter use `YYYY-MM-DD`.
+All three methods use the account resolved by the session. The planner can be used with pending KYC. It avoids the money scheduler and the ledger. A plan's `createdAt` and a check-in's `recordedAt` are Unix milliseconds. The dates people enter use `YYYY-MM-DD`.
 
 | Method | Path | Input | Success |
 |---|---|---|---|
