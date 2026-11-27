@@ -2,6 +2,14 @@
 
 A student enters the cash they can spend today, their usual daily costs (travel, food) and bills with due dates. Before they save anything, the browser shows whether that cash will last until the expected payout, and what changes if it arrives late. When the money arrives, they can reopen the saved plan and compare the deposit with their original expectation. The inputs and outcome are self-reported. The planner has no connection to their bank.
 
+**Status:** built for the web app (27 November 2026); not in the phone app yet · **Plan:** [plan 10](../plans/10-payout-planner.md)
+
+## Why it exists
+
+Vaults lock money for a goal, but a student also has to get through the month on what's left. Their money arrives in lumps (an allowance, a stipend, part-time pay), often later than expected, with daily costs and bills in between. When it runs out, they raid the vault or borrow. The planner shows, before that happens, how much they can spend each day and which bill they'd miss if the money is late. It also tells them how much they can safely lock away.
+
+It's plain arithmetic on figures the student types, so anyone can check the answer by hand, and it uses no AI and moves no money. The reasons behind each design choice are in [plan 10](../plans/10-payout-planner.md#design-decisions-and-why).
+
 ## Architecture walkthrough
 
 ```mermaid

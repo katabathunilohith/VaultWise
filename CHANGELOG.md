@@ -6,7 +6,7 @@ What changed in the server (`src/`) and web app. The phone app has its own log i
 
 ### Added
 
-- **Payout planner (web).** Enter the cash you have, your usual daily costs and the bills due, and see whether it lasts until your next allowance, stipend or pay, and what changes if that money arrives late. It shows the first bill that can't be covered, keeps saved plans, and compares a plan with what actually arrived. A later plan can test the longest delay from up to six of your own checked-in paydays (capped at 14 days in a scenario). The calculation uses calendar dates and whole paise, with no bank connection and no AI calls.
+- **Payout planner (web).** Enter the cash you have, your usual daily costs and the bills due, and see whether it lasts until your next allowance, stipend or pay, and what changes if that money arrives late. It shows the first bill that can't be covered, keeps saved plans, and compares a plan with what actually arrived. A later plan can test the longest delay from up to six of your own checked-in paydays (capped at 14 days in a scenario). The calculation uses calendar dates and whole paise, with no bank connection and no AI calls. Why it exists and the reasons for each design choice: [plan 10](docs/plans/10-payout-planner.md).
 - Account-scoped SQLite storage (`payout_plans`) with validated, retry-safe save and check-in routes (`/api/v1/payout-plans`). Saved plans are included in the account export and deleted when the account closes; the privacy notice, API and data-model references describe them.
 - Regression tests for the payday boundary, the first shortfall, validation, account isolation, duplicate requests and actual-versus-expected results.
 
