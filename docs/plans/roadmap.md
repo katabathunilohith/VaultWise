@@ -24,6 +24,7 @@
 | 7 | [Onboarding checks in test mode](07-onboarding-checks.md) | PAN, Aadhaar via DigiLocker and bank checks, through licensed sandboxes | L | **Done** (test provider; Setu adapter written from the docs, needs sandbox keys to try) |
 | 8 | [Security review](08-security-review.md) | "Before" scan now, "after" scan at the end, against OWASP MASVS | M | **Code review done** (baseline, four independent reviews, findings fixed); the MobSF scans of the APK are yours |
 | 9 | [Move to PostgreSQL](09-postgres.md) | Only when one server isn't enough | L | Later (on purpose: SQLite until the end) |
+| 10 | [Payout planner](10-payout-planner.md) | Students also need to know the money they haven't locked lasts until the next allowance or pay; it shows how much they can safely lock | M | **Done** (web app; phone app not yet) |
 
 ## Dependencies
 
