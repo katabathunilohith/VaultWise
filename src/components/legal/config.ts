@@ -6,7 +6,7 @@
  */
 export const CONTACT_EMAIL = "vaultwise007@gmail.com";
 
-export const LAST_UPDATED = "24 November 2026";
+export const LAST_UPDATED = "27 November 2026";
 
 /** Who runs Vaultwise, as the pages name it. */
 export const OPERATOR = "the Vaultwise student team";

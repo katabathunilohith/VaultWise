@@ -24,7 +24,8 @@ export default function TermsPage() {
       <LegalSection id="what" title="1. What Vaultwise is">
         <p>
           Vaultwise is a capstone project built by {OPERATOR} in India to test an idea: savings &ldquo;vaults&rdquo; locked to a purpose, released
-          when you show a bill or receipt, with emergency access when you need it. It is offered free, for testing and learning, for as long as the
+          when you show a bill or receipt, with emergency access when you need it. Its payout planner also works out, from figures you enter,
+          whether your money lasts until your next allowance or pay. It is offered free, for testing and learning, for as long as the
           project runs.
         </p>
         <p>

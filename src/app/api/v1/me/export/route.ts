@@ -1,6 +1,7 @@
 import { customer, handle } from "@/lib/api";
 import { all } from "@/lib/db";
 import { audit } from "@/lib/audit";
+import { listPayoutPlans } from "@/lib/payout-plan-store";
 
 /** Data-subject access export (GDPR Art. 15 / CCPA / DPDP right to access). */
 export const GET = handle(async () => {
@@ -10,6 +11,7 @@ export const GET = handle(async () => {
   const data = {
     exportedAt: new Date().toISOString(),
     profile,
+    payoutPlans: listPayoutPlans(user.id, -1), // SQLite's -1 includes the complete history.
     vaults: all("SELECT * FROM vaults WHERE user_id = ?", user.id),
     accounts: all("SELECT * FROM accounts WHERE user_id = ?", user.id),
     journals: all("SELECT * FROM journals WHERE user_id = ?", user.id),

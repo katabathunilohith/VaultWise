@@ -6,6 +6,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import {
   Activity,
   Bot,
+  CalendarDays,
   Gauge,
   Landmark,
   LayoutDashboard,
@@ -63,6 +64,7 @@ const NAV = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/vaults", label: "Vaults", icon: PiggyBank },
   { href: "/emergency", label: "Emergency access", icon: Siren, emphasis: true },
+  { href: "/payout-planner", label: "Payout planner", icon: CalendarDays },
   { href: "/invest", label: "Invest", icon: TrendingUp },
   { href: "/accounts", label: "Linked accounts", icon: Landmark },
   { href: "/assistant", label: "Assistant", icon: Bot },
@@ -158,7 +160,7 @@ function SideNav({ me, onNavigate }: { me: Me; onNavigate?: () => void }) {
     </Link>
   );
   return (
-    <div className="flex h-full flex-col gap-6 px-3 py-5">
+    <div className="flex h-full flex-col gap-6 overflow-y-auto px-3 py-5">
       <Logo />
       <nav className="flex flex-col gap-0.5" aria-label="Main">
         {NAV.map(item)}

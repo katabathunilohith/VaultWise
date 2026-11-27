@@ -28,6 +28,7 @@ Everything you need to understand, change and release Vaultwise. Start with the 
 
 | Feature | Doc |
 |---|---|
+| Payout planner: will money last until the next allowance or pay (web) | [features/payout-planner.md](features/payout-planner.md) |
 | Vaults, deposits, withdrawals, the ledger and the scheduler | [features/vaults.md](features/vaults.md) |
 | Personal limits and emergency limit increases | [features/limits.md](features/limits.md) |
 | Custom vault rules | [features/custom-rules.md](features/custom-rules.md) |

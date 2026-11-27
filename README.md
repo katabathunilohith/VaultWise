@@ -25,6 +25,7 @@ Vaultwise is a two-person entrepreneurship capstone: a savings app where money s
 | Area | What a person can do | Docs |
 |---|---|---|
 | Vaults | Save into purpose vaults by rule (fixed, % of income, round-ups); joint vaults | [vaults](docs/features/vaults.md) |
+| Payout planner (web) | Check whether the money you have lasts until your next allowance, stipend or pay, what happens if it arrives late, and how the plan compared with what arrived | [payout-planner](docs/features/payout-planner.md) |
 | Proof checks | Withdraw by uploading a bill: image forensics, an AI read (only with consent), rules, then approve, decline or send to a person; appeals | [proof-verification](docs/features/proof-verification.md) |
 | Emergency | Tier 1 releases the Health vault instantly; Tier 2 opens other vaults with the MPIN and a short hold; receipts afterwards | [emergency](docs/features/emergency.md) |
 | Wallet and Pay | A spending balance with a daily limit; pay a merchant from a vault, checked at checkout | [wallet](docs/features/wallet.md), [pay](docs/features/pay-with-vaultwise.md) |

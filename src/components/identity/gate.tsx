@@ -234,7 +234,7 @@ export function IdentityBanners({ me }: { me: GateMe }) {
         You can see your overview and your vaults. Everything else, and moving money, opens once a person confirms it&apos;s you.
       </Notice>
     );
-  else if (!recovering && !onOps && status !== "verified" && !path.startsWith("/verify"))
+  else if (!recovering && !onOps && status !== "verified" && !path.startsWith("/verify") && path !== "/payout-planner")
     banner =
       status === "pending" || status === "needs_review" ? (
         <Notice

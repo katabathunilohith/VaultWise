@@ -45,6 +45,8 @@ export function closeAccount(user: User, byUid: string) {
       run("UPDATE identities SET user_id = NULL, status = 'active', updated_at = ? WHERE user_id = ? AND status = 'recovery_pending'", now, user.id);
     }
     disableOtherIdentities(user.id, null, now);
+    // Cash forecasts and self-reported bills are planning notes, independent of the financial audit.
+    run("DELETE FROM payout_plans WHERE user_id = ?", user.id);
     markClosed(user.id, now);
     audit({ userId: user.id, actor: byUid, actorType: "user", action: "user.closed", entityType: "user", entityId: user.id, ts: now });
   });

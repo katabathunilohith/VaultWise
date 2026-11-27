@@ -52,6 +52,20 @@ CREATE TABLE IF NOT EXISTS accounts (
 );
 CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id, kind);
 
+CREATE TABLE IF NOT EXISTS payout_plans (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id TEXT NOT NULL,
+  currency TEXT NOT NULL,
+  input_json TEXT NOT NULL,
+  is_example INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  actual_date TEXT,
+  actual_amount INTEGER,
+  checked_at INTEGER,
+  PRIMARY KEY (user_id, id)
+);
+CREATE INDEX IF NOT EXISTS idx_payout_plans_recent ON payout_plans(user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS journals (
   id TEXT PRIMARY KEY,
   user_id TEXT,

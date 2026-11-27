@@ -1,7 +1,7 @@
 # Data model reference
 
 Every table in the server's SQLite database, and every key the phone app keeps on the device.
-As of commit `012a9fc` plus the server work for plans 03, 05, 06 and 07 (2026-11-22) and the external review fixes (2026-11-24).
+As of commit `012a9fc` plus the server work for plans 03, 05, 06 and 07 (2026-11-22) and the external review fixes (2026-11-24), with the payout planner added on 27 November 2026.
 
 ## The server database
 
@@ -19,16 +19,16 @@ As of commit `012a9fc` plus the server work for plans 03, 05, 06 and 07 (2026-11
 ### Conventions
 
 - **Money is integer minor units** (cents, pence). Each money row also carries `currency`, or takes it from the user.
-- **Times are Unix milliseconds** (`INTEGER`), except `vaults.target_date` and `kyc_records.dob`, which are text dates.
+- **Times are Unix milliseconds** (`INTEGER`), except calendar dates such as `vaults.target_date`, `kyc_records.dob` and the payout planner’s input and arrival dates, which use text.
 - **IDs are text** like `usr_…`, `vlt_…`, `emg_…`, `kyc_…` (`newId()`: a prefix plus 9 random bytes in base64url). `ledger_entries`, `audit_log` and `recovery_attempts` use integer autoincrement IDs.
 - **JSON is stored as `TEXT`**: for example `verifications.stages`, `limit_changes.assessment` and `kyc_records.checks`.
-- **Foreign keys are declared only on `ledger_entries`** (to `journals` and `accounts`). Every other link is by convention.
+- **Foreign keys** link ledger entries to journals and accounts, and payout plans to users. Other parts of the app also identify their owner through stored account IDs.
 
 ### Where tables are created
 
 There are two places, and both are idempotent (`CREATE TABLE IF NOT EXISTS`):
 
-1. **The `SCHEMA` string in [`src/lib/db.ts`](../../src/lib/db.ts)** creates 25 tables, their indexes and 4 triggers when the connection opens.
+1. **The `SCHEMA` string in [`src/lib/db.ts`](../../src/lib/db.ts)** creates 26 tables, their indexes and 4 triggers when the connection opens.
    If hot reload keeps an old connection and `SCHEMA` has changed, `db()` runs `SCHEMA` and `migrate()` again.
 2. **Feature modules create their own tables on first use.** Each module keeps a `WeakSet<DatabaseSync>` named `ready`, so it runs its `CREATE` once per database. A reset makes a new database object, so the tables are created again.
    These modules create 17 tables: `identities`, `vault_custom_rules`, `kyc_records`, `recovery_claims`, `recovery_attempts`, `wallet_settings` and `wallet_payments`, and, since plans 03 to 07, `mpin_attempts`, `mpin_meta`, `devices`, `alerts`, `push_tokens`, `otp_codes`, `otp_verifications`, `kyc_checks`, `bank_accounts` and `rate_limits`.
@@ -62,7 +62,7 @@ Migrations check `PRAGMA table_info` and only change what is missing. All but on
 
 ## Tables
 
-The 32 tables, grouped by area. "Owner" is the module that creates most rows. "Also writes" lists other files that change the table.
+The tables are grouped by area. "Owner" is the module that creates most rows. "Also writes" lists other files that change the table.
 
 ### Overview
 
@@ -70,6 +70,7 @@ The 32 tables, grouped by area. "Owner" is the module that creates most rows. "A
 |---|---|---|---|
 | `users` | `db.ts` | [`src/lib/users.ts`](../../src/lib/users.ts) | One row per wallet (customer). |
 | `identities` | module | [`src/lib/auth/identities.ts`](../../src/lib/auth/identities.ts) | Firebase sign-ins and the wallet each one opens. |
+| `payout_plans` | `db.ts` | [Planner storage](../../src/lib/payout-plan-store.ts) | Saved forecasts, sample marker and the actual amount reported at check-in. |
 | `accounts` | `db.ts` | [`src/lib/ledger.ts`](../../src/lib/ledger.ts) | Ledger accounts (bank, vault, wallet, world and so on). |
 | `journals` | `db.ts` | `src/lib/ledger.ts` | One row per balanced money movement. |
 | `ledger_entries` | `db.ts` | `src/lib/ledger.ts` | The double-entry lines of each journal. Append-only. |
@@ -209,6 +210,19 @@ Rate-limit log for `/recovery/find`, `/recovery/reset` and `/recovery/claim`. Ro
 | `ts` | INTEGER NOT NULL | |
 
 Index: `idx_attempts (bucket, client_key, ts)`.
+
+### Payout planning
+
+#### `payout_plans`
+
+| Field | Storage and meaning |
+|---|---|
+| `user_id`, `id` | Composite primary key. The customer ID refers to `users.id` with cascading deletion. The request UUID makes retries of one save idempotent for that customer. |
+| `currency`, `input_json` | Account currency and the validated original inputs, including bills in the order entered. Monetary inputs use integer minor units. |
+| `is_example`, `created_at` | Integer sample flag and server creation timestamp in milliseconds. |
+| `actual_date`, `actual_amount`, `checked_at` | Nullable until check-in. The date and minor units come from the user, and the server records the check-in timestamp. The server writes all three in one transaction. |
+
+The index `idx_payout_plans_recent` supports per-user history sorted by newest creation time. The core schema creates the empty table on first open for existing accounts. The active database drops a customer's plans on account closure and the practice reset deletes the whole database. Archived backups follow the deployment's retention schedule. [Storage code](../../src/lib/payout-plan-store.ts) · [Forecast and check-in](../features/payout-planner.md)
 
 ### Ledger
 
